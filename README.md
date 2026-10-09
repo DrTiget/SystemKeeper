@@ -262,9 +262,19 @@ Uptime — доля успешных проверок за окно; `percent: n
 
 Проверка `check` и прочие короткие команды всегда идут через phpseclib. Семантика TOFU у драйвера `openssh` та же: отпечаток хоста сверяется с `host_fingerprint` до запуска `ssh` (изменился — «Отпечаток хоста изменился», `ssh` не запускается); `ssh` стартует с `StrictHostKeyChecking=yes` и `known_hosts` из единственного — только что проверенного — ключа хоста; при первом подключении отпечаток запоминается после успешной авторизации. Закрытый ключ (без парольной фразы) и `known_hosts` лежат во временном каталоге `0700`, файл ключа — `0600`, всё удаляется сразу после команды, в том числе при ошибке и таймауте. Пароль серверов с парольной авторизацией передаётся через `SSH_ASKPASS` (переменной окружения процесса), а не аргументом. Код выхода `255` — ошибка самого ssh (авторизация, соединение): бекап `failed` с текстом ошибки.
 
+### Тестовое восстановление дампа
+
+Для заданий `mysql`/`postgres` с `verify_restore: true` после успешного бекапа в очередь ставится Job `VerifyBackupRestore`: он поднимает временную базу `sk_restore_<id бекапа>` на тестовом сервере, разворачивает в неё дамп (`zstd -dc | sed | mysql|psql`), проверяет и **всегда удаляет** базу. Проверки: дамп развёрнут без ошибок; таблиц > 0; необязательный `verify_query` (один `SELECT`) вернул первым значением число ≥ `verify_query_min`. Результат в бекапе: `restore_status` (`pending|running|ok|failed|skipped|null`), `restore_checked_at`, `restore_log` (в show).
+
+- **Когда проверять:** `verify_every_n` (каждый N-й успешный бекап) и/или `verify_every_days` (если последняя проверка была больше N суток назад) — условия складываются по «ИЛИ»; оба пусты — каждый бекап. Вручную: `POST /backups/{id}/verify-restore` → `202` (`409`, если проверка уже идёт; `404`, если бекап не `success`/нет файла; `422` для бекапа файлов).
+- **MySQL:** по умолчанию — MySQL проекта (`BACKUP_RESTORE_MYSQL_HOST|PORT|USERNAME|PASSWORD|SSL_VERIFY`, по умолчанию `DB_*`); либо свой сервер в задании: `restore_host`, `restore_port`, `restore_user`, `restore_password` (шифруется, в API только `has_restore_password`). Учётной записи достаточно прав на базы `sk_restore_*`: ``GRANT ALL ON `sk\_restore\_%`.* TO 'user'@'%'``.
+- **PostgreSQL:** нужен тестовый сервер в задании (`restore_host`…), иначе `restore_status: skipped` с пояснением в логе. Безвредные ошибки о ролях и правах игнорируются, остальные `ERROR:` — провал.
+- **Безопасность:** из дампа вырезаются `USE` и `CREATE DATABASE`, поэтому проверка не может затронуть другую базу. Дамп всех баз (без `db_name`) не проверяется (`skipped`). Пароли идут в окружение процесса, из лога вырезаются.
+- **Событие:** при `failed` (но не `skipped`) бросается `App\Events\BackupRestoreFailed` (имя `backup.restore_failed`, свойство `backup`) — на него подписываются алерты. Таймаут `BACKUP_RESTORE_TIMEOUT` (3600 с).
+
 ### Задания (`backup-jobs`)
 
-Ресурс: `{id, name, server_id, server: {id, name}, type: "files"|"mysql"|"postgres", paths, excludes, db_mode: "ssh"|"direct"|null, db_host, db_port, db_name, db_user, has_db_password, db_ssl_verify, compression_level (1–19, по умолчанию 3), schedule (cron, 5 полей)|null, enabled, next_run_at, last_scheduled_at, retention_count, retention_days, keep_daily, keep_weekly, keep_monthly, storage_target_ids, backups_count, latest_backup, created_at, updated_at}`.
+Ресурс: `{id, name, server_id, server: {id, name}, type: "files"|"mysql"|"postgres", paths, excludes, db_mode: "ssh"|"direct"|null, db_host, db_port, db_name, db_user, has_db_password, db_ssl_verify, verify_restore, verify_every_n, verify_every_days, verify_query, verify_query_min, restore_host, restore_port, restore_user, has_restore_password, compression_level (1–19, по умолчанию 3), schedule (cron, 5 полей)|null, enabled, next_run_at, last_scheduled_at, retention_count, retention_days, keep_daily, keep_weekly, keep_monthly, storage_target_ids, backups_count, latest_backup, created_at, updated_at}`.
 
 `storage_target_ids` — id хранилищ (см. «API: хранилища»), куда выгружается каждый успешный бекап (должны существовать; отключённые хранилища пропускаются). Выгрузка идёт Job-ом `UploadFileToStorageTargets` на удалённый путь `{server_id}/{job_id}/{файл}` внутри `base_path` хранилища. Неуспех выгрузки не делает бекап неуспешным: статус каждой копии виден в `copies` бекапа. Ротация — см. «Ротация бекапов» ниже.
 
@@ -291,7 +301,7 @@ Uptime — доля успешных проверок за окно; `percent: n
 
 ### Бекапы (`backups`)
 
-Ресурс: `{id, backup_job_id, backup_job: {id, name, type, server_id}, status: "pending"|"running"|"success"|"failed", trigger: "manual"|"schedule", has_file, file_name, size_bytes, sha256, md5, started_at, finished_at, duration_seconds, error, log (только в show — stderr команды), copies (в index и show), created_at, updated_at}`. Путь к файлу на диске не отдаётся. Копия в `copies`: `{id, storage_target_id, storage_target: {id, name, type}|null, remote_path, status: "pending"|"uploading"|"uploaded"|"failed", size, md5, sha256, error, attempts, uploaded_at}`; `pending`-копии появляются сразу после бекапа.
+Ресурс: `{id, backup_job_id, backup_job: {id, name, type, server_id}, status: "pending"|"running"|"success"|"failed", trigger: "manual"|"schedule", has_file, file_name, size_bytes, sha256, md5, started_at, finished_at, duration_seconds, error, log (только в show — stderr команды), restore_status, restore_checked_at, restore_log (только в show), copies (в index и show), created_at, updated_at}`. Путь к файлу на диске не отдаётся. Копия в `copies`: `{id, storage_target_id, storage_target: {id, name, type}|null, remote_path, status: "pending"|"uploading"|"uploaded"|"failed", size, md5, sha256, error, attempts, uploaded_at}`; `pending`-копии появляются сразу после бекапа.
 
 | Метод и путь | Ответ |
 |---|---|

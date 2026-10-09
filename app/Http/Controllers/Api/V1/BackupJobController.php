@@ -123,6 +123,8 @@ class BackupJobController extends Controller
         if ($type === BackupJob::TYPE_FILES) {
             return array_merge($data, [
                 'db_mode' => null, 'db_host' => null, 'db_port' => null, 'db_name' => null, 'db_user' => null, 'db_password' => null,
+                'verify_restore' => false, 'verify_every_n' => null, 'verify_every_days' => null, 'verify_query' => null, 'verify_query_min' => null,
+                'restore_host' => null, 'restore_port' => null, 'restore_user' => null, 'restore_password' => null,
             ]);
         }
 

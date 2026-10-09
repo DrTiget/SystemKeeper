@@ -7,6 +7,7 @@ use App\Http\Resources\BackupResource;
 use App\Models\Backup;
 use App\Services\Backup\BackupPurgeException;
 use App\Services\Backup\BackupPurger;
+use App\Services\Backup\RestoreVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -35,6 +36,28 @@ class BackupController extends Controller
     public function show(Backup $backup): BackupResource
     {
         return new BackupResource($backup->load(['job:id,name,type,server_id', 'copies.target']));
+    }
+
+    /**
+     * Запускает тестовое восстановление дампа вне расписания (только бекапы БД со статусом success).
+     */
+    public function verifyRestore(Backup $backup, RestoreVerifier $verifier): JsonResponse
+    {
+        $backup->loadMissing('job');
+
+        if (! $backup->job->isDatabase()) {
+            return response()->json(['message' => 'Тестовое восстановление доступно только для бекапов MySQL и PostgreSQL.'], 422);
+        }
+        if (! $this->isDownloadable($backup)) {
+            return response()->json(['message' => 'Файл бекапа недоступен.'], 404);
+        }
+        if ($backup->isRestoreActive()) {
+            return response()->json(['message' => 'Проверка восстановления уже выполняется.'], 409);
+        }
+
+        $verifier->dispatch($backup);
+
+        return (new BackupResource($backup->load(['job:id,name,type,server_id', 'copies.target'])))->response()->setStatusCode(202);
     }
 
     /** Скачивание с Bearer-токеном. Браузеру удобнее временная ссылка — см. downloadLink(). */

@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Storage;
 
 #[Fillable([
     'backup_job_id', 'status', 'trigger', 'file_path', 'size_bytes', 'sha256', 'md5',
-    'started_at', 'finished_at', 'error', 'log',
+    'started_at', 'finished_at', 'error', 'log', 'restore_status', 'restore_checked_at', 'restore_log',
 ])]
 class Backup extends Model
 {
@@ -28,6 +28,17 @@ class Backup extends Model
     public const STATUS_FAILED = 'failed';
 
     public const ACTIVE_STATUSES = [self::STATUS_PENDING, self::STATUS_RUNNING];
+
+    /** Статусы проверки восстановления: null — не проверялся */
+    public const RESTORE_PENDING = 'pending';
+
+    public const RESTORE_RUNNING = 'running';
+
+    public const RESTORE_OK = 'ok';
+
+    public const RESTORE_FAILED = 'failed';
+
+    public const RESTORE_SKIPPED = 'skipped';
 
     public const TRIGGER_MANUAL = 'manual';
 
@@ -48,6 +59,7 @@ class Backup extends Model
             'size_bytes' => 'integer',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
+            'restore_checked_at' => 'datetime',
         ];
     }
 
@@ -69,6 +81,12 @@ class Backup extends Model
             ->whereIn('status', [StorageCopy::STATUS_PENDING, StorageCopy::STATUS_UPLOADING])
             ->where('updated_at', '>', now()->subHours((int) config('backup.upload_stale_hours')))
             ->exists();
+    }
+
+    public function isRestoreActive(): bool
+    {
+        return in_array($this->restore_status, [self::RESTORE_PENDING, self::RESTORE_RUNNING], true)
+            && $this->updated_at->gt(now()->subHours((int) config('backup.upload_stale_hours')));
     }
 
     public function isActive(): bool

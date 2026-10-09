@@ -19,6 +19,20 @@ return [
     // Через сколько суток ротация удаляет записи о неуспешных бекапах (если у задания есть правила ротации)
     'failed_retention_days' => 7,
 
+    // Тестовое восстановление дампов (verify_restore). Нужна учётная запись, которой разрешено создавать и удалять
+    // базы sk_restore_*: GRANT ALL ON `sk\_restore\_%`.* TO 'user'@'%'. По умолчанию — MySQL проекта (DB_*).
+    'restore' => [
+        'timeout' => (int) env('BACKUP_RESTORE_TIMEOUT', 3600),
+        'mysql' => [
+            'host' => env('BACKUP_RESTORE_MYSQL_HOST', env('DB_HOST', 'mysql')),
+            'port' => (int) env('BACKUP_RESTORE_MYSQL_PORT', env('DB_PORT', 3306)),
+            'username' => env('BACKUP_RESTORE_MYSQL_USERNAME', env('DB_USERNAME')),
+            'password' => env('BACKUP_RESTORE_MYSQL_PASSWORD', env('DB_PASSWORD')),
+            // Клиент в контейнере проверяет TLS-сертификат; у MySQL проекта он самоподписанный
+            'ssl_verify' => (bool) env('BACKUP_RESTORE_MYSQL_SSL_VERIFY', false),
+        ],
+    ],
+
     // Сколько символов stderr сохранять в логе бекапа
     'log_limit' => 10000,
 ];

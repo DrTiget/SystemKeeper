@@ -6,6 +6,7 @@ use App\Models\Backup;
 use App\Services\Backup\BackupPublisher;
 use App\Services\Backup\BackupRotator;
 use App\Services\Backup\BackupRunner;
+use App\Services\Backup\RestoreVerifier;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Throwable;
@@ -26,7 +27,7 @@ class RunBackup implements ShouldQueue
         $this->timeout = (int) config('backup.timeout');
     }
 
-    public function handle(BackupRunner $runner, BackupPublisher $publisher, BackupRotator $rotator): void
+    public function handle(BackupRunner $runner, BackupPublisher $publisher, BackupRotator $rotator, RestoreVerifier $verifier): void
     {
         if ($this->backup->status !== Backup::STATUS_PENDING) {
             return;
@@ -36,7 +37,20 @@ class RunBackup implements ShouldQueue
 
         if ($backup->status === Backup::STATUS_SUCCESS) {
             $this->publish($backup, $publisher);
+            $this->verifyRestore($backup, $verifier);
             $this->rotate($backup, $rotator);
+        }
+    }
+
+    /**
+     * Тестовое восстановление ставится в очередь отдельным заданием; его сбой бекап не портит.
+     */
+    private function verifyRestore(Backup $backup, RestoreVerifier $verifier): void
+    {
+        try {
+            $verifier->dispatchIfDue($backup);
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 

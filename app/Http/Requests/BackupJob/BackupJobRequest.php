@@ -65,6 +65,16 @@ abstract class BackupJobRequest extends FormRequest
                 'db_user' => ['nullable', 'string', 'max:255', 'regex:/^[^\x00-\x20]+$/'],
                 'db_password' => ['nullable', 'string', 'max:1000'],
                 'db_ssl_verify' => ['sometimes', 'boolean'],
+                'verify_restore' => ['sometimes', 'boolean'],
+                'verify_every_n' => ['nullable', 'integer', 'min:1', 'max:10000'],
+                'verify_every_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
+                // Один SELECT: он выполняется во временной базе, но писать туда проверке незачем
+                'verify_query' => ['nullable', 'string', 'max:1000', 'regex:/^\s*select\b[^;]*;?\s*$/i'],
+                'verify_query_min' => ['nullable', 'integer', 'min:0'],
+                'restore_host' => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z0-9._:\-\[\]]+$/'],
+                'restore_port' => ['nullable', 'integer', 'between:1,65535'],
+                'restore_user' => ['nullable', 'string', 'max:255', 'regex:/^[^\x00-\x20]+$/'],
+                'restore_password' => ['nullable', 'string', 'max:1000'],
             ];
         }
 
@@ -103,6 +113,9 @@ abstract class BackupJobRequest extends FormRequest
             'retention_days' => 'хранить дней', 'keep_daily' => 'хранить по дням', 'keep_weekly' => 'хранить по неделям', 'keep_monthly' => 'хранить по месяцам', 'storage_target_ids' => 'хранилища', 'paths' => 'пути', 'excludes' => 'исключения',
             'db_mode' => 'режим', 'db_host' => 'хост БД', 'db_port' => 'порт БД', 'db_name' => 'база данных',
             'db_user' => 'пользователь БД', 'db_password' => 'пароль БД', 'db_ssl_verify' => 'проверка сертификата БД',
+            'verify_restore' => 'проверка восстановления', 'verify_every_n' => 'проверять каждый N-й бекап', 'verify_every_days' => 'проверять раз в N дней',
+            'verify_query' => 'проверочный запрос', 'verify_query_min' => 'минимум для запроса', 'restore_host' => 'тестовый сервер', 'restore_port' => 'порт тестового сервера',
+            'restore_user' => 'пользователь тестового сервера', 'restore_password' => 'пароль тестового сервера',
         ];
     }
 }

@@ -39,6 +39,9 @@ class BackupResource extends JsonResource
             'duration_seconds' => $this->started_at && $this->finished_at ? $this->started_at->diffInSeconds($this->finished_at, true) : null,
             'error' => $this->error,
             'log' => $this->when($request->routeIs('backups.show'), $this->log),
+            'restore_status' => $this->restore_status,
+            'restore_checked_at' => $this->restore_checked_at,
+            'restore_log' => $this->when($request->routeIs('backups.show'), $this->restore_log),
             'copies' => $this->whenLoaded('copies', fn () => $this->copies->map(fn ($copy) => [
                 'id' => $copy->id,
                 'storage_target_id' => $copy->storage_target_id,

@@ -17,9 +17,11 @@ use Illuminate\Support\Carbon;
     'name', 'server_id', 'type', 'paths', 'excludes',
     'db_mode', 'db_host', 'db_port', 'db_name', 'db_user', 'db_password', 'db_ssl_verify',
     'compression_level', 'schedule', 'enabled', 'last_scheduled_at',
+    'verify_restore', 'verify_every_n', 'verify_every_days', 'verify_query', 'verify_query_min',
+    'restore_host', 'restore_port', 'restore_user', 'restore_password',
     'retention_count', 'retention_days', 'keep_daily', 'keep_weekly', 'keep_monthly', 'storage_target_ids',
 ])]
-#[Hidden(['db_password'])]
+#[Hidden(['db_password', 'restore_password'])]
 class BackupJob extends Model
 {
     /** @use HasFactory<BackupJobFactory> */
@@ -54,6 +56,12 @@ class BackupJob extends Model
             'db_port' => 'integer',
             'db_password' => 'encrypted',
             'db_ssl_verify' => 'boolean',
+            'verify_restore' => 'boolean',
+            'verify_every_n' => 'integer',
+            'verify_every_days' => 'integer',
+            'verify_query_min' => 'integer',
+            'restore_port' => 'integer',
+            'restore_password' => 'encrypted',
             'compression_level' => 'integer',
             'enabled' => 'boolean',
             'retention_count' => 'integer',

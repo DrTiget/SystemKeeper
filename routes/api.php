@@ -62,6 +62,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('backups/{backup}/download', [BackupController::class, 'download'])->name('backups.download');
     Route::post('backups/{backup}/download-link', [BackupController::class, 'downloadLink']);
+    Route::post('backups/{backup}/verify-restore', [BackupController::class, 'verifyRestore']);
     Route::apiResource('backups', BackupController::class)->only(['index', 'show', 'destroy']);
 });
 
