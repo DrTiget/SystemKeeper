@@ -3,9 +3,12 @@
 namespace App\Services\Alerts;
 
 use App\Events\BackupFailed;
+use App\Events\BackupRestoreFailed;
 use App\Events\BackupSucceeded;
 use App\Events\IncidentOpened;
 use App\Events\IncidentResolved;
+use App\Events\MetricThresholdExceeded;
+use App\Events\MetricThresholdRecovered;
 use App\Events\SslExpiring;
 use App\Events\StorageCopyFailed;
 use Throwable;
@@ -33,6 +36,21 @@ class AlertEventListener
     public function backupSucceeded(BackupSucceeded $e): void
     {
         $this->send(fn () => $this->messages->backupSucceeded($e->backup->loadMissing('job')));
+    }
+
+    public function backupRestoreFailed(BackupRestoreFailed $e): void
+    {
+        $this->send(fn () => $this->messages->backupRestoreFailed($e->backup->loadMissing('job')));
+    }
+
+    public function metricExceeded(MetricThresholdExceeded $e): void
+    {
+        $this->send(fn () => $this->messages->metricExceeded($e));
+    }
+
+    public function metricRecovered(MetricThresholdRecovered $e): void
+    {
+        $this->send(fn () => $this->messages->metricRecovered($e));
     }
 
     public function storageCopyFailed(StorageCopyFailed $e): void

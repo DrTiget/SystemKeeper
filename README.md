@@ -345,7 +345,7 @@ Uptime — доля успешных проверок за окно; `percent: n
 
 Ресурс: `{id, name, event, target_type, target_id, channel_ids, channels: [{id, name, type}], quiet_hours_start, quiet_hours_end, throttle_minutes, enabled, created_at, updated_at}`.
 
-События (`event`): `incident.opened`, `incident.resolved`, `backup.failed`, `backup.succeeded`, `storage_copy.failed`, `ssl.expiring` (сертификат скоро истечёт, но ещё действителен), `metric.threshold` (зарезервировано, источника пока нет).
+События (`event`): `incident.opened`, `incident.resolved`, `backup.failed`, `backup.succeeded`, `storage_copy.failed`, `backup.restore_failed` (тестовое восстановление не удалось), `ssl.expiring` (сертификат скоро истечёт, но ещё действителен), `metric.threshold_exceeded` и `metric.threshold_recovered` (порог метрики сервера — диск/память/нагрузка — превышен / снова в норме; фильтр `target_type: server`, ссылка на `/servers/{id}`; антиспам — на сервер+метрику+точку монтирования).
 
 - **Фильтр.** `target_type`: `monitor` | `backup_job` | `server` | `storage_target` вместе с `target_id`; без них правило действует на все объекты. Событие подходит, только если относится к такому объекту (бекап — к заданию и его серверу, инцидент и SSL — к монитору, копия — к хранилищу).
 - **Тихие часы.** `quiet_hours_start`/`quiet_hours_end` в формате `HH:MM`, часовой пояс приложения (`APP_TIMEZONE`), интервал может переходить через полночь. Внутри них отправка получает `skipped`.

@@ -3,9 +3,12 @@
 namespace App\Providers;
 
 use App\Events\BackupFailed;
+use App\Events\BackupRestoreFailed;
 use App\Events\BackupSucceeded;
 use App\Events\IncidentOpened;
 use App\Events\IncidentResolved;
+use App\Events\MetricThresholdExceeded;
+use App\Events\MetricThresholdRecovered;
 use App\Events\SslExpiring;
 use App\Events\StorageCopyFailed;
 use App\Services\Alerts\AlertEventListener;
@@ -55,6 +58,9 @@ class AppServiceProvider extends ServiceProvider
             BackupSucceeded::class => 'backupSucceeded',
             StorageCopyFailed::class => 'storageCopyFailed',
             SslExpiring::class => 'sslExpiring',
+            BackupRestoreFailed::class => 'backupRestoreFailed',
+            MetricThresholdExceeded::class => 'metricExceeded',
+            MetricThresholdRecovered::class => 'metricRecovered',
         ] as $event => $method) {
             Event::listen($event, [AlertEventListener::class, $method]);
         }

@@ -16,7 +16,8 @@ class AlertRule extends Model
 
     public const EVENTS = [
         'incident.opened', 'incident.resolved', 'backup.failed', 'backup.succeeded',
-        'storage_copy.failed', 'ssl.expiring', 'metric.threshold',
+        'backup.restore_failed', 'storage_copy.failed', 'ssl.expiring',
+        'metric.threshold_exceeded', 'metric.threshold_recovered',
     ];
 
     /** Фильтр по объекту: тип => таблица. Без фильтра правило действует на все объекты. */

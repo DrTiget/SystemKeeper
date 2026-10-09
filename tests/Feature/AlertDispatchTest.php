@@ -464,9 +464,9 @@ class AlertDispatchTest extends TestCase
     public function test_dispatcher_returns_deliveries_for_message_without_object(): void
     {
         Queue::fake();
-        $this->rule('metric.threshold', [AlertChannel::factory()->create()]);
+        $this->rule('metric.threshold_exceeded', [AlertChannel::factory()->create()]);
 
-        $deliveries = app(AlertDispatcher::class)->dispatch(new AlertMessage('metric.threshold', 'CPU', 'Загрузка 95%'));
+        $deliveries = app(AlertDispatcher::class)->dispatch(new AlertMessage('metric.threshold_exceeded', 'CPU', 'Загрузка 95%'));
 
         $this->assertCount(1, $deliveries);
     }

@@ -2,10 +2,13 @@
 
 namespace App\Services\Alerts;
 
+use App\Events\MetricThresholdExceeded;
+use App\Events\MetricThresholdRecovered;
 use App\Models\Backup;
 use App\Models\Incident;
 use App\Models\Monitor;
 use App\Models\StorageCopy;
+use Illuminate\Support\Str;
 
 /** Шаблоны сообщений на русском со ссылкой на объект во фронте. */
 class AlertMessageFactory
@@ -67,6 +70,66 @@ class AlertMessageFactory
             backupJobId: $job->id,
             serverId: $job->server_id,
         );
+    }
+
+    public function backupRestoreFailed(Backup $backup): AlertMessage
+    {
+        $job = $backup->job;
+
+        return new AlertMessage(
+            'backup.restore_failed',
+            "🔴 Тестовое восстановление бекапа «{$job->name}» не удалось",
+            'Причина: '.(Str::limit(trim((string) $backup->restore_log), 300) ?: 'не указана'),
+            $this->url('/backups'),
+            "backup_job:{$job->id}",
+            backupJobId: $job->id,
+            serverId: $job->server_id,
+        );
+    }
+
+    public function metricExceeded(MetricThresholdExceeded $e): AlertMessage
+    {
+        [$label, $unit] = $this->metricLabel($e->metric, $e->target);
+
+        return new AlertMessage(
+            'metric.threshold_exceeded',
+            "🟠 {$label} на сервере «{$e->server->name}» выше порога",
+            "Значение: {$this->num($e->value)}{$unit}, порог: {$this->num($e->threshold)}{$unit}.",
+            $this->url("/servers/{$e->server->id}"),
+            "server:{$e->server->id}:{$e->metric}:{$e->target}",
+            serverId: $e->server->id,
+        );
+    }
+
+    public function metricRecovered(MetricThresholdRecovered $e): AlertMessage
+    {
+        [$label, $unit] = $this->metricLabel($e->metric, $e->target);
+        $since = $e->exceededSince ? ' Превышение было с '.$e->exceededSince->format('d.m.Y H:i').'.' : '';
+
+        return new AlertMessage(
+            'metric.threshold_recovered',
+            "🟢 {$label} на сервере «{$e->server->name}» в норме",
+            "Значение: {$this->num($e->value)}{$unit}, порог: {$this->num($e->threshold)}{$unit}.".$since,
+            $this->url("/servers/{$e->server->id}"),
+            "server:{$e->server->id}:{$e->metric}:{$e->target}",
+            serverId: $e->server->id,
+        );
+    }
+
+    /** @return array{0: string, 1: string} название метрики и единица */
+    private function metricLabel(string $metric, ?string $target): array
+    {
+        return match ($metric) {
+            'disk' => ['Диск'.($target ? " {$target}" : ''), '%'],
+            'ram' => ['Память', '%'],
+            'load' => ['Нагрузка (load average на ядро)', ''],
+            default => [$metric, ''],
+        };
+    }
+
+    private function num(float $v): string
+    {
+        return rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.');
     }
 
     public function storageCopyFailed(StorageCopy $copy): AlertMessage
