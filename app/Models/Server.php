@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'name', 'host', 'port', 'username', 'auth_type', 'ssh_key_id', 'password', 'description',
@@ -23,6 +24,12 @@ class Server extends Model
 
     public const AUTH_PASSWORD = 'password';
 
+    protected static function booted(): void
+    {
+        // Задания бекапов удаляются через Eloquent, чтобы вместе с ними удалились файлы бекапов
+        static::deleting(fn (Server $server) => $server->backupJobs()->get()->each->delete());
+    }
+
     protected function casts(): array
     {
         return [
@@ -35,5 +42,10 @@ class Server extends Model
     public function sshKey(): BelongsTo
     {
         return $this->belongsTo(SshKey::class);
+    }
+
+    public function backupJobs(): HasMany
+    {
+        return $this->hasMany(BackupJob::class);
     }
 }

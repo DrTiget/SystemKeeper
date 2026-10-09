@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\BackupController;
+use App\Http\Controllers\Api\V1\BackupJobController;
 use App\Http\Controllers\Api\V1\HeartbeatController;
 use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\MonitorController;
@@ -42,4 +44,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('monitors', MonitorController::class);
 
     Route::apiResource('incidents', IncidentController::class)->only(['index', 'show']);
+
+    Route::post('backup-jobs/{backup_job}/run', [BackupJobController::class, 'run']);
+    Route::apiResource('backup-jobs', BackupJobController::class)->parameters(['backup-jobs' => 'backup_job']);
+
+    Route::get('backups/{backup}/download', [BackupController::class, 'download'])->name('backups.download');
+    Route::apiResource('backups', BackupController::class)->only(['index', 'show', 'destroy']);
 });

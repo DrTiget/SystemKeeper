@@ -13,6 +13,12 @@ class FakeSshConnector implements SshConnectorInterface
     /** @var array<int, array{server: int, command: string}> */
     public array $calls = [];
 
+    /** @var list<string> куски stdout, которые отдаёт stream() */
+    public array $streamChunks = [];
+
+    /** @var array{exit_code: int|null, stderr: string} */
+    public array $streamResult = ['exit_code' => 0, 'stderr' => ''];
+
     /**
      * @param  array{exit_code: int|null, stdout: string, stderr: string}  $result
      */
@@ -40,5 +46,19 @@ class FakeSshConnector implements SshConnectorInterface
         }
 
         return $this->result;
+    }
+
+    public function stream(Server $server, string $command, callable $onChunk, ?int $timeout = null): array
+    {
+        $this->calls[] = ['server' => $server->id, 'command' => $command];
+
+        if ($this->throw) {
+            throw $this->throw;
+        }
+        foreach ($this->streamChunks as $chunk) {
+            $onChunk($chunk);
+        }
+
+        return $this->streamResult;
     }
 }

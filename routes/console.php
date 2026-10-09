@@ -10,3 +10,4 @@ Artisan::command('inspire', function () {
 
 Schedule::command('monitors:dispatch')->everyMinute()->withoutOverlapping();
 Schedule::command('monitors:prune')->dailyAt('03:30');
+Schedule::command('backups:run-due')->everyMinute()->withoutOverlapping();

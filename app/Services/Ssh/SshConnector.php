@@ -67,6 +67,42 @@ class SshConnector implements SshConnectorInterface
         ];
     }
 
+    public function stream(Server $server, string $command, callable $onChunk, ?int $timeout = null): array
+    {
+        $ssh = $this->connect($server);
+        $ssh->setTimeout($timeout ?? (int) config('backup.timeout'));
+        // Quiet mode разделяет stderr и stdout, иначе диагностика попала бы в поток данных
+        $ssh->enableQuietMode();
+
+        $callbackError = null;
+
+        try {
+            // Колбэк не должен возвращать true — это прервало бы команду
+            $ssh->exec($command, function (string $chunk) use ($onChunk, &$callbackError): void {
+                try {
+                    $onChunk($chunk);
+                } catch (Throwable $e) {
+                    $callbackError = $e;
+                    throw $e;
+                }
+            });
+            $timedOut = $ssh->isTimeout();
+            $exitCode = $ssh->getExitStatus();
+        } catch (Throwable $e) {
+            // Ошибки обработчика данных (например, диск) отдаём как есть, остальное — ошибка SSH
+            throw $callbackError ?? new SshConnectionException("Ошибка выполнения команды: {$e->getMessage()}", previous: $e);
+        } finally {
+            $stderr = (string) $ssh->getStdError();
+            $ssh->disconnect();
+        }
+
+        if ($timedOut) {
+            throw new SshConnectionException('Команда не завершилась за отведённое время.');
+        }
+
+        return ['exit_code' => $exitCode === false ? null : $exitCode, 'stderr' => $stderr];
+    }
+
     /**
      * @throws HostFingerprintChangedException если отпечаток известен и не совпал
      */

@@ -158,3 +158,49 @@ Uptime — доля успешных проверок за окно; `percent: n
 ### Планировщик
 
 `monitors:dispatch` (каждую минуту, `schedule:work` в compose) ставит в очередь Job `RunMonitorCheck` для включённых мониторов, у которых `next_check_at` подошёл (или не задан); воркер `queue` выполняет проверки. `monitors:prune` (ежедневно) удаляет результаты старше `MONITOR_CHECK_RETENTION_DAYS` (по умолчанию 35) дней. Для включения `ping` в уже собранном контейнере пересоберите образ (`docker compose up -d --build`).
+
+## API: бекапы
+
+Все маршруты под `/api/v1`, `Authorization: Bearer <token>`. Списки пагинируются (`?page=N&per_page=1..100`), ответы — `{data: ...}`. Секреты (`db_password`) в ответах отсутствуют, в БД хранятся зашифрованными.
+
+### Как выполняется бекап
+
+Бекап — задание очереди `database` (`RunBackup`, без повторов). Данные стримятся по SSH прямо в локальный файл `storage/app/backups/{server_id}/{job_id}/{YYYYmmdd-HHmmss}-{backup_id}.{tar.zst|sql.zst}` — на сервере ничего не пишется на диск. Размер, `sha256` и `md5` считаются на лету.
+
+| Тип | Команда (на сервере по SSH, либо локально в режиме `direct`) |
+|---|---|
+| `files` | `tar -C / -cf - [--exclude=…] -- <пути> \| zstd -T0 -N -q -c` |
+| `mysql` | `mysqldump --single-transaction --quick --routines --triggers --events [--host --port --user] <база>\|--all-databases \| zstd …` |
+| `postgres` | `pg_dump --no-password … --dbname=<база>` (без `db_name` — `pg_dumpall`) `\| zstd …` |
+
+Конвейер запускается под `bash -o pipefail`: падение `tar`/`mysqldump` не маскируется успешным `zstd`. Пароль БД передаётся переменной окружения (`MYSQL_PWD`/`PGPASSWORD`), а не аргументом, и вырезается из `error`/`log`. Ненулевой код выхода или пустой вывод — `failed`, недописанный файл удаляется. На сервере должны быть `zstd`, `tar` (для БД — `mysqldump`/`pg_dump`); режим `direct` требует их в контейнере `app` (в `docker/php/Dockerfile` добавлены `zstd` и `postgresql-client`). Пересоберите образ: `docker compose up -d --build`.
+
+Планировщик: команда `php artisan backups:run-due` (раз в минуту через `schedule:work`) ставит в очередь задания, у которых по cron наступило время после `last_scheduled_at` (или создания). Пропущенные запуски не копятся, при выполняющемся бекапе запуск пропускается. Зависшие `pending`/`running` старше `BACKUP_TIMEOUT` (по умолчанию 14400 с) + 10 минут помечаются `failed`. Для приёма очереди нужен воркер (`queue`), `DB_QUEUE_RETRY_AFTER` по умолчанию 15000 с.
+
+### Задания (`backup-jobs`)
+
+Ресурс: `{id, name, server_id, server: {id, name}, type: "files"|"mysql"|"postgres", paths, excludes, db_mode: "ssh"|"direct"|null, db_host, db_port, db_name, db_user, has_db_password, compression_level (1–19, по умолчанию 3), schedule (cron, 5 полей)|null, enabled, next_run_at, last_scheduled_at, retention_count, retention_days, storage_target_ids, backups_count, latest_backup, created_at, updated_at}`.
+
+`retention_count`, `retention_days` и `storage_target_ids` — поля под ротацию и выгрузку в хранилища: API их хранит, но сами по себе они ничего не удаляют и не загружают.
+
+| Метод и путь | Тело | Ответ |
+|---|---|---|
+| `GET /backup-jobs` | фильтры `server_id`, `type`, `enabled` | `200` страница |
+| `POST /backup-jobs` | общие: `name`, `server_id`, `type`, `schedule?`, `enabled?` (true), `compression_level?`, `retention_count?`, `retention_days?`, `storage_target_ids?`. `files`: `paths` (абсолютные, обязательно), `excludes?`. `mysql`/`postgres`: `db_mode?` (`ssh` по умолчанию; `direct` — SystemKeeper сам подключается к БД и требует `db_host`, `db_user`), `db_host?`, `db_port?`, `db_name?` (пусто — все базы), `db_user?`, `db_password?` | `201`; `422` |
+| `GET /backup-jobs/{id}` | — | `200` |
+| `PUT/PATCH /backup-jobs/{id}` | любые поля создания, кроме `type` (не меняется); поля чужого типа обнуляются | `200`; `422` |
+| `DELETE /backup-jobs/{id}` | — | `204` (вместе с бекапами и файлами); `409`, если есть выполняющийся бекап |
+| `POST /backup-jobs/{id}/run` | — | `202 {data: backup}` со `status: "pending"`; `409`, если бекап уже выполняется или в очереди |
+
+Удаление сервера удаляет его задания, бекапы и файлы.
+
+### Бекапы (`backups`)
+
+Ресурс: `{id, backup_job_id, backup_job: {id, name, type, server_id}, status: "pending"|"running"|"success"|"failed", trigger: "manual"|"schedule", has_file, file_name, size_bytes, sha256, md5, started_at, finished_at, duration_seconds, error, log (только в show — stderr команды), created_at, updated_at}`. Путь к файлу на диске не отдаётся.
+
+| Метод и путь | Ответ |
+|---|---|
+| `GET /backups` | `200` страница, новые первыми; фильтры `backup_job_id`, `server_id`, `status` |
+| `GET /backups/{id}` | `200` с `log` |
+| `GET /backups/{id}/download` | `200` файл (`application/zstd`, заголовок `X-Checksum-Sha256`); `404`, если бекап не `success` или файл отсутствует |
+| `DELETE /backups/{id}` | `204` (файл удаляется); `409`, если бекап `pending`/`running` |
