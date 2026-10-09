@@ -4,6 +4,7 @@ namespace App\Services\Monitoring;
 
 use App\Events\IncidentOpened;
 use App\Events\IncidentResolved;
+use App\Events\SslExpiring;
 use App\Models\Monitor;
 use App\Models\MonitorCheck;
 use Illuminate\Support\Facades\DB;
@@ -45,6 +46,10 @@ class MonitorRecorder
             } elseif (! $result->up && ! $open && $monitor->consecutive_failures >= max(1, $monitor->failure_threshold)) {
                 $incident = $monitor->incidents()->create(['started_at' => $now, 'reason' => $check->error]);
                 $events[] = new IncidentOpened($incident);
+            }
+
+            if (! $result->up && $result->sslDaysLeft !== null) {
+                $events[] = new SslExpiring($monitor, $result->sslDaysLeft);
             }
 
             return $check;

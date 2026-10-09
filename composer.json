@@ -8,9 +8,11 @@
     "require": {
         "php": "^8.3",
         "aws/aws-sdk-php": "^3.400",
+        "dedoc/scramble": "^0.13.47",
         "laravel/framework": "^13.17",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
+        "minishlink/web-push": "^11.0",
         "phpseclib/phpseclib": "^3"
     },
     "require-dev": {

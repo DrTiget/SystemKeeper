@@ -303,3 +303,56 @@ Uptime — доля успешных проверок за окно; `percent: n
 | `DELETE /backups/{id}` | `204`: удаляются локальный файл, запись и копии в хранилищах; `?keep_remote=1` — копии в хранилищах не трогать. `409`, если бекап `pending`/`running` или его выгрузка ещё идёт; `502`, если копию в хранилище удалить не удалось (бекап остаётся целиком, можно повторить) |
 
 **Скачивание ссылкой.** `GET /backups/{id}/file` отдаёт файл потоком: `Content-Length`, `Accept-Ranges: bytes` и `Range` (докачка, ответ `206`), `X-Checksum-Sha256`, `Content-Disposition: attachment`. Подписывается путь с query без хоста, поэтому `url` можно открывать через любой адрес сервиса (за прокси, подменяющим `Host`, берите из `url` только путь и query). Одна ссылка открывает только свой бекап. Фронт скачивает именно так — обычным переходом, без загрузки файла в память браузера. `GET /backups/{id}/download` с Bearer-токеном остаётся для скриптов (тоже с `Range`).
+
+## API: алерты
+
+Все маршруты под `/api/v1` требуют `Authorization: Bearer <token>`. Списки пагинируются как обычно.
+
+**Как это работает.** Событие (инцидент открыт/закрыт, бекап, копия в хранилище, SSL) → подходящие **правила** (`AlertRule`: событие + фильтр по объекту + каналы) → на каждый канал создаётся запись журнала `AlertDelivery` и ставится в очередь Job `SendAlertDelivery` (3 попытки, паузы 30 и 120 с). Тексты сообщений — на русском, со ссылкой на объект во фронте (`APP_FRONTEND_URL`).
+
+Статусы отправки: `pending` → `sent`; `failed` — все попытки исчерпаны (`error`); `skipped` — не отправлено намеренно (тихие часы, антиспам, канал выключен, нет получателей, FCM отключён).
+
+### Каналы
+
+Ресурс: `{id, name, type: "telegram"|"email"|"webpush"|"mobile", enabled, settings, created_at, updated_at}`. Настройки хранятся зашифрованно (`APP_KEY`), секреты в ответах не показываются.
+
+| Тип | `settings` при записи | `settings` в ответе |
+|---|---|---|
+| `telegram` | `{bot_token: "123:ABC…", chat_id}` — отправка через Bot API `sendMessage` | `{chat_id, has_bot_token}` |
+| `email` | `{recipients: ["a@example.com", …]}` — SMTP из `MAIL_*` (по умолчанию `MAIL_MAILER=log` — письма в лог) | `{recipients}` |
+| `webpush` | не нужны — рассылка всем подпискам браузеров | `{}` |
+| `mobile` | не нужны — рассылка по `DeviceToken`; пока **заготовка**: драйвер `FcmDriver` отключён (`FCM_ENABLED=false`), отправки получают `skipped` | `{}` |
+
+| Метод и путь | Тело | Ответ |
+|---|---|---|
+| `GET /alert-channels` · `GET /alert-channels/{id}` | — | `200` |
+| `POST /alert-channels` | `{name, type, enabled?, settings}` | `201`; `422` |
+| `PUT/PATCH /alert-channels/{id}` | `{name?, enabled?, settings?}` — `type` менять нельзя; `settings` обновляются частично (токен можно не передавать) | `200`; `422` |
+| `DELETE /alert-channels/{id}` | — | `204` |
+| `POST /alert-channels/{id}/test` | — | `200 {data: {ok, skipped, error}}` — тестовое сообщение отправляется сразу; сбой — `ok: false` с текстом ошибки (без токена) |
+
+### Правила
+
+Ресурс: `{id, name, event, target_type, target_id, channel_ids, channels: [{id, name, type}], quiet_hours_start, quiet_hours_end, throttle_minutes, enabled, created_at, updated_at}`.
+
+События (`event`): `incident.opened`, `incident.resolved`, `backup.failed`, `backup.succeeded`, `storage_copy.failed`, `ssl.expiring` (сертификат скоро истечёт, но ещё действителен), `metric.threshold` (зарезервировано, источника пока нет).
+
+- **Фильтр.** `target_type`: `monitor` | `backup_job` | `server` | `storage_target` вместе с `target_id`; без них правило действует на все объекты. Событие подходит, только если относится к такому объекту (бекап — к заданию и его серверу, инцидент и SSL — к монитору, копия — к хранилищу).
+- **Тихие часы.** `quiet_hours_start`/`quiet_hours_end` в формате `HH:MM`, часовой пояс приложения (`APP_TIMEZONE`), интервал может переходить через полночь. Внутри них отправка получает `skipped`.
+- **Антиспам.** `throttle_minutes` (0–10080, по умолчанию 15; 0 — выключить): не чаще раза в N минут на пару «правило + объект». Подавленные отправки в окно не входят.
+
+| Метод и путь | Тело | Ответ |
+|---|---|---|
+| `GET /alert-rules` | `?event=` | `200` страница |
+| `POST /alert-rules` | `{name, event, channel_ids: [..], target_type?, target_id?, quiet_hours_start?, quiet_hours_end?, throttle_minutes?, enabled?}` | `201`; `422` |
+| `GET /alert-rules/{id}` · `PUT/PATCH` · `DELETE` | как при создании (все поля необязательны) | `200` / `200` / `204`; `target_type: null` снимает фильтр |
+| `GET /alert-deliveries` | `?status=`, `?event=`, `?alert_rule_id=`, `?alert_channel_id=` | `200` журнал отправок `{id, alert_rule_id, alert_channel_id, event, title, body, url, status, error, attempts, sent_at, created_at}`, новые первыми |
+
+### Web Push и мобильное приложение
+
+1. Один раз сгенерируйте VAPID-ключи: `docker compose exec app php artisan alerts:vapid-keys` (пишет `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` в `.env`; повторно — только с `--force`, старые подписки перестанут работать). Перезапустите `app` и `queue`. `VAPID_SUBJECT` — контакт (по умолчанию `APP_URL`).
+2. `GET /push/vapid-public-key` → `200 {data: {public_key}}` (`503`, если ключей нет) — для `pushManager.subscribe({applicationServerKey})`.
+3. `POST /push-subscriptions` с `PushSubscription.toJSON()`: `{endpoint (https), keys: {p256dh, auth}}` → `201` (новая) или `200` (уже была; привязка к текущему пользователю). `DELETE /push-subscriptions {endpoint}` → `204`. Недействительные подписки (410/404 от push-сервиса) удаляются автоматически.
+4. Мобильное приложение: `POST /device-tokens {platform: "android"|"ios", token}` → `201`/`200`; `DELETE /device-tokens {token}` → `204`. Реальная отправка подключается реализацией `App\Services\Alerts\FcmDriver` (сейчас `DisabledFcmDriver`).
+
+Журнал отправок чистится ежедневно (`alerts:prune`, `ALERT_DELIVERY_RETENTION_DAYS`, по умолчанию 90).

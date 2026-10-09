@@ -2,6 +2,7 @@
 
 namespace App\Services\Storage;
 
+use App\Events\StorageCopyFailed;
 use App\Jobs\UploadFileToStorageTargets;
 use App\Models\StorageCopy;
 use App\Models\StorageTarget;
@@ -51,6 +52,10 @@ class StorageUploader implements StorageUploaderInterface
                 $copy->fill(['status' => StorageCopy::STATUS_FAILED, 'error' => mb_substr($e->getMessage(), 0, 1000)]);
             }
             $copy->save();
+
+            if ($copy->status === StorageCopy::STATUS_FAILED) {
+                event(new StorageCopyFailed($copy));
+            }
         }
 
         return $copies;

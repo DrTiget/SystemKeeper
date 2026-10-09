@@ -31,7 +31,7 @@ class MonitorChecker
         }
 
         if ($result->responseTimeMs === null && in_array($monitor->type, [Monitor::TYPE_HTTP, Monitor::TYPE_KEYWORD, Monitor::TYPE_TCP, Monitor::TYPE_PING], true)) {
-            $result = new CheckResult($result->up, (int) round((hrtime(true) - $started) / 1e6), $result->statusCode, $result->error);
+            $result = new CheckResult($result->up, (int) round((hrtime(true) - $started) / 1e6), $result->statusCode, $result->error, $result->sslDaysLeft);
         }
 
         return $result;
@@ -82,7 +82,7 @@ class MonitorChecker
             return CheckResult::down('Сертификат истёк '.$expiresAt->toDateString());
         }
         if ($days < $monitor->ssl_expiry_days) {
-            return CheckResult::down("Сертификат истекает {$expiresAt->toDateString()} (осталось дней: {$days}, порог: {$monitor->ssl_expiry_days})");
+            return CheckResult::down("Сертификат истекает {$expiresAt->toDateString()} (осталось дней: {$days}, порог: {$monitor->ssl_expiry_days})", sslDaysLeft: $days);
         }
 
         return CheckResult::up();

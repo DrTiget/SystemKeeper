@@ -2,6 +2,8 @@
 
 namespace App\Services\Backup;
 
+use App\Events\BackupFailed;
+use App\Events\BackupSucceeded;
 use App\Models\Backup;
 use App\Models\BackupJob;
 use App\Services\Ssh\SshConnectorInterface;
@@ -89,6 +91,8 @@ class BackupRunner
                 'finished_at' => now(),
                 'log' => $log !== '' ? $log : null,
             ])->save();
+
+            event(new BackupSucceeded($backup));
         } catch (Throwable $e) {
             if (is_resource($handle)) {
                 fclose($handle);
@@ -118,6 +122,8 @@ class BackupRunner
             'error' => $this->clean($e->getMessage(), $secrets),
             'log' => $e instanceof BackupFailedException && $e->log !== '' ? $e->log : null,
         ])->save();
+
+        event(new BackupFailed($backup));
     }
 
     private function isDirect(BackupJob $job): bool

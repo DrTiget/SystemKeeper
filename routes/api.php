@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AlertChannelController;
+use App\Http\Controllers\Api\V1\AlertDeliveryController;
+use App\Http\Controllers\Api\V1\AlertRuleController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BackupController;
 use App\Http\Controllers\Api\V1\BackupJobController;
@@ -7,6 +10,7 @@ use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\HeartbeatController;
 use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\MonitorController;
+use App\Http\Controllers\Api\V1\PushController;
 use App\Http\Controllers\Api\V1\ServerController;
 use App\Http\Controllers\Api\V1\ServerMetricController;
 use App\Http\Controllers\Api\V1\SshKeyController;
@@ -65,3 +69,16 @@ Route::middleware('auth:sanctum')->group(function () {
 Route::get('backups/{backup}/file', [BackupController::class, 'file'])
     ->middleware(['signed:relative', 'throttle:60,1'])
     ->name('backups.file');
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('alert-channels/{alert_channel}/test', [AlertChannelController::class, 'test']);
+    Route::apiResource('alert-channels', AlertChannelController::class)->parameters(['alert-channels' => 'alert_channel']);
+    Route::apiResource('alert-rules', AlertRuleController::class)->parameters(['alert-rules' => 'alert_rule']);
+    Route::get('alert-deliveries', [AlertDeliveryController::class, 'index']);
+
+    Route::get('push/vapid-public-key', [PushController::class, 'vapidPublicKey']);
+    Route::post('push-subscriptions', [PushController::class, 'subscribe']);
+    Route::delete('push-subscriptions', [PushController::class, 'unsubscribe']);
+    Route::post('device-tokens', [PushController::class, 'registerDevice']);
+    Route::delete('device-tokens', [PushController::class, 'unregisterDevice']);
+});
