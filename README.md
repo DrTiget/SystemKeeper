@@ -72,3 +72,40 @@ docker compose exec app php artisan user:create
 Проверка выполняет `uname -a && uptime` (таймауты — `config/ssh.php`, env `SSH_CONNECT_TIMEOUT`, `SSH_EXEC_TIMEOUT`). Сбой подключения — тоже `200` со `status: "failed"` и текстом в `error`; результат сохраняется в `last_check_*`. Ненулевой код выхода — `failed`.
 
 Отпечаток хоста (TOFU): при первом успешном подключении `host_fingerprint` (SHA256 host key) запоминается; если позже он не совпал, подключение отклоняется с ошибкой «Отпечаток хоста изменился». Принять новый ключ хоста — `POST /servers/{id}/reset-fingerprint`, затем повторить проверку.
+
+## API: хранилища
+
+Куда складываются бекапы: локальный каталог (`local`) или аккаунт Яндекс.Диска (`yandex_disk`); аккаунтов ЯД может быть несколько.
+
+Ресурс: `{id, name, type: "local"|"yandex_disk", base_path, enabled, has_token, last_checked_at, last_check_status: "ok"|"failed"|null, last_check_error, created_at, updated_at}`. OAuth-токен хранится зашифрованно и **никогда не отдаётся в API** — только флаг `has_token`.
+
+| Метод и путь | Тело | Ответ |
+|---|---|---|
+| `GET /storage-targets` | — | `200` страница |
+| `POST /storage-targets` | `{name, type, token (обязателен для yandex_disk), base_path (абсолютный, без «..»), enabled? (по умолчанию true)}` | `201`; `422` |
+| `GET /storage-targets/{id}` | — | `200` |
+| `PUT/PATCH /storage-targets/{id}` | `{name?, token?, base_path?, enabled?}`; тип не меняется; без `token` (или с пустым) прежний токен сохраняется | `200`; `422` |
+| `DELETE /storage-targets/{id}` | — | `204`; записи о копиях удаляются, файлы в хранилище остаются |
+| `POST /storage-targets/{id}/check` | — | `200 {data: {status: "ok"\|"failed", error, total_space, used_space, free_space}}` (байты); для ЯД проверяются токен и свободное место, для local — каталог и права записи. Сбой — тоже `200` со `status: "failed"`; результат сохраняется в `last_check_*` |
+
+### Загрузка файлов (для модуля бекапов)
+
+```php
+use App\Services\Storage\StorageUploaderInterface;
+
+$uploader = app(StorageUploaderInterface::class);
+$uploader->dispatch($localPath, $targets, 'server-1/2026/dump.sql.gz', $backup); // в очередь (Job UploadFileToStorageTargets)
+$copies = $uploader->upload($localPath, $targets, 'server-1/dump.sql.gz', $backup); // синхронно, список StorageCopy
+```
+
+- `$targets` — модели `StorageTarget` (или их id для `dispatch`); отключённые (`enabled=false`) Job пропускает. Удалённый путь — `base_path` цели + `remotePath`.
+- `$backup` — необязательная модель-владелец (полиморфная связь `uploadable`); жёсткой привязки к `Backup` нет.
+- Учёт копий — таблица `storage_copies` (модель `StorageCopy`): цель, `remote_path`, `status` (`pending|uploading|uploaded|failed`), `size`, `md5`, `error`, `attempts`, `uploaded_at`.
+- Сбой одной цели не мешает остальным. Если хоть одна копия упала, Job завершается ошибкой и перезапускается очередью (3 попытки, паузы 60 и 300 с); уже загруженные копии пропускаются.
+- Яндекс.Диск: файл отправляется потоково (в память не читается), недостающие папки создаются рекурсивно, после загрузки md5 сверяется с метаданными ресурса; запросы с 429/5xx и сетевыми сбоями повторяются с экспоненциальным backoff. Настройки — `config/yandex_disk.php` (`YANDEX_DISK_ATTEMPTS`, `YANDEX_DISK_BACKOFF_MS`, `YANDEX_DISK_TIMEOUT`, `YANDEX_DISK_UPLOAD_TIMEOUT`, `YANDEX_DISK_VERIFY_ATTEMPTS`).
+
+### Как получить OAuth-токен Яндекс.Диска
+
+1. На <https://oauth.yandex.ru/client/new> создайте приложение: платформа «Веб-сервисы», Callback URI — `https://oauth.yandex.ru/verification_code`, доступы — `cloud_api:disk.read`, `cloud_api:disk.write`, `cloud_api:disk.info` (для папки приложения — `cloud_api:disk.app_folder`).
+2. Откройте `https://oauth.yandex.ru/authorize?response_type=token&client_id=<ID приложения>` под нужным аккаунтом и разрешите доступ; токен будет в адресе страницы после `access_token=`.
+3. Передайте его в `token` при создании хранилища и проверьте через `POST /storage-targets/{id}/check`. Для каждого аккаунта ЯД — отдельное хранилище.

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ServerController;
 use App\Http\Controllers\Api\V1\SshKeyController;
+use App\Http\Controllers\Api\V1\StorageTargetController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
@@ -21,4 +22,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('servers/{server}/check', [ServerController::class, 'check']);
     Route::post('servers/{server}/reset-fingerprint', [ServerController::class, 'resetFingerprint']);
     Route::apiResource('servers', ServerController::class);
+
+    Route::post('storage-targets/{storage_target}/check', [StorageTargetController::class, 'check']);
+    Route::apiResource('storage-targets', StorageTargetController::class)->parameters(['storage-targets' => 'storage_target']);
 });
