@@ -2,26 +2,22 @@
 
 namespace App\Http\Requests\StorageTarget;
 
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
+use App\Models\StorageTarget;
 
 /**
- * Тип хранилища не меняется. Токен необязателен: без него остаётся прежний.
+ * Тип хранилища не меняется. Секреты (токен, secret key) необязательны: без них остаются прежние.
  */
-class UpdateStorageTargetRequest extends FormRequest
+class UpdateStorageTargetRequest extends StorageTargetRequest
 {
-    public function rules(): array
+    protected function targetType(): ?string
     {
-        return [
-            'name' => ['sometimes', 'required', 'string', 'max:255', Rule::unique('storage_targets', 'name')->ignore($this->route('storage_target'))],
-            'token' => ['sometimes', 'nullable', 'string', 'max:4096'],
-            'base_path' => ['sometimes', 'required', 'string', 'max:255', 'starts_with:/', 'not_regex:#(^|/)\.\.(/|$)#'],
-            'enabled' => ['sometimes', 'boolean'],
-        ];
+        return $this->existing()?->type;
     }
 
-    public function attributes(): array
+    protected function existing(): ?StorageTarget
     {
-        return ['name' => 'название', 'token' => 'токен', 'base_path' => 'базовая папка', 'enabled' => 'признак «включено»'];
+        $target = $this->route('storage_target');
+
+        return $target instanceof StorageTarget ? $target : StorageTarget::find($target);
     }
 }

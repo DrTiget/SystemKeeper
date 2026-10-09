@@ -24,7 +24,7 @@ class ValidationLocaleTest extends TestCase
         $this->assertMatchesRegularExpression('/[а-яё]/iu', $text);
     }
 
-    public function test_required_if_uses_russian_names_and_enum_values(): void
+    public function test_required_uses_russian_attribute_names(): void
     {
         Sanctum::actingAs(User::factory()->create());
 
@@ -32,7 +32,7 @@ class ValidationLocaleTest extends TestCase
             ->assertUnprocessable();
 
         $this->assertSame(
-            'Поле «токен» обязательно, если тип равно Яндекс.Диск.',
+            'Поле «токен» обязательно для заполнения.',
             $response->json('errors.token.0'),
         );
     }

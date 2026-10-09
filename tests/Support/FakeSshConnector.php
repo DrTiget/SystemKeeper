@@ -48,9 +48,9 @@ class FakeSshConnector implements SshConnectorInterface
         return $this->result;
     }
 
-    public function stream(Server $server, string $command, callable $onChunk, ?int $timeout = null): array
+    public function stream(Server $server, string $command, callable $onChunk, ?int $timeout = null, ?string $stdinFile = null): array
     {
-        $this->calls[] = ['server' => $server->id, 'command' => $command];
+        $this->calls[] = ['server' => $server->id, 'command' => $command, 'stdin_file' => $stdinFile];
 
         if ($this->throw) {
             throw $this->throw;

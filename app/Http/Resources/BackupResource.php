@@ -49,6 +49,7 @@ class BackupResource extends JsonResource
                 'status' => $copy->status,
                 'size' => $copy->size,
                 'md5' => $copy->md5,
+                'sha256' => $copy->sha256,
                 'error' => $copy->error,
                 'attempts' => $copy->attempts,
                 'uploaded_at' => $copy->uploaded_at,

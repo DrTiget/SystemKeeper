@@ -158,4 +158,31 @@ class OpenSshStreamRunnerTest extends TestCase
 
         (new OpenSshStreamRunner)->run('h', 22, 'u', self::HOST_KEY, 'k', null, 'true', fn () => null, 5, 5);
     }
+
+    public function test_stdin_file_is_fed_to_the_command_without_dash_n(): void
+    {
+        $ssh = new FakeSshBinary('cat');
+        $file = tempnam(sys_get_temp_dir(), 'sk-stdin-');
+        file_put_contents($file, str_repeat('data-', 200000));
+        config(['ssh.openssh_binary' => $ssh->path]);
+
+        $result = (new OpenSshStreamRunner)->run(
+            host: 'srv.example.com', port: 22, username: 'backup', hostKey: self::HOST_KEY,
+            privateKey: "-----BEGIN KEY-----\nabc\n", password: null, command: 'cat > /x',
+            onChunk: fn () => null, timeout: 10, connectTimeout: 7, stdinFile: $file,
+        );
+
+        $this->assertSame(0, $result['exit_code']);
+        $this->assertNotContains('-n', $ssh->log());
+        $this->assertFileEquals($file, $ssh->dir.'/stdin_copy');
+        unlink($file);
+    }
+
+    public function test_dash_n_is_kept_without_stdin_file(): void
+    {
+        $ssh = new FakeSshBinary('ok');
+        $this->exec($ssh);
+
+        $this->assertContains('-n', $ssh->log());
+    }
 }

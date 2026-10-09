@@ -38,6 +38,7 @@ class FakeSshBinary
           exit3) printf 'partial'; echo 'remote failed' >&2; exit 3 ;;
           fail255) echo 'Permission denied (publickey).' >&2; exit 255 ;;
           big) head -c 5000000 /dev/zero; exit 0 ;;
+          cat) cat > {$this->dir}/stdin_copy; printf 'done'; exit 0 ;;
           sleep) printf 'x'; sleep 30; exit 0 ;;
         esac
         BASH);

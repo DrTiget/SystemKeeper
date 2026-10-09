@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 /**
  * Копия файла в хранилище. `uploadable` — любая модель-владелец (например, бекап).
  */
-#[Fillable(['uploadable_type', 'uploadable_id', 'storage_target_id', 'remote_path', 'status', 'size', 'md5', 'error', 'attempts', 'uploaded_at'])]
+#[Fillable(['uploadable_type', 'uploadable_id', 'storage_target_id', 'remote_path', 'status', 'size', 'md5', 'sha256', 'error', 'attempts', 'uploaded_at'])]
 class StorageCopy extends Model
 {
     public const STATUS_PENDING = 'pending';

@@ -67,10 +67,10 @@ class SshConnector implements SshConnectorInterface
         ];
     }
 
-    public function stream(Server $server, string $command, callable $onChunk, ?int $timeout = null): array
+    public function stream(Server $server, string $command, callable $onChunk, ?int $timeout = null, ?string $stdinFile = null): array
     {
-        if (config('ssh.stream_driver') === 'openssh') {
-            return $this->streamViaOpenSsh($server, $command, $onChunk, $timeout);
+        if ($stdinFile !== null || config('ssh.stream_driver') === 'openssh') {
+            return $this->streamViaOpenSsh($server, $command, $onChunk, $timeout, $stdinFile);
         }
 
         return $this->streamViaPhpseclib($server, $command, $onChunk, $timeout);
@@ -81,7 +81,7 @@ class SshConnector implements SshConnectorInterface
      * клиента, а сам ssh получает known_hosts с единственным — уже проверенным — ключом и StrictHostKeyChecking=yes.
      * При первом подключении отпечаток запоминается только после успешной авторизации (как и в connect()).
      */
-    private function streamViaOpenSsh(Server $server, string $command, callable $onChunk, ?int $timeout): array
+    private function streamViaOpenSsh(Server $server, string $command, callable $onChunk, ?int $timeout, ?string $stdinFile = null): array
     {
         $hostKey = $this->fetchHostKey($server);
         $fingerprint = $this->fingerprintOf($hostKey);
@@ -107,6 +107,7 @@ class SshConnector implements SshConnectorInterface
             onChunk: $onChunk,
             timeout: $timeout ?? (int) config('backup.timeout'),
             connectTimeout: (int) config('ssh.connect_timeout'),
+            stdinFile: $stdinFile,
         );
 
         // 255 — ошибка самого ssh (соединение, авторизация, ключ хоста), а не код удалённой команды

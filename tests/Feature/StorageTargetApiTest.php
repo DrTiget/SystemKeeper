@@ -67,7 +67,7 @@ class StorageTargetApiTest extends TestCase
     {
         $this->login();
 
-        $this->postJson('/api/v1/storage-targets', ['name' => 'a', 'type' => 's3', 'base_path' => '/x'])
+        $this->postJson('/api/v1/storage-targets', ['name' => 'a', 'type' => 'ftp', 'base_path' => '/x'])
             ->assertJsonValidationErrors('type');
         $this->postJson('/api/v1/storage-targets', ['name' => 'a', 'type' => 'local', 'base_path' => '/x/../etc'])
             ->assertJsonValidationErrors('base_path');

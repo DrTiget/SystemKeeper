@@ -2,15 +2,22 @@
 
 namespace App\Services\Storage;
 
-use App\Exceptions\Storage\StorageException;
 use App\Jobs\UploadFileToStorageTargets;
 use App\Models\StorageCopy;
 use App\Models\StorageTarget;
+use App\Services\Storage\Drivers\StorageDriverFactory;
 use Illuminate\Database\Eloquent\Model;
 use Throwable;
 
 class StorageUploader implements StorageUploaderInterface
 {
+    private readonly StorageDriverFactory $drivers;
+
+    public function __construct(?StorageDriverFactory $drivers = null)
+    {
+        $this->drivers = $drivers ?? new StorageDriverFactory;
+    }
+
     public function upload(string $localPath, iterable $targets, string $remotePath, ?Model $uploadable = null): array
     {
         $copies = [];
@@ -32,8 +39,10 @@ class StorageUploader implements StorageUploaderInterface
             $copy->fill(['status' => StorageCopy::STATUS_UPLOADING, 'error' => null, 'attempts' => $copy->attempts + 1])->save();
 
             try {
+                $checksums = $this->drivers->make($target)->upload($localPath, $full);
                 $copy->fill([
-                    'md5' => $this->put($target, $localPath, $full),
+                    'md5' => $checksums['md5'],
+                    'sha256' => $checksums['sha256'],
                     'size' => filesize($localPath),
                     'status' => StorageCopy::STATUS_UPLOADED,
                     'uploaded_at' => now(),
@@ -54,11 +63,7 @@ class StorageUploader implements StorageUploaderInterface
             return;
         }
 
-        match ($target->type) {
-            StorageTarget::TYPE_YANDEX_DISK => (new YandexDiskClient((string) $target->token))->delete($copy->remote_path),
-            StorageTarget::TYPE_LOCAL => $this->deleteLocal($target, $copy->remote_path),
-            default => throw new StorageException("Неизвестный тип хранилища: {$target->type}"),
-        };
+        $this->drivers->make($target)->delete($copy->remote_path);
     }
 
     public function dispatch(string $localPath, iterable $targets, string $remotePath, ?Model $uploadable = null): void
@@ -69,45 +74,5 @@ class StorageUploader implements StorageUploaderInterface
         }
 
         UploadFileToStorageTargets::dispatch($localPath, $ids, $remotePath, $uploadable?->getMorphClass(), $uploadable?->getKey());
-    }
-
-    /** @return string md5 загруженного файла */
-    private function put(StorageTarget $target, string $localPath, string $fullPath): string
-    {
-        return match ($target->type) {
-            StorageTarget::TYPE_YANDEX_DISK => (new YandexDiskClient((string) $target->token))->upload($localPath, $fullPath),
-            StorageTarget::TYPE_LOCAL => $this->putLocal($localPath, $fullPath),
-            default => throw new StorageException("Неизвестный тип хранилища: {$target->type}"),
-        };
-    }
-
-    private function deleteLocal(StorageTarget $target, string $fullPath): void
-    {
-        // Удаляем только внутри базовой папки цели — запись в БД не должна позволять стереть произвольный файл
-        $base = rtrim($target->base_path, '/').'/';
-        if (! str_starts_with($fullPath, $base) || str_contains($fullPath, '..')) {
-            throw new StorageException("Путь {$fullPath} вне базовой папки хранилища.");
-        }
-        if (is_file($fullPath) && ! unlink($fullPath)) {
-            throw new StorageException("Не удалось удалить файл {$fullPath}.");
-        }
-    }
-
-    private function putLocal(string $localPath, string $fullPath): string
-    {
-        $dir = dirname($fullPath);
-        if (! is_dir($dir) && ! mkdir($dir, 0750, true) && ! is_dir($dir)) {
-            throw new StorageException("Не удалось создать каталог {$dir}.");
-        }
-        if (! copy($localPath, $fullPath)) {
-            throw new StorageException("Не удалось скопировать файл в {$fullPath}.");
-        }
-
-        $expected = md5_file($localPath);
-        if (md5_file($fullPath) !== $expected) {
-            throw new StorageException('Контрольная сумма копии не совпала с исходной.');
-        }
-
-        return $expected;
     }
 }

@@ -44,6 +44,11 @@ class Server extends Model
         return $this->belongsTo(SshKey::class);
     }
 
+    public function storageTargets(): HasMany
+    {
+        return $this->hasMany(StorageTarget::class);
+    }
+
     public function backupJobs(): HasMany
     {
         return $this->hasMany(BackupJob::class);

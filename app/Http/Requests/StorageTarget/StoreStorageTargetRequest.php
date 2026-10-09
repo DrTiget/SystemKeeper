@@ -3,24 +3,13 @@
 namespace App\Http\Requests\StorageTarget;
 
 use App\Models\StorageTarget;
-use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
-class StoreStorageTargetRequest extends FormRequest
+class StoreStorageTargetRequest extends StorageTargetRequest
 {
-    public function rules(): array
+    protected function targetType(): ?string
     {
-        return [
-            'name' => ['required', 'string', 'max:255', 'unique:storage_targets,name'],
-            'type' => ['required', Rule::in(StorageTarget::TYPES)],
-            'token' => ['required_if:type,'.StorageTarget::TYPE_YANDEX_DISK, 'nullable', 'string', 'max:4096'],
-            'base_path' => ['required', 'string', 'max:255', 'starts_with:/', 'not_regex:#(^|/)\.\.(/|$)#'],
-            'enabled' => ['sometimes', 'boolean'],
-        ];
-    }
+        $type = $this->input('type');
 
-    public function attributes(): array
-    {
-        return ['name' => 'название', 'type' => 'тип', 'token' => 'токен', 'base_path' => 'базовая папка', 'enabled' => 'признак «включено»'];
+        return in_array($type, StorageTarget::TYPES, true) ? $type : null;
     }
 }

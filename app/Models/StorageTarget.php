@@ -7,10 +7,11 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['name', 'type', 'token', 'base_path', 'enabled'])]
-#[Hidden(['token'])]
+#[Fillable(['name', 'type', 'server_id', 'token', 'secret', 'base_path', 'config', 'enabled'])]
+#[Hidden(['token', 'secret'])]
 class StorageTarget extends Model
 {
     /** @use HasFactory<StorageTargetFactory> */
@@ -20,12 +21,18 @@ class StorageTarget extends Model
 
     public const TYPE_YANDEX_DISK = 'yandex_disk';
 
-    public const TYPES = [self::TYPE_LOCAL, self::TYPE_YANDEX_DISK];
+    public const TYPE_S3 = 's3';
+
+    public const TYPE_SFTP = 'sftp';
+
+    public const TYPES = [self::TYPE_LOCAL, self::TYPE_YANDEX_DISK, self::TYPE_S3, self::TYPE_SFTP];
 
     protected function casts(): array
     {
         return [
             'token' => 'encrypted',
+            'secret' => 'encrypted',
+            'config' => 'array',
             'enabled' => 'boolean',
             'last_checked_at' => 'datetime',
         ];
@@ -34,6 +41,17 @@ class StorageTarget extends Model
     public function copies(): HasMany
     {
         return $this->hasMany(StorageCopy::class);
+    }
+
+    public function server(): BelongsTo
+    {
+        return $this->belongsTo(Server::class);
+    }
+
+    /** Значение несекретной настройки s3 из config. */
+    public function setting(string $key, mixed $default = null): mixed
+    {
+        return ($this->config ?? [])[$key] ?? $default;
     }
 
     public function isYandexDisk(): bool

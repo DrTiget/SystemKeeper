@@ -51,8 +51,12 @@ class ServerController extends Controller
         return new ServerResource($server->load('sshKey'));
     }
 
-    public function destroy(Server $server): Response
+    public function destroy(Server $server): Response|JsonResponse
     {
+        if ($server->storageTargets()->exists()) {
+            return response()->json(['message' => 'Сервер используется как хранилище, удалить его нельзя.'], 409);
+        }
+
         $server->delete();
 
         return response()->noContent();

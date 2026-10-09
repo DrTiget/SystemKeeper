@@ -75,18 +75,29 @@ docker compose exec app php artisan user:create
 
 ## API: хранилища
 
-Куда складываются бекапы: локальный каталог (`local`) или аккаунт Яндекс.Диска (`yandex_disk`); аккаунтов ЯД может быть несколько.
+Куда складываются бекапы. Типы: `local` (каталог на сервере SystemKeeper), `yandex_disk` (аккаунт Яндекс.Диска; аккаунтов может быть несколько), `s3` (AWS S3 и S3-совместимые: Yandex Object Storage, MinIO и т. п.), `sftp` («другой сервер» — запись из «Серверов», файлы кладутся по SSH).
 
-Ресурс: `{id, name, type: "local"|"yandex_disk", base_path, enabled, has_token, last_checked_at, last_check_status: "ok"|"failed"|null, last_check_error, created_at, updated_at}`. OAuth-токен хранится зашифрованно и **никогда не отдаётся в API** — только флаг `has_token`.
+Ресурс (поля, не относящиеся к типу, приходят `null`): `{id, name, type: "local"|"yandex_disk"|"s3"|"sftp", enabled, base_path, has_token, has_secret, server_id, server: {id, name, host, port} (sftp), endpoint, region, bucket, prefix, access_key, path_style, storage_class (s3), last_checked_at, last_check_status: "ok"|"failed"|null, last_check_error, created_at, updated_at}`. Секреты (OAuth-токен ЯД, `secret_key` S3) хранятся зашифрованно и **никогда не отдаются в API** — только флаги `has_token` / `has_secret`. Для s3 `prefix` — это `base_path` без ведущего «/» (`""` — корень бакета).
 
 | Метод и путь | Тело | Ответ |
 |---|---|---|
 | `GET /storage-targets` | — | `200` страница |
-| `POST /storage-targets` | `{name, type, token (обязателен для yandex_disk), base_path (абсолютный, без «..»), enabled? (по умолчанию true)}` | `201`; `422` |
+| `POST /storage-targets` | `{name, type, enabled? (true)}` + поля типа (ниже) | `201`; `422` (сообщения на русском, по полям) |
 | `GET /storage-targets/{id}` | — | `200` |
-| `PUT/PATCH /storage-targets/{id}` | `{name?, token?, base_path?, enabled?}`; тип не меняется; без `token` (или с пустым) прежний токен сохраняется | `200`; `422` |
+| `PUT/PATCH /storage-targets/{id}` | поля типа из создания (любые); `type` игнорируется (не меняется); пустой или отсутствующий секрет сохраняет прежний | `200`; `422` |
 | `DELETE /storage-targets/{id}` | — | `204`; записи о копиях удаляются, файлы в хранилище остаются |
-| `POST /storage-targets/{id}/check` | — | `200 {data: {status: "ok"\|"failed", error, total_space, used_space, free_space}}` (байты); для ЯД проверяются токен и свободное место, для local — каталог и права записи. Сбой — тоже `200` со `status: "failed"`; результат сохраняется в `last_check_*` |
+| `POST /storage-targets/{id}/check` | — | `200 {data: {status: "ok"\|"failed", error, total_space, used_space, free_space}}` (байты, `null`, если хранилище место не сообщает). Сбой — тоже `200` со `status: "failed"`; результат сохраняется в `last_check_*` |
+
+Поля по типам (обязательные при создании):
+
+| Тип | Поля |
+|---|---|
+| `local` | `base_path` — абсолютный путь без «..» |
+| `yandex_disk` | `base_path`, `token` (OAuth-токен) |
+| `s3` | `region`, `bucket`, `access_key`, `secret_key`; необязательные: `endpoint` (URL, для S3-совместимых; пусто — AWS), `prefix` (папка внутри бакета), `path_style` (bool, нужен MinIO и многим совместимым), `storage_class` (например `STANDARD_IA`, у Yandex — `COLD`) |
+| `sftp` | `server_id` (существующий сервер: те же SSH-ключ/пароль и отпечаток хоста), `base_path` — абсолютный путь на нём |
+
+Что делает `check`: `yandex_disk` — проверяет токен и возвращает квоту; `local` — каталог и право записи, место на диске; `s3` — `HeadBucket` плюс запись и удаление маленького тестового объекта (место не сообщается); `sftp` — подключение, запись и удаление тестового файла в `base_path`, место (`df`). Сервер, на который ссылается хранилище `sftp`, удалить нельзя: `DELETE /servers/{id}` вернёт `409`.
 
 ### Загрузка файлов (для модуля бекапов)
 
@@ -100,9 +111,13 @@ $copies = $uploader->upload($localPath, $targets, 'server-1/dump.sql.gz', $backu
 
 - `$targets` — модели `StorageTarget` (или их id для `dispatch`); отключённые (`enabled=false`) Job пропускает. Удалённый путь — `base_path` цели + `remotePath`.
 - `$backup` — необязательная модель-владелец (полиморфная связь `uploadable`); жёсткой привязки к `Backup` нет.
-- Учёт копий — таблица `storage_copies` (модель `StorageCopy`): цель, `remote_path`, `status` (`pending|uploading|uploaded|failed`), `size`, `md5`, `error`, `attempts`, `uploaded_at`.
+- Учёт копий — таблица `storage_copies` (модель `StorageCopy`): цель, `remote_path`, `status` (`pending|uploading|uploaded|failed`), `size`, `md5`, `sha256`, `error`, `attempts`, `uploaded_at`. Заполняются только подтверждённые хранилищем суммы: ЯД и S3 — `md5`, sftp — `sha256`, local — `md5`.
 - Сбой одной цели не мешает остальным. Если хоть одна копия упала, Job завершается ошибкой и перезапускается очередью (3 попытки, паузы 60 и 300 с); уже загруженные копии пропускаются.
 - Яндекс.Диск: файл отправляется потоково (в память не читается), недостающие папки создаются рекурсивно, после загрузки md5 сверяется с метаданными ресурса; запросы с 429/5xx и сетевыми сбоями повторяются с экспоненциальным backoff. Настройки — `config/yandex_disk.php` (`YANDEX_DISK_ATTEMPTS`, `YANDEX_DISK_BACKOFF_MS`, `YANDEX_DISK_TIMEOUT`, `YANDEX_DISK_UPLOAD_TIMEOUT`, `YANDEX_DISK_VERIFY_ATTEMPTS`).
+
+- S3: загрузка потоком; файлы от `S3_MULTIPART_THRESHOLD` (16 МиБ) уходят multipart (часть `S3_PART_SIZE`, 16 МиБ, при больших файлах растёт автоматически), в памяти держатся лишь несколько частей. Целостность: размер объекта и ETag сверяются с вычисленными локально (для multipart — составной `md5(md5 частей)-N`); при несовпадении объект удаляется, копия — `failed`. Если ETag нестандартный (шифрование SSE-KMS), проверяется размер. Недогруженный multipart при сбое отменяется (`AbortMultipartUpload`). Ретраи с backoff — в SDK (`S3_ATTEMPTS`, 5). Настройки — `config/storage_targets.php`.
+- sftp: системный `ssh` читает файл прямо с диска и подаёт в stdin `cat > файл.part` на удалённом сервере; затем там считается `sha256sum` (или `shasum -a 256`), и только при совпадении `.part` переименовывается в итоговый файл (иначе удаляется). Проверка отпечатка хоста (TOFU) — как у остальных SSH-операций сервера. При сбое соединения загрузка повторяется (`SFTP_ATTEMPTS`, 3, с паузой `SFTP_BACKOFF_MS`); таймауты — `SFTP_UPLOAD_TIMEOUT`, `SFTP_COMMAND_TIMEOUT`. Требует на удалённой стороне POSIX-оболочку и `sha256sum`/`shasum`.
+- Ротация и удаление бекапов удаляют копии во всех типах хранилищ (`deleteCopy`): S3 — `DeleteObject` (только внутри префикса), sftp — `rm -f` (только внутри `base_path`).
 
 ### Как получить OAuth-токен Яндекс.Диска
 
@@ -208,14 +223,14 @@ Uptime — доля успешных проверок за окно; `percent: n
 
 - Самый свежий успешный бекап не удаляется никогда; выполняющиеся (`pending`/`running`) не затрагиваются.
 - Неуспешные бекапы старше `backup.failed_retention_days` (7 суток, `config/backup.php`) удаляются, если у задания есть хоть одно правило.
-- Удаляется всё: копии в хранилищах (`deleteCopy`: Яндекс.Диск — `DELETE /resources`, local — `unlink` внутри `base_path`), локальный файл и запись. Если копию в хранилище удалить не удалось, бекап остаётся целиком, ошибка попадает в `errors`, остальные удаляются; повтор — при следующем запуске.
+- Удаляется всё: копии в хранилищах (`deleteCopy`: Яндекс.Диск — `DELETE /resources`, local — `unlink` внутри `base_path`, S3 — `DeleteObject`, sftp — `rm -f` на сервере), локальный файл и запись. Если копию в хранилище удалить не удалось, бекап остаётся целиком, ошибка попадает в `errors`, остальные удаляются; повтор — при следующем запуске.
 - Когда выполняется: сразу после успешного бекапа задания; ежедневно в 04:15 — команда `php artisan backups:rotate [--job=ID] [--dry-run]` (в планировщике; с `--dry-run` только печатает, что будет удалено); по запросу — `POST /backup-jobs/{id}/rotate`.
 
 Удаление сервера удаляет его задания, бекапы и локальные файлы, но не копии в хранилищах (их записи удаляются, файлы остаются).
 
 ### Бекапы (`backups`)
 
-Ресурс: `{id, backup_job_id, backup_job: {id, name, type, server_id}, status: "pending"|"running"|"success"|"failed", trigger: "manual"|"schedule", has_file, file_name, size_bytes, sha256, md5, started_at, finished_at, duration_seconds, error, log (только в show — stderr команды), copies (в index и show), created_at, updated_at}`. Путь к файлу на диске не отдаётся. Копия в `copies`: `{id, storage_target_id, storage_target: {id, name, type}|null, remote_path, status: "pending"|"uploading"|"uploaded"|"failed", size, md5, error, attempts, uploaded_at}`; `pending`-копии появляются сразу после бекапа.
+Ресурс: `{id, backup_job_id, backup_job: {id, name, type, server_id}, status: "pending"|"running"|"success"|"failed", trigger: "manual"|"schedule", has_file, file_name, size_bytes, sha256, md5, started_at, finished_at, duration_seconds, error, log (только в show — stderr команды), copies (в index и show), created_at, updated_at}`. Путь к файлу на диске не отдаётся. Копия в `copies`: `{id, storage_target_id, storage_target: {id, name, type}|null, remote_path, status: "pending"|"uploading"|"uploaded"|"failed", size, md5, sha256, error, attempts, uploaded_at}`; `pending`-копии появляются сразу после бекапа.
 
 | Метод и путь | Ответ |
 |---|---|

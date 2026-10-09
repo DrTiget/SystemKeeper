@@ -2,17 +2,17 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Exceptions\Storage\StorageException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StorageTarget\StoreStorageTargetRequest;
 use App\Http\Requests\StorageTarget\UpdateStorageTargetRequest;
 use App\Http\Resources\StorageTargetResource;
 use App\Models\StorageTarget;
-use App\Services\Storage\YandexDiskClient;
+use App\Services\Storage\Drivers\StorageDriverFactory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -22,37 +22,35 @@ class StorageTargetController extends Controller
     {
         $perPage = min(max($request->integer('per_page', 15), 1), 100);
 
-        return StorageTargetResource::collection(StorageTarget::query()->orderBy('name')->paginate($perPage));
+        return StorageTargetResource::collection(StorageTarget::query()->with('server')->orderBy('name')->paginate($perPage));
     }
 
     public function store(StoreStorageTargetRequest $request): JsonResponse
     {
-        $data = $request->validated();
-        if ($data['type'] === StorageTarget::TYPE_LOCAL) {
-            $data['token'] = null;
-        }
-
+        $data = $this->attributes($request->validated(), $request->validated('type'));
         $data += ['enabled' => true];
 
-        return (new StorageTargetResource(StorageTarget::create($data)))->response()->setStatusCode(201);
+        return (new StorageTargetResource(StorageTarget::create($data)->load('server')))->response()->setStatusCode(201);
     }
 
     public function show(StorageTarget $storageTarget): StorageTargetResource
     {
-        return new StorageTargetResource($storageTarget);
+        return new StorageTargetResource($storageTarget->load('server'));
     }
 
     public function update(UpdateStorageTargetRequest $request, StorageTarget $storageTarget): StorageTargetResource
     {
-        $data = $request->validated();
-        // Пустой токен не затирает сохранённый; у локального хранилища токена нет.
-        if (! $storageTarget->isYandexDisk() || ($data['token'] ?? '') === '') {
-            unset($data['token']);
+        $data = $this->attributes($request->validated(), $storageTarget->type, $storageTarget);
+        // Пустой секрет не затирает сохранённый
+        foreach (['token', 'secret'] as $secret) {
+            if (array_key_exists($secret, $data) && ($data[$secret] === null || $data[$secret] === '')) {
+                unset($data[$secret]);
+            }
         }
 
         $storageTarget->update($data);
 
-        return new StorageTargetResource($storageTarget);
+        return new StorageTargetResource($storageTarget->load('server'));
     }
 
     public function destroy(StorageTarget $storageTarget): Response
@@ -63,18 +61,14 @@ class StorageTargetController extends Controller
         return response()->noContent();
     }
 
-    /** Проверка доступности: для Яндекс.Диска — токен и свободное место, для локального — каталог. */
-    public function check(StorageTarget $storageTarget): JsonResponse
+    /** Проверка доступности: токен и место (ЯД), запись в бакет (S3), запись и место на сервере (sftp), каталог (local). */
+    public function check(StorageTarget $storageTarget, StorageDriverFactory $drivers): JsonResponse
     {
         $error = null;
         $space = null;
 
         try {
-            $space = $storageTarget->isYandexDisk()
-                ? (new YandexDiskClient((string) $storageTarget->token))->quota()
-                : $this->checkLocal($storageTarget);
-        } catch (StorageException $e) {
-            $error = $e->getMessage();
+            $space = $drivers->make($storageTarget)->check();
         } catch (Throwable $e) {
             $error = $e->getMessage();
         }
@@ -94,20 +88,35 @@ class StorageTargetController extends Controller
         ]]);
     }
 
-    /** @return array{total_space: int, used_space: int, free_space: int} */
-    private function checkLocal(StorageTarget $target): array
+    /**
+     * Переносит поля запроса в колонки модели: настройки s3 — в config, secret_key — в secret, prefix — в base_path.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    private function attributes(array $input, string $type, ?StorageTarget $existing = null): array
     {
-        $path = $target->base_path;
-        if (! is_dir($path) && ! @mkdir($path, 0750, true) && ! is_dir($path)) {
-            throw new StorageException("Каталог {$path} не существует и не может быть создан.");
-        }
-        if (! is_writable($path)) {
-            throw new StorageException("Каталог {$path} недоступен для записи.");
+        $data = Arr::only($input, ['name', 'enabled', 'base_path', 'server_id', 'token']);
+        if ($existing === null) {
+            $data['type'] = $type;
         }
 
-        $total = (int) disk_total_space($path);
-        $free = (int) disk_free_space($path);
+        if ($type === StorageTarget::TYPE_S3) {
+            $config = $existing?->config ?? [];
+            foreach (['endpoint', 'region', 'bucket', 'access_key', 'path_style', 'storage_class'] as $key) {
+                if (array_key_exists($key, $input)) {
+                    $config[$key] = $key === 'path_style' ? (bool) $input[$key] : ($input[$key] === '' ? null : $input[$key]);
+                }
+            }
+            $data['config'] = $config + ['endpoint' => null, 'path_style' => false, 'storage_class' => null];
+            if (array_key_exists('secret_key', $input)) {
+                $data['secret'] = $input['secret_key'];
+            }
+            if ($existing === null || array_key_exists('prefix', $input)) {
+                $data['base_path'] = '/'.trim((string) ($input['prefix'] ?? ''), '/');
+            }
+        }
 
-        return ['total_space' => $total, 'used_space' => $total - $free, 'free_space' => $free];
+        return $data;
     }
 }

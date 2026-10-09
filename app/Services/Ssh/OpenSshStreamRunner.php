@@ -23,6 +23,7 @@ class OpenSshStreamRunner
     /**
      * @param  string  $hostKey  открытый ключ хоста в формате "<тип> <base64>"
      * @param  string|null  $privateKey  закрытый ключ без парольной фразы (OpenSSH), либо null при парольной авторизации
+     * @param  string|null  $stdinFile  файл, который ssh читает как stdin команды (выгрузка на удалённый сервер); null — stdin пуст
      * @param  callable(string): void  $onChunk
      * @return array{exit_code: int|null, stderr: string}
      *
@@ -39,13 +40,14 @@ class OpenSshStreamRunner
         callable $onChunk,
         int $timeout,
         int $connectTimeout,
+        ?string $stdinFile = null,
     ): array {
         $dir = $this->makeTempDir();
         $process = null;
         $pipes = [];
 
         try {
-            $args = [(string) config('ssh.openssh_binary'), '-T', '-n', '-p', (string) $port, '-l', $username];
+            $args = [(string) config('ssh.openssh_binary'), '-T', ...($stdinFile === null ? ['-n'] : []), '-p', (string) $port, '-l', $username];
             $env = null;
 
             file_put_contents("{$dir}/known_hosts", 'sk-host '.$this->hostKeyLine($hostKey)."\n");
@@ -85,7 +87,7 @@ class OpenSshStreamRunner
             array_push($args, $host, $command);
 
             try {
-                $process = proc_open($args, [0 => ['file', '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, $env);
+                $process = proc_open($args, [0 => ['file', $stdinFile ?? '/dev/null', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, $env);
             } catch (Throwable $e) {
                 $process = false;
             }
