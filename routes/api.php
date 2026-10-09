@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\HeartbeatController;
+use App\Http\Controllers\Api\V1\IncidentController;
+use App\Http\Controllers\Api\V1\MonitorController;
 use App\Http\Controllers\Api\V1\ServerController;
 use App\Http\Controllers\Api\V1\SshKeyController;
 use App\Http\Controllers\Api\V1\StorageTargetController;
@@ -25,4 +28,18 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('storage-targets/{storage_target}/check', [StorageTargetController::class, 'check']);
     Route::apiResource('storage-targets', StorageTargetController::class)->parameters(['storage-targets' => 'storage_target']);
+});
+
+// Публичный heartbeat: без авторизации, доступ по токену монитора
+Route::match(['get', 'post'], 'heartbeat/{token}', [HeartbeatController::class, 'ping'])->middleware('throttle:120,1');
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('monitors/{monitor}/pause', [MonitorController::class, 'pause']);
+    Route::post('monitors/{monitor}/resume', [MonitorController::class, 'resume']);
+    Route::get('monitors/{monitor}/checks', [MonitorController::class, 'checks']);
+    Route::get('monitors/{monitor}/incidents', [MonitorController::class, 'incidents']);
+    Route::get('monitors/{monitor}/uptime', [MonitorController::class, 'uptime']);
+    Route::apiResource('monitors', MonitorController::class);
+
+    Route::apiResource('incidents', IncidentController::class)->only(['index', 'show']);
 });

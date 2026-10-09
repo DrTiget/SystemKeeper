@@ -4,7 +4,7 @@ ARG UID=1000
 ARG GID=1000
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git unzip openssh-client default-mysql-client gzip \
+        git unzip openssh-client default-mysql-client gzip iputils-ping \
         libzip-dev libicu-dev libonig-dev \
     && docker-php-ext-install pdo_mysql zip intl bcmath pcntl \
     && rm -rf /var/lib/apt/lists/*

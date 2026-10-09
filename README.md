@@ -109,3 +109,52 @@ $copies = $uploader->upload($localPath, $targets, 'server-1/dump.sql.gz', $backu
 1. На <https://oauth.yandex.ru/client/new> создайте приложение: платформа «Веб-сервисы», Callback URI — `https://oauth.yandex.ru/verification_code`, доступы — `cloud_api:disk.read`, `cloud_api:disk.write`, `cloud_api:disk.info` (для папки приложения — `cloud_api:disk.app_folder`).
 2. Откройте `https://oauth.yandex.ru/authorize?response_type=token&client_id=<ID приложения>` под нужным аккаунтом и разрешите доступ; токен будет в адресе страницы после `access_token=`.
 3. Передайте его в `token` при создании хранилища и проверьте через `POST /storage-targets/{id}/check`. Для каждого аккаунта ЯД — отдельное хранилище.
+
+## API: мониторинг
+
+Маршруты под `/api/v1` требуют `Authorization: Bearer <token>`, кроме публичного heartbeat. Пагинация как в остальных списках (`?page`, `?per_page`).
+
+### Мониторы
+
+Типы и цель (`target`):
+
+| `type` | `target` | Проверка |
+|---|---|---|
+| `http` | URL `http(s)://…` | ответ с ожидаемым кодом `expected_status` (без него — любой 2xx) |
+| `keyword` | URL | как `http` + в теле есть `keyword` (обязателен) |
+| `tcp` | `host:port` | TCP-соединение открывается |
+| `ping` | хост или IP | ICMP echo (нужен `ping` в контейнере — `iputils-ping`) |
+| `ssl` | `host`, `host:port` или `https://…` | сертификат валиден и до истечения осталось не меньше `ssl_expiry_days` дней |
+| `heartbeat` | — (не задаётся) | пинг на `heartbeat_url` был не позже чем `interval_seconds` + `heartbeat_grace_seconds` назад |
+
+Ресурс: `{id, name, type, target, interval_seconds, timeout_seconds, expected_status, keyword, ssl_expiry_days, heartbeat_token, heartbeat_url, heartbeat_grace_seconds, last_heartbeat_at, failure_threshold, enabled, status: "up"|"down"|null, consecutive_failures, last_checked_at, next_check_at, open_incident|null (в index/show), uptime (только в show), created_at, updated_at}`.
+
+| Метод и путь | Тело / параметры | Ответ |
+|---|---|---|
+| `GET /monitors` | `?type=`, `?status=up\|down`, `?enabled=0\|1` | `200` страница |
+| `POST /monitors` | `{name, type, target, interval_seconds? (30–86400, по умолчанию 60), timeout_seconds? (1–60, 10), expected_status? (100–599), keyword, ssl_expiry_days? (1–365, 14), heartbeat_grace_seconds? (60), failure_threshold? (1–100, 3), enabled? (true)}` | `201`; `422`; для `heartbeat` токен генерируется |
+| `GET /monitors/{id}` | — | `200` с `uptime` |
+| `PUT/PATCH /monitors/{id}` | любые поля создания, кроме `type` (менять нельзя) | `200`; `422` |
+| `DELETE /monitors/{id}` | — | `204` (проверки и инциденты удаляются) |
+| `POST /monitors/{id}/pause` · `/resume` | — | `200`; при возобновлении сбрасываются счётчик неудач и отсчёт heartbeat |
+| `GET /monitors/{id}/checks` | `?status=up\|down` | `200` страница `{id, monitor_id, status, response_time_ms, status_code, error, checked_at}`, новые первыми |
+| `GET /monitors/{id}/incidents` | `?status=open\|resolved` | `200` страница инцидентов |
+| `GET /monitors/{id}/uptime` | — | `200 {data: {"24h"\|"7d"\|"30d": {percent, checks, failed}}}` |
+
+Uptime — доля успешных проверок за окно; `percent: null`, если проверок не было.
+
+### Инциденты
+
+Ресурс: `{id, monitor_id, monitor: {id, name, type} (в общем списке и show), status: "open"|"resolved", started_at, resolved_at, reason, duration_seconds}` (у открытого `duration_seconds` — на текущий момент).
+
+`GET /incidents` (`?monitor_id=`, `?status=open|resolved`) и `GET /incidents/{id}`.
+
+Антидребезг: инцидент открывается, когда монитор не прошёл проверку `failure_threshold` раз подряд, и закрывается при первой успешной проверке. На открытие и закрытие бросаются события `App\Events\IncidentOpened` и `App\Events\IncidentResolved` (свойство `incident`) — на них будут подписаны алерты.
+
+### Heartbeat
+
+`GET` или `POST /api/v1/heartbeat/{token}` — **без авторизации**, токен берётся из `heartbeat_url` монитора. `200 {data: {ok: true, paused: false}}`; неизвестный токен — `404`; монитор на паузе — `200` с `paused: true`, пинг не учитывается. Пример для cron: `curl -fsS https://host/api/v1/heartbeat/<token>`. Пинг закрывает открытый инцидент сразу, без ожидания планировщика.
+
+### Планировщик
+
+`monitors:dispatch` (каждую минуту, `schedule:work` в compose) ставит в очередь Job `RunMonitorCheck` для включённых мониторов, у которых `next_check_at` подошёл (или не задан); воркер `queue` выполняет проверки. `monitors:prune` (ежедневно) удаляет результаты старше `MONITOR_CHECK_RETENTION_DAYS` (по умолчанию 35) дней. Для включения `ping` в уже собранном контейнере пересоберите образ (`docker compose up -d --build`).
