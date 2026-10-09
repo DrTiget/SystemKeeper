@@ -7,6 +7,7 @@ use App\Models\Monitor;
 use App\Models\MonitorCheck;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -156,5 +157,62 @@ class MonitorApiTest extends TestCase
         $monitor = Monitor::factory()->create();
 
         $this->getJson("/api/v1/monitors/{$monitor->id}/uptime")->assertOk()->assertJsonPath('data.24h.percent', null);
+    }
+
+    public function test_index_includes_uptime_and_last_result_without_n_plus_one(): void
+    {
+        $this->login();
+        $monitors = Monitor::factory()->count(5)->create();
+        foreach ($monitors as $i => $monitor) {
+            MonitorCheck::create(['monitor_id' => $monitor->id, 'status' => 'up', 'checked_at' => now()->subHours(2)]);
+            MonitorCheck::create(['monitor_id' => $monitor->id, 'status' => $i === 0 ? 'down' : 'up', 'checked_at' => now()->subHour()]);
+            MonitorCheck::create(['monitor_id' => $monitor->id, 'status' => 'up', 'checked_at' => now()->subDays(3)]);
+        }
+        $monitors[1]->forceFill(['last_status' => 'up', 'last_response_time_ms' => 123])->save();
+        Incident::create(['monitor_id' => $monitors[0]->id, 'started_at' => now()->subHour()]);
+
+        DB::enableQueryLog();
+        $response = $this->getJson('/api/v1/monitors')->assertOk()->assertJsonCount(5, 'data');
+        $apiQueries = collect(DB::getQueryLog())->filter(fn ($q) => ! str_contains($q['query'], 'personal_access_tokens') && ! str_contains($q['query'], 'from `users`'));
+        DB::disableQueryLog();
+
+        // count + monitors + open incidents + uptime
+        $this->assertLessThanOrEqual(4, $apiQueries->count(), $apiQueries->pluck('query')->implode("\n"));
+
+        $first = collect($response->json('data'))->firstWhere('id', $monitors[0]->id);
+        $this->assertSame(50, $first['uptime']['24h']['percent']);
+        $this->assertSame(2, $first['uptime']['24h']['checks']);
+        $this->assertSame(3, $first['uptime']['7d']['checks']);
+        $this->assertNotNull($first['open_incident']);
+
+        $second = collect($response->json('data'))->firstWhere('id', $monitors[1]->id);
+        $this->assertSame(100, $second['uptime']['24h']['percent']);
+        $this->assertSame(123, $second['last_response_time_ms']);
+        $this->assertSame('up', $second['status']);
+    }
+
+    public function test_index_uptime_is_null_for_monitor_without_checks(): void
+    {
+        $this->login();
+        Monitor::factory()->create();
+
+        $this->getJson('/api/v1/monitors')->assertOk()
+            ->assertJsonPath('data.0.uptime.24h.percent', null)
+            ->assertJsonPath('data.0.uptime.30d.checks', 0);
+    }
+
+    public function test_incidents_list_puts_open_first_across_pages(): void
+    {
+        $this->login();
+        $monitor = Monitor::factory()->create();
+        $resolvedNew = Incident::create(['monitor_id' => $monitor->id, 'started_at' => now()->subHour(), 'resolved_at' => now(), 'duration_seconds' => 3600]);
+        $openOld = Incident::create(['monitor_id' => $monitor->id, 'started_at' => now()->subDays(5)]);
+        $resolvedOld = Incident::create(['monitor_id' => $monitor->id, 'started_at' => now()->subDays(2), 'resolved_at' => now()->subDay(), 'duration_seconds' => 86400]);
+        $openNew = Incident::create(['monitor_id' => $monitor->id, 'started_at' => now()->subMinutes(5)]);
+
+        $ids = fn (int $page) => collect($this->getJson("/api/v1/incidents?per_page=2&page={$page}")->assertOk()->json('data'))->pluck('id')->all();
+
+        $this->assertSame([$openNew->id, $openOld->id], $ids(1));
+        $this->assertSame([$resolvedNew->id, $resolvedOld->id], $ids(2));
     }
 }

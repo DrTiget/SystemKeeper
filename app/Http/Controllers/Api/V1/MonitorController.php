@@ -20,7 +20,7 @@ use Illuminate\Support\Str;
 
 class MonitorController extends Controller
 {
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request, UptimeCalculator $uptime): AnonymousResourceCollection
     {
         $query = Monitor::query()->with('openIncident')->orderBy('name');
 
@@ -34,7 +34,11 @@ class MonitorController extends Controller
             $query->where('enabled', $request->boolean('enabled'));
         }
 
-        return MonitorResource::collection($query->paginate($this->perPage($request)));
+        $page = $query->paginate($this->perPage($request));
+        $stats = $uptime->forMonitors($page->pluck('id')->all());
+        $page->getCollection()->each(fn (Monitor $m) => $m->setAttribute('uptime', $stats[$m->id]));
+
+        return MonitorResource::collection($page);
     }
 
     public function store(StoreMonitorRequest $request): JsonResponse

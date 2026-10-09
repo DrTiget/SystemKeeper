@@ -12,7 +12,7 @@ class IncidentController extends Controller
 {
     public function index(Request $request): AnonymousResourceCollection
     {
-        $query = Incident::query()->with('monitor')->orderByDesc('started_at')->orderByDesc('id');
+        $query = Incident::query()->with('monitor')->orderByRaw('resolved_at is null desc')->orderByDesc('started_at')->orderByDesc('id');
 
         if ($request->filled('monitor_id')) {
             $query->where('monitor_id', $request->integer('monitor_id'));

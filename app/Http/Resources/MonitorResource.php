@@ -31,6 +31,8 @@ class MonitorResource extends JsonResource
             'failure_threshold' => $this->failure_threshold,
             'enabled' => $this->enabled,
             'status' => $this->last_status,
+            'last_response_time_ms' => $this->last_response_time_ms,
+            'last_error' => $this->last_error,
             'consecutive_failures' => $this->consecutive_failures,
             'last_checked_at' => $this->last_checked_at,
             'next_check_at' => $this->next_check_at,

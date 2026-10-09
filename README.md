@@ -127,11 +127,11 @@ $copies = $uploader->upload($localPath, $targets, 'server-1/dump.sql.gz', $backu
 | `ssl` | `host`, `host:port` или `https://…` | сертификат валиден и до истечения осталось не меньше `ssl_expiry_days` дней |
 | `heartbeat` | — (не задаётся) | пинг на `heartbeat_url` был не позже чем `interval_seconds` + `heartbeat_grace_seconds` назад |
 
-Ресурс: `{id, name, type, target, interval_seconds, timeout_seconds, expected_status, keyword, ssl_expiry_days, heartbeat_token, heartbeat_url, heartbeat_grace_seconds, last_heartbeat_at, failure_threshold, enabled, status: "up"|"down"|null, consecutive_failures, last_checked_at, next_check_at, open_incident|null (в index/show), uptime (только в show), created_at, updated_at}`.
+Ресурс: `{id, name, type, target, interval_seconds, timeout_seconds, expected_status, keyword, ssl_expiry_days, heartbeat_token, heartbeat_url, heartbeat_grace_seconds, last_heartbeat_at, failure_threshold, enabled, status: "up"|"down"|null, last_response_time_ms|null, last_error|null (результат последней проверки), consecutive_failures, last_checked_at, next_check_at, open_incident|null (в index/show), uptime (в index и show), created_at, updated_at}`.
 
 | Метод и путь | Тело / параметры | Ответ |
 |---|---|---|
-| `GET /monitors` | `?type=`, `?status=up\|down`, `?enabled=0\|1` | `200` страница |
+| `GET /monitors` | `?type=`, `?status=up\|down`, `?enabled=0\|1` | `200` страница; каждый монитор сразу с `uptime` и `open_incident` (фиксированное число запросов, без N+1) |
 | `POST /monitors` | `{name, type, target, interval_seconds? (30–86400, по умолчанию 60), timeout_seconds? (1–60, 10), expected_status? (100–599), keyword, ssl_expiry_days? (1–365, 14), heartbeat_grace_seconds? (60), failure_threshold? (1–100, 3), enabled? (true)}` | `201`; `422`; для `heartbeat` токен генерируется |
 | `GET /monitors/{id}` | — | `200` с `uptime` |
 | `PUT/PATCH /monitors/{id}` | любые поля создания, кроме `type` (менять нельзя) | `200`; `422` |
@@ -147,7 +147,7 @@ Uptime — доля успешных проверок за окно; `percent: n
 
 Ресурс: `{id, monitor_id, monitor: {id, name, type} (в общем списке и show), status: "open"|"resolved", started_at, resolved_at, reason, duration_seconds}` (у открытого `duration_seconds` — на текущий момент).
 
-`GET /incidents` (`?monitor_id=`, `?status=open|resolved`) и `GET /incidents/{id}`.
+`GET /incidents` (`?monitor_id=`, `?status=open|resolved`) и `GET /incidents/{id}`. Порядок в `/incidents`: сначала активные (`resolved_at` пуст), затем по `started_at` убыванию — сортировка на уровне запроса, поэтому корректна между страницами.
 
 Антидребезг: инцидент открывается, когда монитор не прошёл проверку `failure_threshold` раз подряд, и закрывается при первой успешной проверке. На открытие и закрытие бросаются события `App\Events\IncidentOpened` и `App\Events\IncidentResolved` (свойство `incident`) — на них будут подписаны алерты.
 

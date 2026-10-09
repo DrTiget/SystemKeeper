@@ -15,21 +15,46 @@ class UptimeCalculator
      */
     public function forMonitor(Monitor $monitor): array
     {
-        $result = [];
-        foreach (self::WINDOWS as $label => $days) {
-            $row = MonitorCheck::query()
-                ->where('monitor_id', $monitor->id)
-                ->where('checked_at', '>=', now()->subDays($days))
-                ->selectRaw('count(*) as total, coalesce(sum(status = ?), 0) as failed', [Monitor::STATUS_DOWN])
-                ->first();
+        return $this->forMonitors([$monitor->id])[$monitor->id];
+    }
 
-            $total = (int) $row->total;
-            $failed = (int) $row->failed;
-            $result[$label] = [
-                'percent' => $total === 0 ? null : round(($total - $failed) / $total * 100, 3),
-                'checks' => $total,
-                'failed' => $failed,
-            ];
+    /**
+     * Uptime сразу для набора мониторов — один запрос на все окна.
+     *
+     * @param  list<int>  $ids
+     * @return array<int, array<string, array{percent: float|null, checks: int, failed: int}>>
+     */
+    public function forMonitors(array $ids): array
+    {
+        $select = ['monitor_id'];
+        $bindings = [];
+        foreach (self::WINDOWS as $label => $days) {
+            $since = now()->subDays($days);
+            $select[] = "sum(checked_at >= ?) as total_{$days}";
+            $select[] = "coalesce(sum(checked_at >= ? and status = ?), 0) as failed_{$days}";
+            array_push($bindings, $since, $since, Monitor::STATUS_DOWN);
+        }
+
+        $rows = $ids === [] ? collect() : MonitorCheck::query()
+            ->whereIn('monitor_id', $ids)
+            ->where('checked_at', '>=', now()->subDays(max(self::WINDOWS)))
+            ->groupBy('monitor_id')
+            ->selectRaw(implode(', ', $select), $bindings)
+            ->get()
+            ->keyBy('monitor_id');
+
+        $result = [];
+        foreach ($ids as $id) {
+            $row = $rows->get($id);
+            foreach (self::WINDOWS as $label => $days) {
+                $total = (int) ($row?->{"total_{$days}"} ?? 0);
+                $failed = (int) ($row?->{"failed_{$days}"} ?? 0);
+                $result[$id][$label] = [
+                    'percent' => $total === 0 ? null : round(($total - $failed) / $total * 100, 3),
+                    'checks' => $total,
+                    'failed' => $failed,
+                ];
+            }
         }
 
         return $result;

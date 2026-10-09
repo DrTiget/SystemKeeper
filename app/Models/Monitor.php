@@ -49,6 +49,7 @@ class Monitor extends Model
             'heartbeat_grace_seconds' => 'integer',
             'failure_threshold' => 'integer',
             'consecutive_failures' => 'integer',
+            'last_response_time_ms' => 'integer',
             'enabled' => 'boolean',
             'enabled_at' => 'datetime',
             'next_check_at' => 'datetime',

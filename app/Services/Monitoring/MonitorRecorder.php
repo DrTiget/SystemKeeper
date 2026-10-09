@@ -32,6 +32,8 @@ class MonitorRecorder
             $monitor->forceFill([
                 'last_checked_at' => $now,
                 'last_status' => $check->status,
+                'last_response_time_ms' => $check->response_time_ms,
+                'last_error' => $check->error,
                 'consecutive_failures' => $result->up ? 0 : $monitor->consecutive_failures + 1,
             ])->save();
 
