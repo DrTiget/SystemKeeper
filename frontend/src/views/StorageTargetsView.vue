@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { api, ApiError } from '@/api/client'
-import type { Paginated, StorageCheck, StorageTarget } from '@/api/types'
+import type { Paginated, Server, StorageCheck, StorageTarget } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
@@ -34,7 +34,15 @@ const replace = (t: StorageTarget) => {
   const i = items.value.findIndex((x) => x.id === t.id)
   if (i >= 0) items.value[i] = t
 }
-const typeLabel = (t: StorageTarget) => (t.type === 'local' ? 'Локальный каталог' : 'Яндекс.Диск')
+const TYPES = [
+  { value: 'local', label: 'Локальный каталог' },
+  { value: 'yandex_disk', label: 'Яндекс.Диск' },
+  { value: 's3', label: 'S3' },
+  { value: 'sftp', label: 'Другой сервер' },
+] as const
+const typeLabel = (t: { type: string }) => TYPES.find((x) => x.value === t.type)?.label ?? t.type
+const location = (t: StorageTarget) =>
+  t.type === 's3' ? `s3://${t.bucket}/${t.prefix ?? ''}` : (t.base_path ?? '—')
 const status = (t: StorageTarget) =>
   t.last_check_status === 'ok'
     ? ({ tone: 'success', label: 'Норма' } as const)
@@ -44,7 +52,20 @@ const status = (t: StorageTarget) =>
 
 // --- форма ---
 const editing = ref<'new' | StorageTarget | null>(null)
-const form = ref({ name: '', type: 'local', base_path: '', token: '', enabled: true })
+const emptyForm = () => ({
+  name: '', type: 'local', base_path: '/', token: '', enabled: true,
+  endpoint: '', region: '', bucket: '', prefix: '', access_key: '', secret_key: '', path_style: false, storage_class: '',
+  server_id: '' as number | '',
+})
+const form = ref(emptyForm())
+const servers = ref<Server[]>([])
+async function loadServers() {
+  try {
+    servers.value = (await api<Paginated<Server>>('/servers?per_page=100')).data
+  } catch {
+    servers.value = []
+  }
+}
 const saving = ref(false)
 const formError = ref('')
 const fieldErrors = ref<Record<string, string[]>>({})
@@ -54,9 +75,30 @@ function openForm(t: 'new' | StorageTarget) {
   formError.value = ''
   form.value =
     t === 'new'
-      ? { name: '', type: 'local', base_path: '/', token: '', enabled: true }
-      : { name: t.name, type: t.type, base_path: t.base_path, token: '', enabled: t.enabled }
+      ? emptyForm()
+      : {
+          ...emptyForm(),
+          name: t.name,
+          type: t.type,
+          base_path: t.base_path ?? '/',
+          enabled: t.enabled,
+          endpoint: t.endpoint ?? '',
+          region: t.region ?? '',
+          bucket: t.bucket ?? '',
+          prefix: t.prefix ?? '',
+          access_key: t.access_key ?? '',
+          path_style: !!t.path_style,
+          storage_class: t.storage_class ?? '',
+          server_id: t.server_id ?? '',
+        }
   editing.value = t
+  if (!servers.value.length) loadServers()
+}
+function pickType(type: string) {
+  form.value.type = type
+  fieldErrors.value = {}
+  if (type === 's3' && !form.value.region) form.value.region = 'ru-central1'
+  if (type === 'sftp' && !servers.value.length) loadServers()
 }
 
 async function save() {
@@ -64,15 +106,29 @@ async function save() {
   formError.value = ''
   fieldErrors.value = {}
   const f = form.value
-  const body: Record<string, unknown> = { name: f.name, base_path: f.base_path, enabled: f.enabled }
+  const body: Record<string, unknown> = { name: f.name, enabled: f.enabled }
   if (editing.value === 'new') body.type = f.type
+  if (f.type === 'local' || f.type === 'yandex_disk' || f.type === 'sftp') body.base_path = f.base_path
   if (f.type === 'yandex_disk' && f.token) body.token = f.token
+  if (f.type === 'sftp') body.server_id = f.server_id === '' ? null : f.server_id
+  if (f.type === 's3') {
+    Object.assign(body, {
+      endpoint: f.endpoint || null,
+      region: f.region,
+      bucket: f.bucket,
+      prefix: f.prefix || null,
+      access_key: f.access_key,
+      path_style: f.path_style,
+      storage_class: f.storage_class || null,
+    })
+    if (f.secret_key) body.secret_key = f.secret_key
+  }
   try {
     const target = editing.value
     if (target === 'new') await api('/storage-targets', { method: 'POST', body })
     else if (target) await api(`/storage-targets/${target.id}`, { method: 'PUT', body })
     editing.value = null
-    form.value.token = ''
+    form.value.token = form.value.secret_key = ''
     await load(target === 'new' ? 1 : meta.value.current_page)
   } catch (e) {
     if (e instanceof ApiError && e.status === 422) {
@@ -170,11 +226,25 @@ async function remove() {
             </span>
           </div>
           <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-            <dt class="text-muted-foreground">Путь</dt>
-            <dd class="truncate font-mono">{{ t.base_path }}</dd>
+            <dt class="text-muted-foreground">{{ t.type === 's3' ? 'Бакет' : 'Путь' }}</dt>
+            <dd class="truncate font-mono" :title="location(t)">{{ location(t) }}</dd>
             <template v-if="t.type === 'yandex_disk'">
               <dt class="text-muted-foreground">Токен</dt>
               <dd>{{ t.has_token ? 'задан' : 'не задан' }}</dd>
+            </template>
+            <template v-if="t.type === 's3'">
+              <dt class="text-muted-foreground">Endpoint</dt>
+              <dd class="truncate font-mono">{{ t.endpoint || 'AWS' }} · {{ t.region }}</dd>
+              <dt class="text-muted-foreground">Ключ доступа</dt>
+              <dd class="truncate font-mono">{{ t.access_key }} · secret {{ t.has_secret ? 'задан' : 'не задан' }}</dd>
+              <template v-if="t.storage_class">
+                <dt class="text-muted-foreground">Класс</dt>
+                <dd class="font-mono">{{ t.storage_class }}</dd>
+              </template>
+            </template>
+            <template v-if="t.type === 'sftp' && t.server">
+              <dt class="text-muted-foreground">Сервер</dt>
+              <dd class="truncate">{{ t.server.name }} <span class="font-mono text-xs text-muted-foreground">{{ t.server.host }}:{{ t.server.port }}</span></dd>
             </template>
             <dt class="text-muted-foreground">Состояние</dt>
             <dd>{{ t.enabled ? 'включено' : 'выключено' }}</dd>
@@ -203,18 +273,89 @@ async function remove() {
         </div>
         <div v-if="editing === 'new'" class="grid gap-2">
           <span class="text-sm leading-none font-medium">Тип</span>
-          <div class="flex gap-2">
-            <button type="button" :class="form.type === 'local' ? btnClass.default : btnClass.outline" @click="form.type = 'local'">Локальный каталог</button>
-            <button type="button" :class="form.type === 'yandex_disk' ? btnClass.default : btnClass.outline" @click="form.type = 'yandex_disk'">Яндекс.Диск</button>
+          <div class="flex flex-wrap gap-2">
+            <button v-for="ty in TYPES" :key="ty.value" type="button" :class="form.type === ty.value ? btnClass.default : btnClass.outline" @click="pickType(ty.value)">{{ ty.label }}</button>
           </div>
           <p v-for="m in fieldErrors.type" :key="m" class="text-sm text-destructive">{{ m }}</p>
         </div>
-        <div class="grid gap-2">
+        <div v-if="form.type !== 's3'" class="grid gap-2">
           <label for="t-path" class="text-sm leading-none font-medium">Базовый путь</label>
-          <input id="t-path" v-model="form.base_path" required class="font-mono" :placeholder="form.type === 'local' ? '/var/backups' : '/SystemKeeper'" :class="inputClass" :aria-invalid="!!fieldErrors.base_path" />
-          <p class="text-xs text-muted-foreground">Абсолютный путь, без «..».</p>
+          <input id="t-path" v-model="form.base_path" required class="font-mono" :placeholder="form.type === 'local' ? '/var/backups' : form.type === 'sftp' ? '/srv/backups' : '/SystemKeeper'" :class="inputClass" :aria-invalid="!!fieldErrors.base_path" />
+          <p class="text-xs text-muted-foreground">Абсолютный путь{{ form.type === 'sftp' ? ' на выбранном сервере' : '' }}, без «..».</p>
           <p v-for="m in fieldErrors.base_path" :key="m" class="text-sm text-destructive">{{ m }}</p>
         </div>
+        <div v-if="form.type === 'sftp'" class="grid gap-2">
+          <label for="t-server" class="text-sm leading-none font-medium">Сервер</label>
+          <select id="t-server" v-model="form.server_id" required :class="inputClass" :aria-invalid="!!fieldErrors.server_id">
+            <option value="" disabled>Выберите сервер</option>
+            <option v-for="sv in servers" :key="sv.id" :value="sv.id">{{ sv.name }} ({{ sv.username }}@{{ sv.host }}:{{ sv.port }})</option>
+          </select>
+          <p class="text-xs text-muted-foreground">
+            Файлы кладутся по SSH с теми же ключом/паролем и отпечатком хоста, что заданы у сервера.
+            <template v-if="!servers.length">Серверов нет — <RouterLink to="/servers" class="text-link hover:underline">добавьте сервер</RouterLink>.</template>
+          </p>
+          <p v-for="m in fieldErrors.server_id" :key="m" class="text-sm text-destructive">{{ m }}</p>
+        </div>
+        <template v-if="form.type === 's3'">
+          <div class="grid gap-2">
+            <label for="t-endpoint" class="text-sm leading-none font-medium">Endpoint</label>
+            <input id="t-endpoint" v-model="form.endpoint" type="url" placeholder="https://storage.yandexcloud.net" class="font-mono" :class="inputClass" :aria-invalid="!!fieldErrors.endpoint" />
+            <p class="text-xs text-muted-foreground">
+              Для S3-совместимых хранилищ: Yandex Object Storage — <code class="rounded bg-muted px-1 py-0.5 font-mono text-[13px]">https://storage.yandexcloud.net</code>
+              (регион <code class="rounded bg-muted px-1 py-0.5 font-mono text-[13px]">ru-central1</code>), MinIO — например <code class="rounded bg-muted px-1 py-0.5 font-mono text-[13px]">http://minio:9000</code> (включите path-style). Пусто — AWS S3.
+            </p>
+            <p v-for="m in fieldErrors.endpoint" :key="m" class="text-sm text-destructive">{{ m }}</p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="grid content-start gap-2">
+              <label for="t-region" class="text-sm leading-none font-medium">Регион</label>
+              <input id="t-region" v-model="form.region" required class="font-mono" :class="inputClass" :aria-invalid="!!fieldErrors.region" />
+              <p v-for="m in fieldErrors.region" :key="m" class="text-sm text-destructive">{{ m }}</p>
+            </div>
+            <div class="grid content-start gap-2">
+              <label for="t-bucket" class="text-sm leading-none font-medium">Бакет</label>
+              <input id="t-bucket" v-model="form.bucket" required class="font-mono" :class="inputClass" :aria-invalid="!!fieldErrors.bucket" />
+              <p v-for="m in fieldErrors.bucket" :key="m" class="text-sm text-destructive">{{ m }}</p>
+            </div>
+          </div>
+          <div class="grid gap-2">
+            <label for="t-prefix" class="text-sm leading-none font-medium">Префикс</label>
+            <input id="t-prefix" v-model="form.prefix" placeholder="systemkeeper" class="font-mono" :class="inputClass" :aria-invalid="!!fieldErrors.prefix" />
+            <p class="text-xs text-muted-foreground">Папка внутри бакета; пусто — корень бакета.</p>
+            <p v-for="m in fieldErrors.prefix" :key="m" class="text-sm text-destructive">{{ m }}</p>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="grid content-start gap-2">
+              <label for="t-ak" class="text-sm leading-none font-medium">Access key</label>
+              <input id="t-ak" v-model="form.access_key" required autocomplete="off" class="font-mono" :class="inputClass" :aria-invalid="!!fieldErrors.access_key" />
+              <p v-for="m in fieldErrors.access_key" :key="m" class="text-sm text-destructive">{{ m }}</p>
+            </div>
+            <div class="grid content-start gap-2">
+              <label for="t-sk" class="text-sm leading-none font-medium">Secret key</label>
+              <input
+                id="t-sk"
+                v-model="form.secret_key"
+                type="password"
+                autocomplete="new-password"
+                :required="editing === 'new'"
+                :placeholder="editing !== 'new' && editing.has_secret ? 'Пусто — не менять' : ''"
+                class="font-mono"
+                :class="inputClass"
+                :aria-invalid="!!fieldErrors.secret_key"
+              />
+              <p v-for="m in fieldErrors.secret_key" :key="m" class="text-sm text-destructive">{{ m }}</p>
+            </div>
+          </div>
+          <div class="grid gap-2">
+            <label for="t-class" class="text-sm leading-none font-medium">Класс хранения</label>
+            <input id="t-class" v-model="form.storage_class" placeholder="STANDARD_IA" class="font-mono" :class="inputClass" :aria-invalid="!!fieldErrors.storage_class" />
+            <p class="text-xs text-muted-foreground">Необязательно: <code class="rounded bg-muted px-1 py-0.5 font-mono text-[13px]">STANDARD_IA</code>, у Yandex — <code class="rounded bg-muted px-1 py-0.5 font-mono text-[13px]">COLD</code>.</p>
+            <p v-for="m in fieldErrors.storage_class" :key="m" class="text-sm text-destructive">{{ m }}</p>
+          </div>
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="form.path_style" type="checkbox" class="size-4 rounded-[4px] border-input accent-primary" />Path-style адресация (нужна MinIO и многим совместимым хранилищам)
+          </label>
+        </template>
         <div v-if="form.type === 'yandex_disk'" class="grid gap-2">
           <label for="t-token" class="text-sm leading-none font-medium">OAuth-токен Яндекс.Диска</label>
           <input
@@ -258,13 +399,17 @@ async function remove() {
       </form>
     </Modal>
 
-    <Modal v-if="checking" wide :title="`Проверка: ${checking.name}`" :description="`${typeLabel(checking)} · ${checking.base_path}`" @close="checkLoading || (checking = null)">
+    <Modal v-if="checking" wide :title="`Проверка: ${checking.name}`" :description="`${typeLabel(checking)} · ${location(checking)}`" @close="checkLoading || (checking = null)">
       <div v-if="checkLoading" class="flex items-center gap-2 rounded-lg border px-4 py-3 text-sm text-muted-foreground"><Icon name="loader" class="animate-spin" />Проверяем…</div>
       <div v-else-if="checkError" role="alert" class="rounded-lg border bg-card px-4 py-3 text-sm text-destructive">{{ checkError }}</div>
       <template v-else-if="checkResult">
         <div><StatusBadge :tone="checkResult.status === 'ok' ? 'success' : 'danger'" :label="checkResult.status === 'ok' ? 'Хранилище доступно' : 'Проверка не пройдена'" /></div>
         <div v-if="checkResult.error" role="alert" class="rounded-lg border bg-card px-4 py-3 text-sm text-destructive">{{ checkResult.error }}</div>
-        <div v-if="checkResult.total_space != null" class="grid gap-2">
+        <p v-if="checkResult.status === 'ok' && checking.type !== 'yandex_disk'" class="text-sm text-muted-foreground">
+          {{ checking.type === 's3' ? 'Бакет доступен, тестовый объект записан и удалён.' : 'Подключение работает, тестовая запись выполнена и удалена.' }}
+        </p>
+        <p v-if="checkResult.status === 'ok' && checkResult.total_space == null && checkResult.free_space == null" class="text-sm text-muted-foreground">Это хранилище не сообщает свободное место.</p>
+        <div v-if="checkResult.total_space != null || checkResult.free_space != null" class="grid gap-2">
           <div v-if="usedPercent(checkResult) != null" class="h-1.5 rounded-full bg-muted">
             <div class="h-1.5 rounded-full" :class="barTone(usedPercent(checkResult)!)" :style="{ width: `${usedPercent(checkResult)}%` }" />
           </div>

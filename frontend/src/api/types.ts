@@ -46,10 +46,20 @@ export interface CheckResult {
 export interface StorageTarget {
   id: number
   name: string
-  type: 'local' | 'yandex_disk'
-  base_path: string
+  type: 'local' | 'yandex_disk' | 's3' | 'sftp'
+  base_path: string | null
   enabled: boolean
   has_token: boolean
+  has_secret: boolean
+  server_id: number | null
+  server: { id: number; name: string; host: string; port: number } | null
+  endpoint: string | null
+  region: string | null
+  bucket: string | null
+  prefix: string | null
+  access_key: string | null
+  path_style: boolean | null
+  storage_class: string | null
   last_checked_at: string | null
   last_check_status: 'ok' | 'failed' | null
   last_check_error: string | null
