@@ -105,6 +105,18 @@ class BackupApiTest extends TestCase
         $this->assertNotSame('top-secret', \DB::table('backup_jobs')->value('db_password'));
     }
 
+    public function test_db_ssl_verify_defaults_to_true_and_can_be_disabled(): void
+    {
+        $this->login();
+        $server = Server::factory()->create();
+        $base = ['name' => 'db', 'server_id' => $server->id, 'type' => 'mysql', 'db_mode' => 'direct', 'db_host' => 'db.local', 'db_user' => 'u'];
+
+        $id = $this->postJson('/api/v1/backup-jobs', $base)->assertCreated()->assertJsonPath('data.db_ssl_verify', true)->json('data.id');
+
+        $this->patchJson("/api/v1/backup-jobs/{$id}", ['db_ssl_verify' => false])->assertOk()->assertJsonPath('data.db_ssl_verify', false);
+        $this->postJson('/api/v1/backup-jobs', $base + ['db_ssl_verify' => 'maybe'])->assertUnprocessable()->assertJsonValidationErrors(['db_ssl_verify']);
+    }
+
     public function test_direct_mode_requires_host_and_user(): void
     {
         $this->login();

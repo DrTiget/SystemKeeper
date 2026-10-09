@@ -61,6 +61,7 @@ abstract class BackupJobRequest extends FormRequest
                 'db_name' => ['nullable', 'string', 'max:255', 'regex:/^[A-Za-z0-9_][A-Za-z0-9_$.\-]*$/'],
                 'db_user' => ['nullable', 'string', 'max:255', 'regex:/^[^\x00-\x20]+$/'],
                 'db_password' => ['nullable', 'string', 'max:1000'],
+                'db_ssl_verify' => ['sometimes', 'boolean'],
             ];
         }
 
@@ -98,7 +99,7 @@ abstract class BackupJobRequest extends FormRequest
             'enabled' => 'включено', 'compression_level' => 'уровень сжатия', 'retention_count' => 'хранить копий',
             'retention_days' => 'хранить дней', 'storage_target_ids' => 'хранилища', 'paths' => 'пути', 'excludes' => 'исключения',
             'db_mode' => 'режим', 'db_host' => 'хост БД', 'db_port' => 'порт БД', 'db_name' => 'база данных',
-            'db_user' => 'пользователь БД', 'db_password' => 'пароль БД',
+            'db_user' => 'пользователь БД', 'db_password' => 'пароль БД', 'db_ssl_verify' => 'проверка сертификата БД',
         ];
     }
 }

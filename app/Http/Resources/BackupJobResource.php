@@ -32,6 +32,7 @@ class BackupJobResource extends JsonResource
             'db_name' => $this->db_name,
             'db_user' => $this->db_user,
             'has_db_password' => $this->db_password !== null,
+            'db_ssl_verify' => $this->db_ssl_verify,
             'compression_level' => $this->compression_level,
             'schedule' => $this->schedule,
             'enabled' => $this->enabled,

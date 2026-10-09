@@ -80,4 +80,24 @@ class BackupCommandBuilderTest extends TestCase
         $this->assertSame('tar.zst', $builder->extension($this->job(['type' => 'files'])));
         $this->assertSame('sql.zst', $builder->extension($this->job(['type' => 'mysql'])));
     }
+
+    public function test_mysql_skips_tablespaces(): void
+    {
+        $command = (new BackupCommandBuilder)->build($this->job(['type' => 'mysql', 'db_name' => 'shop']));
+
+        $this->assertStringContainsString('--no-tablespaces', $command->command);
+    }
+
+    public function test_mysql_direct_without_ssl_verify_skips_certificate_check(): void
+    {
+        $builder = new BackupCommandBuilder;
+
+        $direct = $builder->build($this->job(['type' => 'mysql', 'db_mode' => 'direct', 'db_host' => 'db', 'db_ssl_verify' => false]));
+        $verified = $builder->build($this->job(['type' => 'mysql', 'db_mode' => 'direct', 'db_host' => 'db', 'db_ssl_verify' => true]));
+        $ssh = $builder->build($this->job(['type' => 'mysql', 'db_mode' => 'ssh', 'db_ssl_verify' => false]));
+
+        $this->assertStringContainsString('--skip-ssl-verify-server-cert', $direct->command);
+        $this->assertStringNotContainsString('--skip-ssl-verify-server-cert', $verified->command);
+        $this->assertStringNotContainsString('--skip-ssl-verify-server-cert', $ssh->command);
+    }
 }

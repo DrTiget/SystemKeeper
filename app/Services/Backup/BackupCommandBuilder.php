@@ -42,8 +42,13 @@ class BackupCommandBuilder
 
     private function mysql(BackupJob $job): BackupCommand
     {
-        $args = ['mysqldump', '--single-transaction', '--quick', '--routines', '--triggers', '--events'];
+        // --no-tablespaces: без привилегии PROCESS mysqldump иначе пишет ошибку про табличные пространства
+        $args = ['mysqldump', '--single-transaction', '--quick', '--routines', '--triggers', '--events', '--no-tablespaces'];
         $args = [...$args, ...$this->connectionArgs($job, user: '--user=', host: '--host=', port: '--port=')];
+        // Клиент в контейнере — MariaDB, он по умолчанию проверяет сертификат; у удалённого клиента по SSH флага может не быть
+        if ($job->db_mode === BackupJob::DB_MODE_DIRECT && $job->db_ssl_verify === false) {
+            $args[] = '--skip-ssl-verify-server-cert';
+        }
         array_push($args, ...($job->db_name ? [$job->db_name] : ['--all-databases']));
 
         return new BackupCommand(

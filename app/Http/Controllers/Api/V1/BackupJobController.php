@@ -94,7 +94,7 @@ class BackupJobController extends Controller
         $type ??= $data['type'] ?? null;
 
         if ($create) {
-            $data += ['enabled' => true, 'compression_level' => (int) config('backup.compression_level')];
+            $data += ['enabled' => true, 'db_ssl_verify' => true, 'compression_level' => (int) config('backup.compression_level')];
         }
 
         if ($type === BackupJob::TYPE_FILES) {

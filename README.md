@@ -170,7 +170,7 @@ Uptime — доля успешных проверок за окно; `percent: n
 | Тип | Команда (на сервере по SSH, либо локально в режиме `direct`) |
 |---|---|
 | `files` | `tar -C / -cf - [--exclude=…] -- <пути> \| zstd -T0 -N -q -c` |
-| `mysql` | `mysqldump --single-transaction --quick --routines --triggers --events [--host --port --user] <база>\|--all-databases \| zstd …` |
+| `mysql` | `mysqldump --single-transaction --quick --routines --triggers --events --no-tablespaces [--host --port --user] <база>\|--all-databases \| zstd …` |
 | `postgres` | `pg_dump --no-password … --dbname=<база>` (без `db_name` — `pg_dumpall`) `\| zstd …` |
 
 Конвейер запускается под `bash -o pipefail`: падение `tar`/`mysqldump` не маскируется успешным `zstd`. Пароль БД передаётся переменной окружения (`MYSQL_PWD`/`PGPASSWORD`), а не аргументом, и вырезается из `error`/`log`. Ненулевой код выхода или пустой вывод — `failed`, недописанный файл удаляется. На сервере должны быть `zstd`, `tar` (для БД — `mysqldump`/`pg_dump`); режим `direct` требует их в контейнере `app` (в `docker/php/Dockerfile` добавлены `zstd` и `postgresql-client`). Пересоберите образ: `docker compose up -d --build`.
@@ -179,14 +179,14 @@ Uptime — доля успешных проверок за окно; `percent: n
 
 ### Задания (`backup-jobs`)
 
-Ресурс: `{id, name, server_id, server: {id, name}, type: "files"|"mysql"|"postgres", paths, excludes, db_mode: "ssh"|"direct"|null, db_host, db_port, db_name, db_user, has_db_password, compression_level (1–19, по умолчанию 3), schedule (cron, 5 полей)|null, enabled, next_run_at, last_scheduled_at, retention_count, retention_days, storage_target_ids, backups_count, latest_backup, created_at, updated_at}`.
+Ресурс: `{id, name, server_id, server: {id, name}, type: "files"|"mysql"|"postgres", paths, excludes, db_mode: "ssh"|"direct"|null, db_host, db_port, db_name, db_user, has_db_password, db_ssl_verify, compression_level (1–19, по умолчанию 3), schedule (cron, 5 полей)|null, enabled, next_run_at, last_scheduled_at, retention_count, retention_days, storage_target_ids, backups_count, latest_backup, created_at, updated_at}`.
 
 `retention_count`, `retention_days` и `storage_target_ids` — поля под ротацию и выгрузку в хранилища: API их хранит, но сами по себе они ничего не удаляют и не загружают.
 
 | Метод и путь | Тело | Ответ |
 |---|---|---|
 | `GET /backup-jobs` | фильтры `server_id`, `type`, `enabled` | `200` страница |
-| `POST /backup-jobs` | общие: `name`, `server_id`, `type`, `schedule?`, `enabled?` (true), `compression_level?`, `retention_count?`, `retention_days?`, `storage_target_ids?`. `files`: `paths` (абсолютные, обязательно), `excludes?`. `mysql`/`postgres`: `db_mode?` (`ssh` по умолчанию; `direct` — SystemKeeper сам подключается к БД и требует `db_host`, `db_user`), `db_host?`, `db_port?`, `db_name?` (пусто — все базы), `db_user?`, `db_password?` | `201`; `422` |
+| `POST /backup-jobs` | общие: `name`, `server_id`, `type`, `schedule?`, `enabled?` (true), `compression_level?`, `retention_count?`, `retention_days?`, `storage_target_ids?`. `files`: `paths` (абсолютные, обязательно), `excludes?`. `mysql`/`postgres`: `db_mode?` (`ssh` по умолчанию; `direct` — SystemKeeper сам подключается к БД и требует `db_host`, `db_user`), `db_host?`, `db_port?`, `db_name?` (пусто — все базы), `db_user?`, `db_password?`, `db_ssl_verify?` (по умолчанию true; false — не проверять TLS-сертификат MySQL в режиме `direct`, нужно для самоподписанных) | `201`; `422` |
 | `GET /backup-jobs/{id}` | — | `200` |
 | `PUT/PATCH /backup-jobs/{id}` | любые поля создания, кроме `type` (не меняется); поля чужого типа обнуляются | `200`; `422` |
 | `DELETE /backup-jobs/{id}` | — | `204` (вместе с бекапами и файлами); `409`, если есть выполняющийся бекап |

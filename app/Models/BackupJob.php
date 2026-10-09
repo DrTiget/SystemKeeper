@@ -15,7 +15,7 @@ use Illuminate\Support\Carbon;
 
 #[Fillable([
     'name', 'server_id', 'type', 'paths', 'excludes',
-    'db_mode', 'db_host', 'db_port', 'db_name', 'db_user', 'db_password',
+    'db_mode', 'db_host', 'db_port', 'db_name', 'db_user', 'db_password', 'db_ssl_verify',
     'compression_level', 'schedule', 'enabled', 'last_scheduled_at',
     'retention_count', 'retention_days', 'storage_target_ids',
 ])]
@@ -53,6 +53,7 @@ class BackupJob extends Model
             'storage_target_ids' => 'array',
             'db_port' => 'integer',
             'db_password' => 'encrypted',
+            'db_ssl_verify' => 'boolean',
             'compression_level' => 'integer',
             'enabled' => 'boolean',
             'retention_count' => 'integer',
