@@ -179,9 +179,9 @@ Uptime — доля успешных проверок за окно; `percent: n
 
 ### Задания (`backup-jobs`)
 
-Ресурс: `{id, name, server_id, server: {id, name}, type: "files"|"mysql"|"postgres", paths, excludes, db_mode: "ssh"|"direct"|null, db_host, db_port, db_name, db_user, has_db_password, db_ssl_verify, compression_level (1–19, по умолчанию 3), schedule (cron, 5 полей)|null, enabled, next_run_at, last_scheduled_at, retention_count, retention_days, storage_target_ids, backups_count, latest_backup, created_at, updated_at}`.
+Ресурс: `{id, name, server_id, server: {id, name}, type: "files"|"mysql"|"postgres", paths, excludes, db_mode: "ssh"|"direct"|null, db_host, db_port, db_name, db_user, has_db_password, db_ssl_verify, compression_level (1–19, по умолчанию 3), schedule (cron, 5 полей)|null, enabled, next_run_at, last_scheduled_at, retention_count, retention_days, keep_daily, keep_weekly, keep_monthly, storage_target_ids, backups_count, latest_backup, created_at, updated_at}`.
 
-`storage_target_ids` — id хранилищ (см. «API: хранилища»), куда выгружается каждый успешный бекап (должны существовать; отключённые хранилища пропускаются). Выгрузка идёт Job-ом `UploadFileToStorageTargets` на удалённый путь `{server_id}/{job_id}/{файл}` внутри `base_path` хранилища. Неуспех выгрузки не делает бекап неуспешным: статус каждой копии виден в `copies` бекапа. `retention_count` и `retention_days` — поля ротации (см. ниже).
+`storage_target_ids` — id хранилищ (см. «API: хранилища»), куда выгружается каждый успешный бекап (должны существовать; отключённые хранилища пропускаются). Выгрузка идёт Job-ом `UploadFileToStorageTargets` на удалённый путь `{server_id}/{job_id}/{файл}` внутри `base_path` хранилища. Неуспех выгрузки не делает бекап неуспешным: статус каждой копии виден в `copies` бекапа. Ротация — см. «Ротация бекапов» ниже.
 
 | Метод и путь | Тело | Ответ |
 |---|---|---|
@@ -190,7 +190,17 @@ Uptime — доля успешных проверок за окно; `percent: n
 | `GET /backup-jobs/{id}` | — | `200` |
 | `PUT/PATCH /backup-jobs/{id}` | любые поля создания, кроме `type` (не меняется); поля чужого типа обнуляются | `200`; `422` |
 | `DELETE /backup-jobs/{id}` | `?keep_remote=1` (не удалять копии в хранилищах) | `204` (вместе с бекапами, файлами и копиями в хранилищах); `409`, если есть выполняющийся бекап или идёт выгрузка; `502` — копию удалить не удалось |
+| `POST /backup-jobs/{id}/rotate` | `{dry_run?: bool}` | `200 {data: {dry_run, kept, deleted: [id бекапов], errors: [..]}}` — применяет правила ротации сразу; с `dry_run` только показывает, что будет удалено |
 | `POST /backup-jobs/{id}/run` | — | `202 {data: backup}` со `status: "pending"`; `409`, если бекап уже выполняется или в очереди |
+
+### Ротация бекапов
+
+Поля задания (все необязательные, `null` — правило не используется): `retention_count` (хранить N последних успешных), `retention_days` (хранить успешные не старше N суток), схема GFS — `keep_daily`, `keep_weekly`, `keep_monthly` (оставить по одному, самому свежему, бекапу за каждый из последних N дней / недель ISO / месяцев, **в которых бекапы были**). Правила складываются по «ИЛИ»: бекап хранится, если его защищает хотя бы одно. Нет ни одного правила — ничего не удаляется.
+
+- Самый свежий успешный бекап не удаляется никогда; выполняющиеся (`pending`/`running`) не затрагиваются.
+- Неуспешные бекапы старше `backup.failed_retention_days` (7 суток, `config/backup.php`) удаляются, если у задания есть хоть одно правило.
+- Удаляется всё: копии в хранилищах (`deleteCopy`: Яндекс.Диск — `DELETE /resources`, local — `unlink` внутри `base_path`), локальный файл и запись. Если копию в хранилище удалить не удалось, бекап остаётся целиком, ошибка попадает в `errors`, остальные удаляются; повтор — при следующем запуске.
+- Когда выполняется: сразу после успешного бекапа задания; ежедневно в 04:15 — команда `php artisan backups:rotate [--job=ID] [--dry-run]` (в планировщике; с `--dry-run` только печатает, что будет удалено); по запросу — `POST /backup-jobs/{id}/rotate`.
 
 Удаление сервера удаляет его задания, бекапы и локальные файлы, но не копии в хранилищах (их записи удаляются, файлы остаются).
 

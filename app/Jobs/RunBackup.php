@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Backup;
 use App\Services\Backup\BackupPublisher;
+use App\Services\Backup\BackupRotator;
 use App\Services\Backup\BackupRunner;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -25,7 +26,7 @@ class RunBackup implements ShouldQueue
         $this->timeout = (int) config('backup.timeout');
     }
 
-    public function handle(BackupRunner $runner, BackupPublisher $publisher): void
+    public function handle(BackupRunner $runner, BackupPublisher $publisher, BackupRotator $rotator): void
     {
         if ($this->backup->status !== Backup::STATUS_PENDING) {
             return;
@@ -35,6 +36,19 @@ class RunBackup implements ShouldQueue
 
         if ($backup->status === Backup::STATUS_SUCCESS) {
             $this->publish($backup, $publisher);
+            $this->rotate($backup, $rotator);
+        }
+    }
+
+    /**
+     * Ротация сразу после бекапа; её сбой тоже не портит успешный бекап (ту же работу делает ночная команда).
+     */
+    private function rotate(Backup $backup, BackupRotator $rotator): void
+    {
+        try {
+            $rotator->rotate($backup->job);
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 

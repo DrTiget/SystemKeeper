@@ -12,6 +12,7 @@ use App\Models\Backup;
 use App\Models\BackupJob;
 use App\Services\Backup\BackupPurgeException;
 use App\Services\Backup\BackupPurger;
+use App\Services\Backup\BackupRotator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -86,6 +87,18 @@ class BackupJobController extends Controller
         RunBackup::dispatch($backup);
 
         return (new BackupResource($backup->load('job')))->response()->setStatusCode(202);
+    }
+
+    /**
+     * Применяет правила ротации сразу. `dry_run=1` — только показать, что будет удалено.
+     */
+    public function rotate(Request $request, BackupJob $backupJob, BackupRotator $rotator): JsonResponse
+    {
+        $request->validate(['dry_run' => ['sometimes', 'boolean']]);
+
+        $result = $rotator->rotate($backupJob, $request->boolean('dry_run'));
+
+        return response()->json(['data' => $result]);
     }
 
     private function loaded(BackupJob $job): BackupJob

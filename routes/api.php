@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('incidents', IncidentController::class)->only(['index', 'show']);
 
     Route::post('backup-jobs/{backup_job}/run', [BackupJobController::class, 'run']);
+    Route::post('backup-jobs/{backup_job}/rotate', [BackupJobController::class, 'rotate']);
     Route::apiResource('backup-jobs', BackupJobController::class)->parameters(['backup-jobs' => 'backup_job']);
 
     Route::get('backups/{backup}/download', [BackupController::class, 'download'])->name('backups.download');

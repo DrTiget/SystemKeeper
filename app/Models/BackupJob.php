@@ -17,7 +17,7 @@ use Illuminate\Support\Carbon;
     'name', 'server_id', 'type', 'paths', 'excludes',
     'db_mode', 'db_host', 'db_port', 'db_name', 'db_user', 'db_password', 'db_ssl_verify',
     'compression_level', 'schedule', 'enabled', 'last_scheduled_at',
-    'retention_count', 'retention_days', 'storage_target_ids',
+    'retention_count', 'retention_days', 'keep_daily', 'keep_weekly', 'keep_monthly', 'storage_target_ids',
 ])]
 #[Hidden(['db_password'])]
 class BackupJob extends Model
@@ -58,6 +58,9 @@ class BackupJob extends Model
             'enabled' => 'boolean',
             'retention_count' => 'integer',
             'retention_days' => 'integer',
+            'keep_daily' => 'integer',
+            'keep_weekly' => 'integer',
+            'keep_monthly' => 'integer',
             'last_scheduled_at' => 'datetime',
         ];
     }

@@ -37,6 +37,9 @@ abstract class BackupJobRequest extends FormRequest
             'compression_level' => ['sometimes', 'integer', 'between:1,19'],
             'retention_count' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'retention_days' => ['nullable', 'integer', 'min:1', 'max:36500'],
+            'keep_daily' => ['nullable', 'integer', 'min:1', 'max:3650'],
+            'keep_weekly' => ['nullable', 'integer', 'min:1', 'max:1000'],
+            'keep_monthly' => ['nullable', 'integer', 'min:1', 'max:1200'],
             'storage_target_ids' => ['nullable', 'array'],
             'storage_target_ids.*' => ['integer', 'distinct', 'exists:storage_targets,id'],
         ];
@@ -97,7 +100,7 @@ abstract class BackupJobRequest extends FormRequest
         return [
             'name' => 'название', 'server_id' => 'сервер', 'type' => 'тип', 'schedule' => 'расписание',
             'enabled' => 'включено', 'compression_level' => 'уровень сжатия', 'retention_count' => 'хранить копий',
-            'retention_days' => 'хранить дней', 'storage_target_ids' => 'хранилища', 'paths' => 'пути', 'excludes' => 'исключения',
+            'retention_days' => 'хранить дней', 'keep_daily' => 'хранить по дням', 'keep_weekly' => 'хранить по неделям', 'keep_monthly' => 'хранить по месяцам', 'storage_target_ids' => 'хранилища', 'paths' => 'пути', 'excludes' => 'исключения',
             'db_mode' => 'режим', 'db_host' => 'хост БД', 'db_port' => 'порт БД', 'db_name' => 'база данных',
             'db_user' => 'пользователь БД', 'db_password' => 'пароль БД', 'db_ssl_verify' => 'проверка сертификата БД',
         ];
