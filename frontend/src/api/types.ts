@@ -151,6 +151,8 @@ export interface Monitor {
   heartbeat_url: string | null
   heartbeat_grace_seconds: number | null
   last_heartbeat_at: string | null
+  last_response_time_ms: number | null
+  last_error: string | null
   failure_threshold: number
   enabled: boolean
   status: 'up' | 'down' | null
@@ -158,7 +160,7 @@ export interface Monitor {
   last_checked_at: string | null
   next_check_at: string | null
   open_incident: Incident | null
-  uptime?: Uptime
+  uptime: Uptime
   created_at: string
   updated_at: string
 }

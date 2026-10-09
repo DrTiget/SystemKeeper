@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 import { api } from '@/api/client'
-import type { Incident, Monitor, MonitorCheck, Paginated, Uptime } from '@/api/types'
+import type { Incident, Monitor, Paginated } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
 import IncidentTable from '@/components/IncidentTable.vue'
@@ -14,8 +14,6 @@ import { TYPES, formatPercent } from '@/lib/monitoring'
 const tab = ref<'monitors' | 'incidents'>('monitors')
 
 const monitors = ref<Monitor[]>([])
-const uptime = ref<Record<number, Uptime>>({})
-const lastMs = ref<Record<number, number | null>>({})
 const mMeta = ref({ current_page: 1, last_page: 1, per_page: 15, total: 0 })
 
 const incidents = ref<Incident[]>([])
@@ -30,25 +28,13 @@ async function loadMonitors(page = mMeta.value.current_page) {
   if (!res.data.length && page > res.meta.last_page && res.meta.last_page > 0) return loadMonitors(res.meta.last_page)
   monitors.value = res.data
   mMeta.value = res.meta
-  // uptime и время ответа в списке не приходят — добираем по каждому монитору
-  await Promise.all(
-    res.data.map(async (m) => {
-      const [u, c] = await Promise.allSettled([
-        api<{ data: Uptime }>(`/monitors/${m.id}/uptime`),
-        api<Paginated<MonitorCheck>>(`/monitors/${m.id}/checks?per_page=1`),
-      ])
-      if (u.status === 'fulfilled') uptime.value[m.id] = u.value.data
-      if (c.status === 'fulfilled') lastMs.value[m.id] = c.value.data[0]?.response_time_ms ?? null
-    }),
-  )
 }
 
 async function loadIncidents(page = iMeta.value.current_page) {
   const q = iFilter.value ? `&status=${iFilter.value}` : ''
   const res = await api<Paginated<Incident>>(`/incidents?page=${page}&per_page=15${q}`)
   if (!res.data.length && page > res.meta.last_page && res.meta.last_page > 0) return loadIncidents(res.meta.last_page)
-  // активные сверху, внутри группы порядок API
-  incidents.value = [...res.data].sort((a, b) => Number(b.status === 'open') - Number(a.status === 'open'))
+  incidents.value = res.data
   iMeta.value = res.meta
 }
 
@@ -173,11 +159,14 @@ const tabCls = (t: string) => (tab.value === t ? btnClass.default : btnClass.out
                   <RouterLink :to="`/monitoring/${m.id}`" class="block truncate font-mono font-medium hover:underline">{{ m.name }}</RouterLink>
                   <span class="block truncate text-xs text-muted-foreground">{{ TYPES[m.type] }}<template v-if="m.target"> · {{ m.target }}</template></span>
                 </td>
-                <td class="px-4 py-2"><MonitorStatus :monitor="m" /></td>
-                <td class="px-4 py-2 tabular-nums">{{ formatPercent(uptime[m.id]?.['24h'].percent) }}</td>
-                <td class="px-4 py-2 tabular-nums">{{ formatPercent(uptime[m.id]?.['7d'].percent) }}</td>
-                <td class="px-4 py-2 tabular-nums">{{ formatPercent(uptime[m.id]?.['30d'].percent) }}</td>
-                <td class="px-4 py-2 tabular-nums">{{ lastMs[m.id] != null ? `${lastMs[m.id]} мс` : '—' }}</td>
+                <td class="px-4 py-2">
+                  <MonitorStatus :monitor="m" />
+                  <span v-if="m.enabled && m.status === 'down' && m.last_error" class="mt-0.5 block max-w-48 truncate text-xs text-muted-foreground" :title="m.last_error">{{ m.last_error }}</span>
+                </td>
+                <td class="px-4 py-2 tabular-nums">{{ formatPercent(m.uptime?.['24h'].percent) }}</td>
+                <td class="px-4 py-2 tabular-nums">{{ formatPercent(m.uptime?.['7d'].percent) }}</td>
+                <td class="px-4 py-2 tabular-nums">{{ formatPercent(m.uptime?.['30d'].percent) }}</td>
+                <td class="px-4 py-2 tabular-nums">{{ m.last_response_time_ms != null ? `${m.last_response_time_ms} мс` : '—' }}</td>
                 <td class="px-4 py-2 text-right whitespace-nowrap">
                   <button :class="btnClass.ghostSm" :title="m.enabled ? 'Поставить на паузу' : 'Возобновить'" @click="togglePause(m)">{{ m.enabled ? 'Пауза' : 'Возобновить' }}</button>
                   <button :class="btnClass.ghostSm" title="Редактировать" @click="editing = m"><Icon name="pencil" /></button>

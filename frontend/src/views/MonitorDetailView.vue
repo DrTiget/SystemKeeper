@@ -46,7 +46,7 @@ async function load(silent = false) {
     monitor.value = m.data
     uptime.value = m.data.uptime ?? null
     chart.value = [...c.data].reverse()
-    incidents.value = [...i.data].sort((a, b) => Number(b.status === 'open') - Number(a.status === 'open'))
+    incidents.value = i.data
     await loadChecks()
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) notFound.value = true
