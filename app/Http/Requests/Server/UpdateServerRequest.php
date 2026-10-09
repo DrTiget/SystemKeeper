@@ -25,7 +25,7 @@ class UpdateServerRequest extends FormRequest
             'ssh_key_id' => [Rule::requiredIf($switchedToKey), 'nullable', 'integer', 'exists:ssh_keys,id'],
             'password' => [Rule::requiredIf($switchedToPassword), 'nullable', 'string', 'max:1000'],
             'description' => ['sometimes', 'nullable', 'string', 'max:5000'],
-        ];
+        ] + MetricsSettingsRules::rules();
     }
 
     public function attributes(): array

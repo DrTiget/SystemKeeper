@@ -57,7 +57,7 @@ docker compose exec app php artisan user:create
 
 ### Серверы
 
-Ресурс: `{id, name, host, port, username, auth_type: "key"|"password", ssh_key_id, ssh_key: {id, name, type, fingerprint}|null, has_password, description, last_checked_at, last_check_status: "ok"|"failed"|null, last_check_error, host_fingerprint, created_at, updated_at}`.
+Ресурс: `{id, name, host, port, username, auth_type: "key"|"password", ssh_key_id, ssh_key: {id, name, type, fingerprint}|null, has_password, description, last_checked_at, last_check_status: "ok"|"failed"|null, last_check_error, host_fingerprint, metrics_settings, metrics_collected_at, metrics_last_error, created_at, updated_at}` (`metrics_settings` — см. «Метрики серверов»).
 
 | Метод и путь | Тело | Ответ |
 |---|---|---|
@@ -72,6 +72,46 @@ docker compose exec app php artisan user:create
 Проверка выполняет `uname -a && uptime` (таймауты — `config/ssh.php`, env `SSH_CONNECT_TIMEOUT`, `SSH_EXEC_TIMEOUT`). Сбой подключения — тоже `200` со `status: "failed"` и текстом в `error`; результат сохраняется в `last_check_*`. Ненулевой код выхода — `failed`.
 
 Отпечаток хоста (TOFU): при первом успешном подключении `host_fingerprint` (SHA256 host key) запоминается; если позже он не совпал, подключение отклоняется с ошибкой «Отпечаток хоста изменился». Принять новый ключ хоста — `POST /servers/{id}/reset-fingerprint`, затем повторить проверку.
+
+## API: метрики серверов
+
+Раз в N минут планировщик собирает с серверов нагрузку, память и диски по SSH — одной командой через `SshConnectorInterface::exec`:
+`cat /proc/loadavg /proc/meminfo`, `nproc`, `/proc/uptime`, `df -PTk` (на BusyBox без `-T` — запасной `df -Pk`) и `df -Pi` (inodes). Разбор рассчитан на Debian/Ubuntu/CentOS (в т.ч. старые ядра без `MemAvailable`) и Alpine/BusyBox; псевдо-ФС (`tmpfs`, `devtmpfs`, `squashfs`…), `/proc`, `/sys`, `/dev`, `/run`, `/snap` и docker-монтирования `/etc/hosts|hostname|resolv.conf` отбрасываются, дубли одной ФС схлопываются. Занятая память = `MemTotal − MemAvailable` (без кэша); занятость диска считается как «Use%» в `df`: `used / (used + avail)`.
+
+### Настройки (в ресурсе сервера и в `POST/PUT /servers`)
+
+```json
+"metrics_settings": {
+  "enabled": true,
+  "interval_minutes": 5,
+  "confirmations": 2,
+  "thresholds": { "disk_percent": 90, "load_per_core": 2.0, "ram_percent": 90 }
+}
+```
+
+В запросе можно передавать любое подмножество ключей (остальное не меняется). `interval_minutes` 1–1440; `thresholds.*: null` выключает проверку; `disk_percent`/`ram_percent` 1–100, `load_per_core` 0.1–100 — это `load average за 5 минут / число ядер`; `confirmations` 1–10 — антидребезг (см. ниже). Значения по умолчанию — как в примере. Результат последнего сбора: `metrics_collected_at`, `metrics_last_error` (null, если всё хорошо).
+
+### Эндпоинты
+
+| Метод и путь | Ответ |
+|---|---|
+| `GET /servers/{id}/metrics/latest` | `200 {data: {metric, alerts, collected_at, last_error}}` — последний замер (`null`, если ещё не было) и активные превышения порогов |
+| `GET /servers/{id}/metrics?from=&to=&points=` | `200 {data: {from, to, bucket_seconds, points: [...]}}` — история для графиков. `from`/`to` — даты ISO 8601 (по умолчанию последние сутки; глубже срока хранения не отдаётся), `points` 2–1000 (по умолчанию 200) — максимум точек: период делится на равные окна (не короче минуты), значения в окне усредняются. `422`, если `from ≥ to` |
+| `POST /servers/{id}/metrics/collect` | `200 {data: {status: "ok"\|"failed", error, metric}}` — собрать прямо сейчас (синхронно, пороги тоже проверяются) |
+
+Замер (`metric`): `{id, server_id, collected_at, load: {load1, load5, load15, per_core}, cpu_count, memory: {total_bytes, used_bytes, available_bytes, used_percent}, swap: {total_bytes, used_bytes, used_percent|null}, uptime_seconds, disks: [{mount, device, fstype|null, total_bytes, used_bytes, avail_bytes, used_percent, inodes_total, inodes_used, inodes_free}]}`.
+
+Точка истории: `{time, samples, load1|load5|load15|load_per_core|mem_used_percent|swap_used_percent: {avg, max}, mem_used_bytes, disks: [{mount, total_bytes, used_bytes, used_percent: {avg, max}}]}`. Окна без замеров в ответ не попадают (на графике — разрыв).
+
+Активное превышение (`alerts[]`): `{metric: "disk"|"load"|"ram", target: точка монтирования|null, value, threshold, exceeded_since}`.
+
+### Пороги и события
+
+После каждого замера значения сравниваются с порогами (срабатывание — `значение ≥ порога`; диски проверяются по каждой точке монтирования отдельно). Антидребезг: событие `App\Events\MetricThresholdExceeded` отправляется, когда превышение удержалось `confirmations` замеров подряд (один всплеск не в счёт), и больше не повторяется, пока показатель не вернётся в норму; `App\Events\MetricThresholdRecovered` — когда в норме `confirmations` замеров подряд. Если порог выключили или точка монтирования исчезла, открытое превышение закрывается событием возврата. Поля событий: `server`, `sample` (замер), `metric` (`disk|load|ram`), `target`, `value`, `threshold` (проценты или нагрузка на ядро), у `Recovered` ещё `exceededSince`. События только диспатчатся — отправку алертов делает отдельный модуль. Сбой сбора (SSH недоступен и т. п.) событий не порождает — он виден в `metrics_last_error`.
+
+### Планировщик
+
+`metrics:dispatch` (каждую минуту) ставит Job `CollectServerMetrics` для серверов с включённым сбором, срок которых подошёл (`metrics_next_at`; смена настроек сбрасывает его). `metrics:prune` (ежедневно в 03:45) удаляет замеры старше `METRICS_RETENTION_DAYS` (по умолчанию 30) дней; также `METRICS_EXEC_TIMEOUT` (30 с) и `METRICS_DISPATCH_LIMIT` (200) — см. `config/metrics.php`. Для серверов, добавленных до этой функции, сбор включается автоматически с настройками по умолчанию — отключить можно `metrics_settings.enabled: false`.
 
 ## API: хранилища
 

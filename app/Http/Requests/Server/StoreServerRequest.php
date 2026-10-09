@@ -21,7 +21,7 @@ class StoreServerRequest extends FormRequest
             'ssh_key_id' => [Rule::requiredIf($auth === Server::AUTH_KEY), 'nullable', 'integer', 'exists:ssh_keys,id'],
             'password' => [Rule::requiredIf($auth === Server::AUTH_PASSWORD), 'nullable', 'string', 'max:1000'],
             'description' => ['nullable', 'string', 'max:5000'],
-        ];
+        ] + MetricsSettingsRules::rules();
     }
 
     public function attributes(): array
@@ -29,6 +29,6 @@ class StoreServerRequest extends FormRequest
         return [
             'name' => 'название', 'host' => 'хост', 'port' => 'порт', 'username' => 'пользователь',
             'auth_type' => 'способ авторизации', 'ssh_key_id' => 'SSH-ключ', 'password' => 'пароль', 'description' => 'описание',
-        ];
+        ] + MetricsSettingsRules::attributes();
     }
 }

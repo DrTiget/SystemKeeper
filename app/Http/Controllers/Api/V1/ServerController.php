@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\Ssh\HostFingerprintChangedException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Server\MetricsSettingsRules;
 use App\Http\Requests\Server\StoreServerRequest;
 use App\Http\Requests\Server\UpdateServerRequest;
 use App\Http\Resources\ServerResource;
@@ -27,7 +28,7 @@ class ServerController extends Controller
 
     public function store(StoreServerRequest $request): JsonResponse
     {
-        $server = Server::create($this->attributes($request->validated()) + ['port' => 22]);
+        $server = Server::create($this->attributes(MetricsSettingsRules::flatten($request->validated())) + ['port' => 22]);
 
         return (new ServerResource($server->load('sshKey')))->response()->setStatusCode(201);
     }
@@ -39,7 +40,7 @@ class ServerController extends Controller
 
     public function update(UpdateServerRequest $request, Server $server): ServerResource
     {
-        $data = $this->attributes($request->validated());
+        $data = $this->attributes(MetricsSettingsRules::flatten($request->validated()));
 
         // Смена хоста или порта делает запомненный отпечаток недействительным
         if (($data['host'] ?? $server->host) !== $server->host || ($data['port'] ?? $server->port) !== $server->port) {
