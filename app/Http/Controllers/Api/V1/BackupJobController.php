@@ -10,6 +10,8 @@ use App\Http\Resources\BackupResource;
 use App\Jobs\RunBackup;
 use App\Models\Backup;
 use App\Models\BackupJob;
+use App\Services\Backup\BackupPurgeException;
+use App\Services\Backup\BackupPurger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -55,10 +57,18 @@ class BackupJobController extends Controller
     /**
      * Удаляет задание вместе с бекапами и их файлами.
      */
-    public function destroy(BackupJob $backupJob): JsonResponse|Response
+    public function destroy(Request $request, BackupJob $backupJob, BackupPurger $purger): JsonResponse|Response
     {
         if ($backupJob->hasActiveBackup()) {
             return response()->json(['message' => 'У задания есть выполняющийся бекап — дождитесь его завершения.'], 409);
+        }
+
+        try {
+            foreach ($backupJob->backups()->get() as $backup) {
+                $purger->purge($backup, remote: ! $request->boolean('keep_remote'));
+            }
+        } catch (BackupPurgeException $e) {
+            return response()->json(['message' => $e->getMessage()], $e->status);
         }
 
         $backupJob->delete();

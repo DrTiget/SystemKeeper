@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Support\Facades\Storage;
 
 #[Fillable([
@@ -34,7 +35,11 @@ class Backup extends Model
 
     protected static function booted(): void
     {
-        static::deleting(fn (Backup $backup) => $backup->deleteFile());
+        static::deleting(function (Backup $backup) {
+            $backup->deleteFile();
+            // Записи о копиях; сами файлы в хранилищах удаляет BackupPurger
+            $backup->copies()->delete();
+        });
     }
 
     protected function casts(): array
@@ -49,6 +54,21 @@ class Backup extends Model
     public function job(): BelongsTo
     {
         return $this->belongsTo(BackupJob::class, 'backup_job_id');
+    }
+
+    public function copies(): MorphMany
+    {
+        return $this->morphMany(StorageCopy::class, 'uploadable');
+    }
+
+    /** Идёт ли выгрузка копий в хранилища (ожидает в очереди или выполняется). */
+    public function hasActiveCopies(): bool
+    {
+        // Копии, застрявшие дольше upload_stale_hours (воркер потерял задание), выгрузкой не считаем
+        return $this->copies()
+            ->whereIn('status', [StorageCopy::STATUS_PENDING, StorageCopy::STATUS_UPLOADING])
+            ->where('updated_at', '>', now()->subHours((int) config('backup.upload_stale_hours')))
+            ->exists();
     }
 
     public function isActive(): bool

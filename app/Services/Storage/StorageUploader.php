@@ -47,6 +47,20 @@ class StorageUploader implements StorageUploaderInterface
         return $copies;
     }
 
+    public function deleteCopy(StorageCopy $copy): void
+    {
+        $target = $copy->target;
+        if ($target === null) {
+            return;
+        }
+
+        match ($target->type) {
+            StorageTarget::TYPE_YANDEX_DISK => (new YandexDiskClient((string) $target->token))->delete($copy->remote_path),
+            StorageTarget::TYPE_LOCAL => $this->deleteLocal($target, $copy->remote_path),
+            default => throw new StorageException("Неизвестный тип хранилища: {$target->type}"),
+        };
+    }
+
     public function dispatch(string $localPath, iterable $targets, string $remotePath, ?Model $uploadable = null): void
     {
         $ids = [];
@@ -65,6 +79,18 @@ class StorageUploader implements StorageUploaderInterface
             StorageTarget::TYPE_LOCAL => $this->putLocal($localPath, $fullPath),
             default => throw new StorageException("Неизвестный тип хранилища: {$target->type}"),
         };
+    }
+
+    private function deleteLocal(StorageTarget $target, string $fullPath): void
+    {
+        // Удаляем только внутри базовой папки цели — запись в БД не должна позволять стереть произвольный файл
+        $base = rtrim($target->base_path, '/').'/';
+        if (! str_starts_with($fullPath, $base) || str_contains($fullPath, '..')) {
+            throw new StorageException("Путь {$fullPath} вне базовой папки хранилища.");
+        }
+        if (is_file($fullPath) && ! unlink($fullPath)) {
+            throw new StorageException("Не удалось удалить файл {$fullPath}.");
+        }
     }
 
     private function putLocal(string $localPath, string $fullPath): string

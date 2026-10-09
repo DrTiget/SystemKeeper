@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BackupResource;
 use App\Models\Backup;
+use App\Services\Backup\BackupPurgeException;
+use App\Services\Backup\BackupPurger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -19,7 +21,7 @@ class BackupController extends Controller
         $perPage = min(max($request->integer('per_page', 15), 1), 100);
 
         $backups = Backup::query()
-            ->with('job:id,name,type,server_id')
+            ->with(['job:id,name,type,server_id', 'copies.target'])
             ->when($request->filled('backup_job_id'), fn ($q) => $q->where('backup_job_id', $request->integer('backup_job_id')))
             ->when($request->filled('server_id'), fn ($q) => $q->whereHas('job', fn ($j) => $j->where('server_id', $request->integer('server_id'))))
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')))
@@ -31,7 +33,7 @@ class BackupController extends Controller
 
     public function show(Backup $backup): BackupResource
     {
-        return new BackupResource($backup->load('job:id,name,type,server_id'));
+        return new BackupResource($backup->load(['job:id,name,type,server_id', 'copies.target']));
     }
 
     public function download(Backup $backup): StreamedResponse|JsonResponse
@@ -46,13 +48,16 @@ class BackupController extends Controller
         ]);
     }
 
-    public function destroy(Backup $backup): JsonResponse|Response
+    /**
+     * Удаляет бекап, его локальный файл и копии в хранилищах. `?keep_remote=1` — копии в хранилищах не трогать.
+     */
+    public function destroy(Request $request, Backup $backup, BackupPurger $purger): JsonResponse|Response
     {
-        if ($backup->isActive()) {
-            return response()->json(['message' => 'Бекап ещё выполняется — удалить его нельзя.'], 409);
+        try {
+            $purger->purge($backup, remote: ! $request->boolean('keep_remote'));
+        } catch (BackupPurgeException $e) {
+            return response()->json(['message' => $e->getMessage()], $e->status);
         }
-
-        $backup->delete();
 
         return response()->noContent();
     }

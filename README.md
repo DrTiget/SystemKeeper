@@ -181,7 +181,7 @@ Uptime — доля успешных проверок за окно; `percent: n
 
 Ресурс: `{id, name, server_id, server: {id, name}, type: "files"|"mysql"|"postgres", paths, excludes, db_mode: "ssh"|"direct"|null, db_host, db_port, db_name, db_user, has_db_password, db_ssl_verify, compression_level (1–19, по умолчанию 3), schedule (cron, 5 полей)|null, enabled, next_run_at, last_scheduled_at, retention_count, retention_days, storage_target_ids, backups_count, latest_backup, created_at, updated_at}`.
 
-`retention_count`, `retention_days` и `storage_target_ids` — поля под ротацию и выгрузку в хранилища: API их хранит, но сами по себе они ничего не удаляют и не загружают.
+`storage_target_ids` — id хранилищ (см. «API: хранилища»), куда выгружается каждый успешный бекап (должны существовать; отключённые хранилища пропускаются). Выгрузка идёт Job-ом `UploadFileToStorageTargets` на удалённый путь `{server_id}/{job_id}/{файл}` внутри `base_path` хранилища. Неуспех выгрузки не делает бекап неуспешным: статус каждой копии виден в `copies` бекапа. `retention_count` и `retention_days` — поля ротации (см. ниже).
 
 | Метод и путь | Тело | Ответ |
 |---|---|---|
@@ -189,18 +189,18 @@ Uptime — доля успешных проверок за окно; `percent: n
 | `POST /backup-jobs` | общие: `name`, `server_id`, `type`, `schedule?`, `enabled?` (true), `compression_level?`, `retention_count?`, `retention_days?`, `storage_target_ids?`. `files`: `paths` (абсолютные, обязательно), `excludes?`. `mysql`/`postgres`: `db_mode?` (`ssh` по умолчанию; `direct` — SystemKeeper сам подключается к БД и требует `db_host`, `db_user`), `db_host?`, `db_port?`, `db_name?` (пусто — все базы), `db_user?`, `db_password?`, `db_ssl_verify?` (по умолчанию true; false — не проверять TLS-сертификат MySQL в режиме `direct`, нужно для самоподписанных) | `201`; `422` |
 | `GET /backup-jobs/{id}` | — | `200` |
 | `PUT/PATCH /backup-jobs/{id}` | любые поля создания, кроме `type` (не меняется); поля чужого типа обнуляются | `200`; `422` |
-| `DELETE /backup-jobs/{id}` | — | `204` (вместе с бекапами и файлами); `409`, если есть выполняющийся бекап |
+| `DELETE /backup-jobs/{id}` | `?keep_remote=1` (не удалять копии в хранилищах) | `204` (вместе с бекапами, файлами и копиями в хранилищах); `409`, если есть выполняющийся бекап или идёт выгрузка; `502` — копию удалить не удалось |
 | `POST /backup-jobs/{id}/run` | — | `202 {data: backup}` со `status: "pending"`; `409`, если бекап уже выполняется или в очереди |
 
-Удаление сервера удаляет его задания, бекапы и файлы.
+Удаление сервера удаляет его задания, бекапы и локальные файлы, но не копии в хранилищах (их записи удаляются, файлы остаются).
 
 ### Бекапы (`backups`)
 
-Ресурс: `{id, backup_job_id, backup_job: {id, name, type, server_id}, status: "pending"|"running"|"success"|"failed", trigger: "manual"|"schedule", has_file, file_name, size_bytes, sha256, md5, started_at, finished_at, duration_seconds, error, log (только в show — stderr команды), created_at, updated_at}`. Путь к файлу на диске не отдаётся.
+Ресурс: `{id, backup_job_id, backup_job: {id, name, type, server_id}, status: "pending"|"running"|"success"|"failed", trigger: "manual"|"schedule", has_file, file_name, size_bytes, sha256, md5, started_at, finished_at, duration_seconds, error, log (только в show — stderr команды), copies (в index и show), created_at, updated_at}`. Путь к файлу на диске не отдаётся. Копия в `copies`: `{id, storage_target_id, storage_target: {id, name, type}|null, remote_path, status: "pending"|"uploading"|"uploaded"|"failed", size, md5, error, attempts, uploaded_at}`; `pending`-копии появляются сразу после бекапа.
 
 | Метод и путь | Ответ |
 |---|---|
 | `GET /backups` | `200` страница, новые первыми; фильтры `backup_job_id`, `server_id`, `status` |
 | `GET /backups/{id}` | `200` с `log` |
 | `GET /backups/{id}/download` | `200` файл (`application/zstd`, заголовок `X-Checksum-Sha256`); `404`, если бекап не `success` или файл отсутствует |
-| `DELETE /backups/{id}` | `204` (файл удаляется); `409`, если бекап `pending`/`running` |
+| `DELETE /backups/{id}` | `204`: удаляются локальный файл, запись и копии в хранилищах; `?keep_remote=1` — копии в хранилищах не трогать. `409`, если бекап `pending`/`running` или его выгрузка ещё идёт; `502`, если копию в хранилище удалить не удалось (бекап остаётся целиком, можно повторить) |

@@ -6,6 +6,7 @@ use App\Jobs\RunBackup;
 use App\Models\Backup;
 use App\Models\BackupJob;
 use App\Models\Server;
+use App\Models\StorageTarget;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
@@ -50,11 +51,12 @@ class BackupApiTest extends TestCase
     {
         $this->login();
         $server = Server::factory()->create();
+        [$t1, $t2] = [StorageTarget::factory()->create()->id, StorageTarget::factory()->create()->id];
 
         $this->postJson('/api/v1/backup-jobs', [
             'name' => 'www', 'server_id' => $server->id, 'type' => 'files',
             'paths' => ['/var/www'], 'excludes' => ['*.log'], 'schedule' => '0 3 * * *',
-            'retention_count' => 7, 'retention_days' => 30, 'storage_target_ids' => [1, 2],
+            'retention_count' => 7, 'retention_days' => 30, 'storage_target_ids' => [$t1, $t2],
         ])
             ->assertCreated()
             ->assertJsonPath('data.type', 'files')
@@ -62,7 +64,7 @@ class BackupApiTest extends TestCase
             ->assertJsonPath('data.enabled', true)
             ->assertJsonPath('data.db_mode', null)
             ->assertJsonPath('data.retention_count', 7)
-            ->assertJsonPath('data.storage_target_ids', [1, 2])
+            ->assertJsonPath('data.storage_target_ids', [$t1, $t2])
             ->assertJsonPath('data.server.id', $server->id)
             ->assertJsonPath('data.latest_backup', null);
     }

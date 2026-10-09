@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Backup;
+use App\Services\Backup\BackupPublisher;
 use App\Services\Backup\BackupRunner;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -24,13 +25,31 @@ class RunBackup implements ShouldQueue
         $this->timeout = (int) config('backup.timeout');
     }
 
-    public function handle(BackupRunner $runner): void
+    public function handle(BackupRunner $runner, BackupPublisher $publisher): void
     {
         if ($this->backup->status !== Backup::STATUS_PENDING) {
             return;
         }
 
-        $runner->run($this->backup);
+        $backup = $runner->run($this->backup);
+
+        if ($backup->status === Backup::STATUS_SUCCESS) {
+            $this->publish($backup, $publisher);
+        }
+    }
+
+    /**
+     * Сбой постановки выгрузки не должен делать успешный бекап неуспешным — пишем его в лог бекапа.
+     */
+    private function publish(Backup $backup, BackupPublisher $publisher): void
+    {
+        try {
+            $publisher->publish($backup);
+        } catch (Throwable $e) {
+            $note = 'Не удалось поставить выгрузку в хранилища: '.$e->getMessage();
+            $backup->forceFill(['log' => trim(($backup->log ? $backup->log."\n" : '').$note)])->save();
+            report($e);
+        }
     }
 
     /**

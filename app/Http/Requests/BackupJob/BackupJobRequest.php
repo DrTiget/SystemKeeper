@@ -38,7 +38,7 @@ abstract class BackupJobRequest extends FormRequest
             'retention_count' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'retention_days' => ['nullable', 'integer', 'min:1', 'max:36500'],
             'storage_target_ids' => ['nullable', 'array'],
-            'storage_target_ids.*' => ['integer', 'min:1'],
+            'storage_target_ids.*' => ['integer', 'distinct', 'exists:storage_targets,id'],
         ];
 
         if ($create) {
