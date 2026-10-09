@@ -65,6 +65,58 @@ export interface StorageCheck {
   free_space: number | null
 }
 
+export type BackupType = 'files' | 'mysql' | 'postgres'
+export type BackupStatus = 'pending' | 'running' | 'success' | 'failed'
+
+export interface Backup {
+  id: number
+  backup_job_id: number
+  backup_job: { id: number; name: string; type: BackupType; server_id: number } | null
+  status: BackupStatus
+  trigger: 'manual' | 'schedule'
+  has_file: boolean
+  file_name: string | null
+  size_bytes: number | null
+  sha256: string | null
+  md5: string | null
+  started_at: string | null
+  finished_at: string | null
+  duration_seconds: number | null
+  error: string | null
+  log?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface BackupJob {
+  id: number
+  name: string
+  server_id: number
+  server: { id: number; name: string } | null
+  type: BackupType
+  paths: string[] | null
+  excludes: string[] | null
+  db_mode: 'ssh' | 'direct' | null
+  db_host: string | null
+  db_port: number | null
+  db_name: string | null
+  db_user: string | null
+  has_db_password: boolean
+  db_ssl_verify: boolean
+  compression_level: number
+  schedule: string | null
+  enabled: boolean
+  next_run_at: string | null
+  last_scheduled_at: string | null
+  retention_count: number | null
+  retention_days: number | null
+  storage_target_ids: number[] | null
+  backups_count: number
+  latest_backup: Backup | null
+  created_at: string
+  updated_at: string
+}
+
 export type MonitorType = 'http' | 'keyword' | 'tcp' | 'ping' | 'ssl' | 'heartbeat'
 
 export interface UptimeWindow {

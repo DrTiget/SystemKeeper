@@ -40,3 +40,12 @@ export function formatBytes(n: number | null | undefined): string {
   }
   return `${v.toLocaleString('ru-RU', { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`
 }
+
+export function formatDuration(sec: number | null | undefined): string {
+  if (sec == null) return '—'
+  if (sec < 60) return `${sec} с`
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = sec % 60
+  return h ? `${h} ч ${m} мин` : `${m} мин ${s} с`
+}
