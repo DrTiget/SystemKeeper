@@ -50,5 +50,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('backup-jobs', BackupJobController::class)->parameters(['backup-jobs' => 'backup_job']);
 
     Route::get('backups/{backup}/download', [BackupController::class, 'download'])->name('backups.download');
+    Route::post('backups/{backup}/download-link', [BackupController::class, 'downloadLink']);
     Route::apiResource('backups', BackupController::class)->only(['index', 'show', 'destroy']);
 });
+
+// Скачивание бекапа по временной подписанной ссылке: без Bearer, подлинность — в подписи (см. POST backups/{id}/download-link)
+Route::get('backups/{backup}/file', [BackupController::class, 'file'])
+    ->middleware(['signed:relative', 'throttle:60,1'])
+    ->name('backups.file');

@@ -1,5 +1,5 @@
 import type { BackupStatus, BackupType } from '@/api/types'
-import { ApiError, getToken } from '@/api/client'
+import { api } from '@/api/client'
 
 export const typeLabel: Record<BackupType, string> = { files: 'Файлы', mysql: 'MySQL', postgres: 'PostgreSQL' }
 
@@ -13,16 +13,18 @@ export const statusBadge = (s: BackupStatus) => STATUS_BADGE[s]
 
 export const isActive = (s: BackupStatus | undefined | null) => s === 'pending' || s === 'running'
 
-/** Скачивание файла бекапа: нужен Bearer-токен, поэтому через fetch + blob. */
+/**
+ * Скачивание файла бекапа по временной подписанной ссылке (POST /backups/{id}/download-link, ~5 мин):
+ * браузер сам стримит файл обычным переходом, без blob в памяти и без Bearer-заголовка.
+ * Из ссылки берём только путь с подписью: хост в ней может быть внутренним (за прокси).
+ */
 export async function downloadBackup(id: number, fallbackName: string | null): Promise<void> {
-  const res = await fetch(`/api/v1/backups/${id}/download`, { headers: { Authorization: `Bearer ${getToken()}`, Accept: 'application/json' } })
-  if (!res.ok) throw new ApiError(res.status, 'Не удалось скачать')
-  const url = URL.createObjectURL(await res.blob())
+  const { data } = await api<{ data: { url: string; expires_at: string } }>(`/backups/${id}/download-link`, { method: 'POST' })
+  const link = new URL(data.url, window.location.origin)
   const a = document.createElement('a')
-  a.href = url
+  a.href = link.pathname + link.search
   a.download = fallbackName ?? `backup-${id}.zst`
   document.body.appendChild(a)
   a.click()
   a.remove()
-  URL.revokeObjectURL(url)
 }

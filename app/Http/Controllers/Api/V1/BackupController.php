@@ -12,7 +12,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Facades\URL;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class BackupController extends Controller
 {
@@ -36,16 +37,56 @@ class BackupController extends Controller
         return new BackupResource($backup->load(['job:id,name,type,server_id', 'copies.target']));
     }
 
-    public function download(Backup $backup): StreamedResponse|JsonResponse
+    /** Скачивание с Bearer-токеном. Браузеру удобнее временная ссылка — см. downloadLink(). */
+    public function download(Backup $backup): BinaryFileResponse|JsonResponse
     {
-        if ($backup->status !== Backup::STATUS_SUCCESS || ! $backup->fileExists()) {
+        return $this->fileResponse($backup);
+    }
+
+    /**
+     * Временная подписанная ссылка на файл бекапа: открывается без Authorization (в браузере — обычным переходом).
+     * Подписан путь с query (без хоста), поэтому ссылка работает и за прокси, подменяющим Host.
+     */
+    public function downloadLink(Request $request, Backup $backup): JsonResponse
+    {
+        if (! $this->isDownloadable($backup)) {
             return response()->json(['message' => 'Файл бекапа недоступен.'], 404);
         }
 
-        return Storage::disk(config('backup.disk'))->download($backup->file_path, basename($backup->file_path), [
-            'Content-Type' => 'application/zstd',
-            'X-Checksum-Sha256' => $backup->sha256,
-        ]);
+        $expiresAt = now()->addMinutes((int) config('backup.download_link_minutes'));
+        $relative = URL::temporarySignedRoute('backups.file', $expiresAt, ['backup' => $backup->id], absolute: false);
+
+        return response()->json(['data' => [
+            'url' => $request->getSchemeAndHttpHost().$relative,
+            'expires_at' => $expiresAt->toIso8601String(),
+        ]]);
+    }
+
+    /** Отдача файла по подписанной ссылке (маршрут за middleware `signed:relative`). */
+    public function file(Backup $backup): BinaryFileResponse|JsonResponse
+    {
+        return $this->fileResponse($backup);
+    }
+
+    private function isDownloadable(Backup $backup): bool
+    {
+        return $backup->status === Backup::STATUS_SUCCESS && $backup->fileExists();
+    }
+
+    /**
+     * Потоковая отдача с Content-Length, Accept-Ranges/Range (докачка), ETag и контрольной суммой в заголовке.
+     */
+    private function fileResponse(Backup $backup): BinaryFileResponse|JsonResponse
+    {
+        if (! $this->isDownloadable($backup)) {
+            return response()->json(['message' => 'Файл бекапа недоступен.'], 404);
+        }
+
+        return response()->download(
+            Storage::disk(config('backup.disk'))->path($backup->file_path),
+            basename($backup->file_path),
+            ['Content-Type' => 'application/zstd', 'X-Checksum-Sha256' => $backup->sha256, 'Cache-Control' => 'private, no-store'],
+        );
     }
 
     /**
