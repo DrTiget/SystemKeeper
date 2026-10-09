@@ -13,6 +13,7 @@ const router = createRouter({
       children: [
         { path: '', name: 'dashboard', component: () => import('@/views/DashboardView.vue'), meta: { title: 'Дашборд' } },
         { path: 'servers', name: 'servers', component: () => import('@/views/ServersView.vue'), meta: { title: 'Серверы' } },
+        { path: 'servers/:id(\\d+)', name: 'server', component: () => import('@/views/ServerDetailView.vue'), meta: { title: 'Серверы' } },
         { path: 'ssh-keys', name: 'ssh-keys', component: () => import('@/views/SshKeysView.vue'), meta: { title: 'SSH-ключи' } },
         { path: 'storage-targets', name: 'storage-targets', component: () => import('@/views/StorageTargetsView.vue'), meta: { title: 'Хранилища' } },
         { path: 'backups', name: 'backups', component: () => import('@/views/BackupsView.vue'), meta: { title: 'Бекапы' } },

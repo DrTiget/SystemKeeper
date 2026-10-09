@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { api, ApiError } from '@/api/client'
-import type { CheckResult, Paginated, Server, SshKey } from '@/api/types'
+import type { CheckResult, MetricsLatest, Paginated, Server, SshKey } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
 import Pagination from '@/components/Pagination.vue'
+import ServerMetricsSummary from '@/components/ServerMetricsSummary.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { btnClass, errorMessage, formatDate, inputClass, textareaClass } from '@/lib/format'
 
@@ -22,6 +23,7 @@ async function load(page = meta.value.current_page) {
     if (!res.data.length && page > res.meta.last_page && res.meta.last_page > 0) return load(res.meta.last_page)
     items.value = res.data
     meta.value = res.meta
+    loadLatest(res.data)
   } catch (e) {
     loadError.value = errorMessage(e, 'Не удалось загрузить список серверов')
   } finally {
@@ -29,6 +31,16 @@ async function load(page = meta.value.current_page) {
   }
 }
 onMounted(() => load(1))
+
+// последние метрики для карточек; сбой по одному серверу не мешает остальным
+const latest = ref<Record<number, MetricsLatest | undefined>>({})
+function loadLatest(list: Server[]) {
+  for (const sv of list) {
+    api<{ data: MetricsLatest }>(`/servers/${sv.id}/metrics/latest`)
+      .then((r) => (latest.value[sv.id] = r.data))
+      .catch(() => (latest.value[sv.id] = undefined))
+  }
+}
 
 function replace(s: Server) {
   const i = items.value.findIndex((x) => x.id === s.id)
@@ -45,7 +57,8 @@ const status = (s: Server) =>
 // --- создание / редактирование ---
 const keys = ref<SshKey[]>([])
 const editing = ref<'new' | Server | null>(null)
-const form = ref({ name: '', host: '', port: 22, username: '', auth_type: 'key', ssh_key_id: '' as number | '', password: '', description: '' })
+const emptyMetrics = () => ({ enabled: true, interval_minutes: 5 as number | '', disk_percent: 90 as number | '', load_per_core: 2 as number | '', ram_percent: 90 as number | '' })
+const form = ref({ name: '', host: '', port: 22, username: '', auth_type: 'key', ssh_key_id: '' as number | '', password: '', description: '', metrics: emptyMetrics() })
 const saving = ref(false)
 const formError = ref('')
 const fieldErrors = ref<Record<string, string[]>>({})
@@ -63,7 +76,7 @@ async function openForm(target: 'new' | Server) {
   formError.value = ''
   form.value =
     target === 'new'
-      ? { name: '', host: '', port: 22, username: 'root', auth_type: 'key', ssh_key_id: '', password: '', description: '' }
+      ? { name: '', host: '', port: 22, username: 'root', auth_type: 'key', ssh_key_id: '', password: '', description: '', metrics: emptyMetrics() }
       : {
           name: target.name,
           host: target.host,
@@ -73,6 +86,13 @@ async function openForm(target: 'new' | Server) {
           ssh_key_id: target.ssh_key_id ?? '',
           password: '',
           description: target.description ?? '',
+          metrics: {
+            enabled: target.metrics_settings.enabled,
+            interval_minutes: target.metrics_settings.interval_minutes,
+            disk_percent: target.metrics_settings.thresholds.disk_percent ?? '',
+            load_per_core: target.metrics_settings.thresholds.load_per_core ?? '',
+            ram_percent: target.metrics_settings.thresholds.ram_percent ?? '',
+          },
         }
   editing.value = target
   await loadKeys()
@@ -80,6 +100,11 @@ async function openForm(target: 'new' | Server) {
 
 const hostChanged = computed(
   () => editing.value && editing.value !== 'new' && (editing.value.host !== form.value.host || editing.value.port !== Number(form.value.port)),
+)
+const metricsErrors = computed(() =>
+  Object.entries(fieldErrors.value)
+    .filter(([k]) => k.startsWith('metrics_settings'))
+    .flatMap(([, m]) => m),
 )
 const noKeys = computed(() => form.value.auth_type === 'key' && !keys.value.length)
 
@@ -95,6 +120,16 @@ async function save() {
     username: f.username,
     auth_type: f.auth_type,
     description: f.description || null,
+    // пустой порог = проверка выключена (null)
+    metrics_settings: {
+      enabled: f.metrics.enabled,
+      ...(f.metrics.interval_minutes === '' ? {} : { interval_minutes: Number(f.metrics.interval_minutes) }),
+      thresholds: {
+        disk_percent: f.metrics.disk_percent === '' ? null : Number(f.metrics.disk_percent),
+        load_per_core: f.metrics.load_per_core === '' ? null : Number(f.metrics.load_per_core),
+        ram_percent: f.metrics.ram_percent === '' ? null : Number(f.metrics.ram_percent),
+      },
+    },
   }
   if (f.auth_type === 'key') body.ssh_key_id = f.ssh_key_id === '' ? null : f.ssh_key_id
   // пустой пароль при редактировании = оставить прежний (если способ входа не менялся)
@@ -202,7 +237,7 @@ async function remove() {
         <div v-for="s in items" :key="s.id" class="flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4">
           <div class="flex items-center gap-2">
             <Icon name="server" class="text-muted-foreground" />
-            <span class="truncate font-mono font-medium">{{ s.name }}</span>
+            <RouterLink :to="`/servers/${s.id}`" class="truncate font-mono font-medium hover:underline">{{ s.name }}</RouterLink>
             <span class="text-xs text-muted-foreground uppercase">{{ s.auth_type === 'key' ? 'ключ' : 'пароль' }}</span>
             <span class="ml-auto flex shrink-0">
               <button :class="btnClass.ghostSm" title="Редактировать" @click="openForm(s)"><Icon name="pencil" /></button>
@@ -224,12 +259,23 @@ async function remove() {
               <dd class="truncate">{{ s.description }}</dd>
             </template>
           </dl>
+          <div v-if="latest[s.id]?.metric" class="grid gap-2 border-t pt-3">
+            <div class="flex items-center gap-2 text-xs text-muted-foreground">
+              Метрики · {{ formatDate(latest[s.id]!.collected_at) }}
+              <StatusBadge v-if="latest[s.id]!.alerts.length" tone="danger" :label="`Превышений: ${latest[s.id]!.alerts.length}`" />
+            </div>
+            <ServerMetricsSummary :metric="latest[s.id]!.metric!" :settings="s.metrics_settings" compact />
+          </div>
+          <p v-else-if="s.metrics_last_error" class="truncate border-t pt-3 text-xs text-destructive" :title="s.metrics_last_error">Метрики: {{ s.metrics_last_error }}</p>
           <div class="flex items-center gap-2 text-sm">
             <StatusBadge :tone="status(s).tone" :label="status(s).label" />
             <span v-if="s.last_check_error" class="truncate text-xs text-muted-foreground" :title="s.last_check_error">{{ s.last_check_error }}</span>
             <span class="ml-auto shrink-0 text-xs text-muted-foreground">{{ formatDate(s.last_checked_at) }}</span>
           </div>
-          <button :class="[btnClass.outlineSm, 'self-start']" @click="runCheck(s)"><Icon name="plug" />Проверить подключение</button>
+          <div class="flex flex-wrap gap-2">
+            <button :class="btnClass.outlineSm" @click="runCheck(s)"><Icon name="plug" />Проверить подключение</button>
+            <RouterLink :to="`/servers/${s.id}`" :class="btnClass.outlineSm">Метрики и графики</RouterLink>
+          </div>
         </div>
       </div>
       <Pagination :page="meta.current_page" :last-page="meta.last_page" :total="meta.total" @change="load" />
@@ -299,6 +345,32 @@ async function remove() {
           <textarea id="s-desc" v-model="form.description" rows="2" :class="textareaClass" class="!min-h-16" />
           <p v-for="m in fieldErrors.description" :key="m" class="text-sm text-destructive">{{ m }}</p>
         </div>
+        <fieldset class="grid gap-3 rounded-lg border p-3">
+          <legend class="px-1 text-sm font-medium">Метрики</legend>
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="form.metrics.enabled" type="checkbox" class="size-4 rounded-[4px] border-input accent-primary" />Собирать метрики по SSH
+          </label>
+          <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div class="grid content-start gap-2">
+              <label for="m-int" class="text-xs leading-tight font-medium">Интервал, мин</label>
+              <input id="m-int" v-model.number="form.metrics.interval_minutes" type="number" min="1" max="1440" :class="inputClass" />
+            </div>
+            <div class="grid content-start gap-2">
+              <label for="m-disk" class="text-xs leading-tight font-medium">Диск, %</label>
+              <input id="m-disk" v-model.number="form.metrics.disk_percent" type="number" min="1" max="100" placeholder="выкл" :class="inputClass" />
+            </div>
+            <div class="grid content-start gap-2">
+              <label for="m-load" class="text-xs leading-tight font-medium">LA на ядро</label>
+              <input id="m-load" v-model.number="form.metrics.load_per_core" type="number" min="0.1" max="100" step="0.1" placeholder="выкл" :class="inputClass" />
+            </div>
+            <div class="grid content-start gap-2">
+              <label for="m-ram" class="text-xs leading-tight font-medium">RAM, %</label>
+              <input id="m-ram" v-model.number="form.metrics.ram_percent" type="number" min="1" max="100" placeholder="выкл" :class="inputClass" />
+            </div>
+          </div>
+          <p class="text-xs text-muted-foreground">Порог срабатывает при значении ≥ порога. Пустое поле — проверка выключена. LA на ядро — нагрузка за 5 минут, делённая на число ядер.</p>
+          <p v-for="m in metricsErrors" :key="m" class="text-sm text-destructive">{{ m }}</p>
+        </fieldset>
         <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" :class="btnClass.outline" @click="editing = null">Отмена</button>
           <button type="submit" :class="btnClass.default" :disabled="saving">

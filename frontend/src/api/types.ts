@@ -31,6 +31,9 @@ export interface Server {
   last_check_status: 'ok' | 'failed' | null
   last_check_error: string | null
   host_fingerprint: string | null
+  metrics_settings: MetricsSettings
+  metrics_collected_at: string | null
+  metrics_last_error: string | null
   created_at: string
   updated_at: string
 }
@@ -221,4 +224,73 @@ export interface Dashboard {
     free_space: number | null
   }[]
   generated_at: string
+}
+
+export interface MetricsSettings {
+  enabled: boolean
+  interval_minutes: number
+  confirmations: number | null
+  thresholds: { disk_percent: number | null; load_per_core: number | null; ram_percent: number | null }
+}
+
+export interface ServerMetric {
+  id: number
+  server_id: number
+  collected_at: string
+  load: { load1: number; load5: number; load15: number; per_core: number }
+  cpu_count: number
+  memory: { total_bytes: number; used_bytes: number; available_bytes: number; used_percent: number }
+  swap: { total_bytes: number; used_bytes: number; used_percent: number | null }
+  uptime_seconds: number
+  disks: {
+    mount: string
+    device: string
+    fstype: string | null
+    total_bytes: number
+    used_bytes: number
+    avail_bytes: number
+    used_percent: number
+    inodes_total: number | null
+    inodes_used: number | null
+    inodes_free: number | null
+  }[]
+}
+
+export interface MetricAlert {
+  metric: 'disk' | 'load' | 'ram'
+  target: string | null
+  value: number
+  threshold: number
+  exceeded_since: string
+}
+
+export interface MetricsLatest {
+  metric: ServerMetric | null
+  alerts: MetricAlert[]
+  collected_at: string | null
+  last_error: string | null
+}
+
+interface Agg {
+  avg: number
+  max: number
+}
+export interface MetricPoint {
+  time: string
+  samples: number
+  load1: Agg
+  load5: Agg
+  load15: Agg
+  load_per_core: Agg
+  mem_used_percent: Agg
+  swap_used_percent: Agg | null
+  mem_used_bytes: number
+  disks: { mount: string; total_bytes: number; used_bytes: number; used_percent: Agg }[]
+}
+
+export interface MetricsHistory {
+  from: string
+  to: string
+  bucket_seconds: number
+  points: MetricPoint[]
 }
