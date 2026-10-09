@@ -7,6 +7,7 @@
 - Сообщения коммитов пишутся **на русском языке**: краткий заголовок в повелительном наклонении («Добавь…», «Исправь…»), при необходимости — описание после пустой строки.
 - ИИ **не указывается** автором или соавтором: никаких строк `Co-Authored-By: Claude …`, `Co-authored-by: Copilot …`, «Generated with Claude Code» и подобных — ни в коммитах, ни в описаниях PR.
 - Автор коммита — пользователь из `git config`; не меняй его.
+- В рабочем дереве параллельно работают несколько чатов. Коммить **только явным списком своих файлов**: `git commit -m "…" -- путь1 путь2 …` (так в коммит не попадёт чужое из индекса). Не используй `git add -A`, `git commit -a`, не откатывай чужие изменения, не переписывай историю и не делай `git push` без просьбы пользователя.
 
 ## Локальная разработка (Docker)
 
@@ -28,7 +29,15 @@ docker compose exec app php artisan migrate
 docker compose exec app php artisan test
 ```
 
-Тесты используют отдельную БД `systemkeeper_testing` (создаётся при инициализации MySQL, `docker/mysql/init`). Каждое изменение сопровождай тестами; перед коммитом тесты должны проходить.
+Тесты используют отдельную БД `systemkeeper_testing` (создаётся при инициализации MySQL, `docker/mysql/init`). Если параллельно работают другие чаты, гоняй тесты на своей временной БД, чтобы не мешать друг другу:
+
+```sh
+DB=systemkeeper_test_$RANDOM
+docker compose exec mysql mysql -uroot -proot -e "CREATE DATABASE $DB; GRANT ALL ON $DB.* TO 'systemkeeper'@'%';"
+docker compose exec -e DB_DATABASE=$DB app php artisan test
+docker compose exec mysql mysql -uroot -proot -e "DROP DATABASE $DB;"
+```
+ Каждое изменение сопровождай тестами; перед коммитом тесты должны проходить.
 
 ## Код
 
