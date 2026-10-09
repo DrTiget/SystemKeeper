@@ -69,6 +69,58 @@ class SshConnector implements SshConnectorInterface
 
     public function stream(Server $server, string $command, callable $onChunk, ?int $timeout = null): array
     {
+        if (config('ssh.stream_driver') === 'openssh') {
+            return $this->streamViaOpenSsh($server, $command, $onChunk, $timeout);
+        }
+
+        return $this->streamViaPhpseclib($server, $command, $onChunk, $timeout);
+    }
+
+    /**
+     * Стрим через системный ssh. TOFU сохраняется: отпечаток хоста сверяется с сохранённым до запуска
+     * клиента, а сам ssh получает known_hosts с единственным — уже проверенным — ключом и StrictHostKeyChecking=yes.
+     * При первом подключении отпечаток запоминается только после успешной авторизации (как и в connect()).
+     */
+    private function streamViaOpenSsh(Server $server, string $command, callable $onChunk, ?int $timeout): array
+    {
+        $hostKey = $this->fetchHostKey($server);
+        $fingerprint = $this->fingerprintOf($hostKey);
+        $this->verifyHostFingerprint($server, $fingerprint);
+
+        try {
+            $privateKey = $server->auth_type === Server::AUTH_KEY
+                // withPassword() снимает парольную фразу: ssh не умеет спрашивать её неинтерактивно (иначе toString() зашифровал бы ключ снова)
+                ? PublicKeyLoader::load($server->sshKey->private_key, $server->sshKey->passphrase ?: false)->withPassword()->toString('OpenSSH')
+                : null;
+        } catch (Throwable $e) {
+            throw new SshConnectionException("Ошибка авторизации: {$e->getMessage()}", previous: $e);
+        }
+
+        $result = app(OpenSshStreamRunner::class)->run(
+            host: $server->host,
+            port: $server->port,
+            username: $server->username,
+            hostKey: $hostKey,
+            privateKey: $privateKey,
+            password: $privateKey === null ? $server->password : null,
+            command: $command,
+            onChunk: $onChunk,
+            timeout: $timeout ?? (int) config('backup.timeout'),
+            connectTimeout: (int) config('ssh.connect_timeout'),
+        );
+
+        // 255 — ошибка самого ssh (соединение, авторизация, ключ хоста), а не код удалённой команды
+        if ($result['exit_code'] === 255) {
+            throw new SshConnectionException('Ошибка SSH: '.(trim($result['stderr']) ?: 'соединение не удалось.'));
+        }
+
+        $this->rememberHostFingerprint($server, $fingerprint);
+
+        return $result;
+    }
+
+    private function streamViaPhpseclib(Server $server, string $command, callable $onChunk, ?int $timeout): array
+    {
         $ssh = $this->connect($server);
         $ssh->setTimeout($timeout ?? (int) config('backup.timeout'));
         // Quiet mode разделяет stderr и stdout, иначе диагностика попала бы в поток данных
@@ -101,6 +153,24 @@ class SshConnector implements SshConnectorInterface
         }
 
         return ['exit_code' => $exitCode === false ? null : $exitCode, 'stderr' => $stderr];
+    }
+
+    /**
+     * Открытый ключ хоста ("<тип> <base64>") без авторизации.
+     *
+     * @throws SshConnectionException
+     */
+    protected function fetchHostKey(Server $server): string
+    {
+        $ssh = new SSH2($server->host, $server->port, (int) config('ssh.connect_timeout'));
+
+        try {
+            return $ssh->getServerPublicHostKey();
+        } catch (Throwable $e) {
+            throw new SshConnectionException("Не удалось подключиться к {$server->host}:{$server->port}: {$e->getMessage()}", previous: $e);
+        } finally {
+            $ssh->disconnect();
+        }
     }
 
     /**

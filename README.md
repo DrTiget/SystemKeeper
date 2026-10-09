@@ -177,6 +177,15 @@ Uptime — доля успешных проверок за окно; `percent: n
 
 Планировщик: команда `php artisan backups:run-due` (раз в минуту через `schedule:work`) ставит в очередь задания, у которых по cron наступило время после `last_scheduled_at` (или создания). Пропущенные запуски не копятся, при выполняющемся бекапе запуск пропускается. Зависшие `pending`/`running` старше `BACKUP_TIMEOUT` (по умолчанию 14400 с) + 10 минут помечаются `failed`. Для приёма очереди нужен воркер (`queue`), `DB_QUEUE_RETRY_AFTER` по умолчанию 15000 с.
 
+### SSH-драйвер потока
+
+Данные тянет драйвер, выбираемый переменной `SSH_STREAM_DRIVER`:
+
+- `openssh` (по умолчанию) — системный клиент `ssh` (`SSH_BINARY`, по умолчанию `ssh`; есть в образе `app`). На тестовом sshd в Docker: **≈100 МБ/с** против ≈5 МБ/с у phpseclib (400 МБ: 4 с против 74 с), память PHP ровная (~28 МБ).
+- `phpseclib` — чистый PHP, ничего не требует от окружения, но медленный.
+
+Проверка `check` и прочие короткие команды всегда идут через phpseclib. Семантика TOFU у драйвера `openssh` та же: отпечаток хоста сверяется с `host_fingerprint` до запуска `ssh` (изменился — «Отпечаток хоста изменился», `ssh` не запускается); `ssh` стартует с `StrictHostKeyChecking=yes` и `known_hosts` из единственного — только что проверенного — ключа хоста; при первом подключении отпечаток запоминается после успешной авторизации. Закрытый ключ (без парольной фразы) и `known_hosts` лежат во временном каталоге `0700`, файл ключа — `0600`, всё удаляется сразу после команды, в том числе при ошибке и таймауте. Пароль серверов с парольной авторизацией передаётся через `SSH_ASKPASS` (переменной окружения процесса), а не аргументом. Код выхода `255` — ошибка самого ssh (авторизация, соединение): бекап `failed` с текстом ошибки.
+
 ### Задания (`backup-jobs`)
 
 Ресурс: `{id, name, server_id, server: {id, name}, type: "files"|"mysql"|"postgres", paths, excludes, db_mode: "ssh"|"direct"|null, db_host, db_port, db_name, db_user, has_db_password, db_ssl_verify, compression_level (1–19, по умолчанию 3), schedule (cron, 5 полей)|null, enabled, next_run_at, last_scheduled_at, retention_count, retention_days, keep_daily, keep_weekly, keep_monthly, storage_target_ids, backups_count, latest_backup, created_at, updated_at}`.
