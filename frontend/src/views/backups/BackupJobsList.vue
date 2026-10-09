@@ -72,6 +72,15 @@ interface Form {
   db_user: string
   db_password: string
   db_ssl_verify: boolean
+  verify_restore: boolean
+  verify_every_n: string
+  verify_every_days: string
+  verify_query: string
+  verify_query_min: string
+  restore_host: string
+  restore_port: string
+  restore_user: string
+  restore_password: string
 }
 const editing = ref<'new' | BackupJob | null>(null)
 const form = ref<Form>(emptyForm())
@@ -84,6 +93,8 @@ function emptyForm(): Form {
     name: '', server_id: servers.value[0]?.id ?? null, type: 'files', schedule: '0 3 * * *', enabled: true, compression_level: 3,
     retention_count: '', retention_days: '', storage_target_ids: [], paths: '', excludes: '',
     db_mode: 'ssh', db_host: '', db_port: '', db_name: '', db_user: '', db_password: '', db_ssl_verify: true,
+    verify_restore: false, verify_every_n: '', verify_every_days: '', verify_query: '', verify_query_min: '',
+    restore_host: '', restore_port: '', restore_user: '', restore_password: '',
   }
 }
 
@@ -101,6 +112,10 @@ function openForm(j: 'new' | BackupJob) {
           paths: (j.paths ?? []).join('\n'), excludes: (j.excludes ?? []).join('\n'),
           db_mode: j.db_mode ?? 'ssh', db_host: j.db_host ?? '', db_port: j.db_port?.toString() ?? '',
           db_name: j.db_name ?? '', db_user: j.db_user ?? '', db_password: '', db_ssl_verify: j.db_ssl_verify,
+          verify_restore: j.verify_restore, verify_every_n: j.verify_every_n?.toString() ?? '',
+          verify_every_days: j.verify_every_days?.toString() ?? '', verify_query: j.verify_query ?? '',
+          verify_query_min: j.verify_query_min?.toString() ?? '', restore_host: j.restore_host ?? '',
+          restore_port: j.restore_port?.toString() ?? '', restore_user: j.restore_user ?? '', restore_password: '',
         }
   editing.value = j
 }
@@ -136,6 +151,15 @@ async function save() {
     body.db_user = f.db_user.trim() || null
     body.db_ssl_verify = f.db_ssl_verify
     if (f.db_password) body.db_password = f.db_password // пусто = не менять
+    body.verify_restore = f.verify_restore
+    body.verify_every_n = intOrNull(f.verify_every_n)
+    body.verify_every_days = intOrNull(f.verify_every_days)
+    body.verify_query = f.verify_query.trim() || null
+    body.verify_query_min = intOrNull(f.verify_query_min)
+    body.restore_host = f.restore_host.trim() || null
+    body.restore_port = intOrNull(f.restore_port)
+    body.restore_user = f.restore_user.trim() || null
+    if (f.restore_password) body.restore_password = f.restore_password // пусто = не менять
   }
   try {
     const target = editing.value
@@ -143,6 +167,7 @@ async function save() {
     else if (target) await api(`/backup-jobs/${target.id}`, { method: 'PUT', body })
     editing.value = null
     form.value.db_password = ''
+    form.value.restore_password = ''
     await load(target === 'new' ? 1 : meta.value.current_page)
     emit('changed')
   } catch (e) {
@@ -352,6 +377,71 @@ const label = 'text-sm leading-none font-medium'
             <input v-model="form.db_ssl_verify" type="checkbox" class="mt-0.5 size-4 rounded-[4px] border-input accent-primary" />
             <span>Проверять TLS-сертификат MySQL<span class="block text-xs text-muted-foreground">Отключите для самоподписанных сертификатов.</span></span>
           </label>
+
+          <fieldset class="grid gap-4 rounded-lg border p-4">
+            <legend class="px-1 text-sm font-medium">Проверка восстановления</legend>
+            <label class="flex items-start gap-2 text-sm">
+              <input v-model="form.verify_restore" type="checkbox" class="mt-0.5 size-4 rounded-[4px] border-input accent-primary" />
+              <span>Разворачивать дамп во временной базе после бекапа<span class="block text-xs text-muted-foreground">База удаляется после проверки. Дамп всех баз (без имени базы) не проверяется.</span></span>
+            </label>
+            <template v-if="form.verify_restore">
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div class="grid gap-2">
+                  <label for="j-ven" :class="label">Каждый N-й бекап</label>
+                  <input id="j-ven" v-model="form.verify_every_n" type="number" min="1" placeholder="Каждый" :class="inputClass" :aria-invalid="!!err('verify_every_n').length" />
+                  <p v-for="m in err('verify_every_n')" :key="m" class="text-sm text-destructive">{{ m }}</p>
+                </div>
+                <div class="grid gap-2">
+                  <label for="j-ved" :class="label">Или раз в N дней</label>
+                  <input id="j-ved" v-model="form.verify_every_days" type="number" min="1" placeholder="Не задано" :class="inputClass" :aria-invalid="!!err('verify_every_days').length" />
+                  <p v-for="m in err('verify_every_days')" :key="m" class="text-sm text-destructive">{{ m }}</p>
+                </div>
+              </div>
+              <p class="-mt-2 text-xs text-muted-foreground">Условия складываются по «ИЛИ»; если оба пусты — проверяется каждый бекап.</p>
+              <div class="grid gap-4 sm:grid-cols-[1fr_9rem]">
+                <div class="grid gap-2">
+                  <label for="j-vq" :class="label">Проверочный SQL</label>
+                  <input id="j-vq" v-model="form.verify_query" placeholder="SELECT COUNT(*) FROM users" class="font-mono" :class="inputClass" :aria-invalid="!!err('verify_query').length" />
+                  <p v-for="m in err('verify_query')" :key="m" class="text-sm text-destructive">{{ m }}</p>
+                </div>
+                <div class="grid gap-2">
+                  <label for="j-vqm" :class="label">Минимум</label>
+                  <input id="j-vqm" v-model="form.verify_query_min" type="number" min="0" placeholder="0" :class="inputClass" :aria-invalid="!!err('verify_query_min').length" />
+                  <p v-for="m in err('verify_query_min')" :key="m" class="text-sm text-destructive">{{ m }}</p>
+                </div>
+              </div>
+              <p class="-mt-2 text-xs text-muted-foreground">Один SELECT: первое значение результата должно быть не меньше минимума.</p>
+              <p v-if="form.type === 'postgres'" class="rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">Для PostgreSQL нужен тестовый сервер — иначе проверка будет пропущена.</p>
+              <p v-else class="text-xs text-muted-foreground">Тестовый сервер необязателен: по умолчанию используется MySQL проекта.</p>
+              <div class="grid gap-4 sm:grid-cols-[1fr_8rem]">
+                <div class="grid gap-2">
+                  <label for="j-rh" :class="label">Тестовый сервер</label>
+                  <input id="j-rh" v-model="form.restore_host" placeholder="host" class="font-mono" :class="inputClass" :aria-invalid="!!err('restore_host').length" />
+                  <p v-for="m in err('restore_host')" :key="m" class="text-sm text-destructive">{{ m }}</p>
+                </div>
+                <div class="grid gap-2">
+                  <label for="j-rp" :class="label">Порт</label>
+                  <input id="j-rp" v-model="form.restore_port" type="number" min="1" max="65535" :placeholder="form.type === 'mysql' ? '3306' : '5432'" :class="inputClass" :aria-invalid="!!err('restore_port').length" />
+                  <p v-for="m in err('restore_port')" :key="m" class="text-sm text-destructive">{{ m }}</p>
+                </div>
+              </div>
+              <div class="grid gap-4 sm:grid-cols-2">
+                <div class="grid gap-2">
+                  <label for="j-ru" :class="label">Пользователь</label>
+                  <input id="j-ru" v-model="form.restore_user" autocomplete="off" class="font-mono" :class="inputClass" :aria-invalid="!!err('restore_user').length" />
+                  <p v-for="m in err('restore_user')" :key="m" class="text-sm text-destructive">{{ m }}</p>
+                </div>
+                <div class="grid gap-2">
+                  <label for="j-rpw" :class="label">Пароль</label>
+                  <input
+                    id="j-rpw" v-model="form.restore_password" type="password" autocomplete="new-password" class="font-mono" :class="inputClass"
+                    :placeholder="editing !== 'new' && editing.has_restore_password ? 'Оставьте пустым, чтобы не менять' : ''" :aria-invalid="!!err('restore_password').length"
+                  />
+                  <p v-for="m in err('restore_password')" :key="m" class="text-sm text-destructive">{{ m }}</p>
+                </div>
+              </div>
+            </template>
+          </fieldset>
         </template>
 
         <div class="grid gap-4 sm:grid-cols-2">

@@ -79,6 +79,7 @@ export interface StorageCheck {
 }
 
 export type BackupType = 'files' | 'mysql' | 'postgres'
+export type RestoreStatus = 'pending' | 'running' | 'ok' | 'failed' | 'skipped'
 export type BackupStatus = 'pending' | 'running' | 'success' | 'failed'
 
 export interface Backup {
@@ -97,6 +98,9 @@ export interface Backup {
   duration_seconds: number | null
   error: string | null
   log?: string | null
+  restore_status: RestoreStatus | null
+  restore_checked_at: string | null
+  restore_log?: string | null
   created_at: string
   updated_at: string
 }
@@ -116,6 +120,15 @@ export interface BackupJob {
   db_user: string | null
   has_db_password: boolean
   db_ssl_verify: boolean
+  verify_restore: boolean
+  verify_every_n: number | null
+  verify_every_days: number | null
+  verify_query: string | null
+  verify_query_min: number | null
+  restore_host: string | null
+  restore_port: number | null
+  restore_user: string | null
+  has_restore_password: boolean
   compression_level: number
   schedule: string | null
   enabled: boolean

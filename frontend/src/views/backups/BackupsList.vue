@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { api } from '@/api/client'
+import { api, ApiError } from '@/api/client'
 import type { Backup, BackupJob, Paginated } from '@/api/types'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import CopyButton from '@/components/CopyButton.vue'
@@ -8,7 +8,7 @@ import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
 import Pagination from '@/components/Pagination.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import { downloadBackup, isActive, statusBadge, typeLabel } from '@/lib/backup'
+import { downloadBackup, isActive, isRestoreActive, restoreBadge, statusBadge, typeLabel } from '@/lib/backup'
 import { btnClass, errorMessage, formatBytes, formatDate, formatDuration, inputClass } from '@/lib/format'
 
 const props = defineProps<{ jobId: number | null; jobs: BackupJob[] }>()
@@ -44,7 +44,8 @@ let timer: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   load(1)
   timer = setInterval(() => {
-    if (items.value.some((b) => isActive(b.status))) load(meta.value.current_page, true)
+    if (items.value.some((b) => isActive(b.status) || isRestoreActive(b.restore_status))) load(meta.value.current_page, true)
+    if (details.value && (isActive(details.value.status) || isRestoreActive(details.value.restore_status))) refreshDetails()
   }, 4000)
 })
 onUnmounted(() => clearInterval(timer))
@@ -55,6 +56,7 @@ const details = ref<Backup | null>(null)
 const detailsLoading = ref(false)
 const detailsError = ref('')
 async function openDetails(b: Backup) {
+  verifyError.value = ''
   details.value = b
   detailsError.value = ''
   detailsLoading.value = true
@@ -64,6 +66,41 @@ async function openDetails(b: Backup) {
     detailsError.value = errorMessage(e, 'Не удалось загрузить лог')
   } finally {
     detailsLoading.value = false
+  }
+}
+
+async function refreshDetails() {
+  if (!details.value) return
+  try {
+    const fresh = (await api<{ data: Backup }>(`/backups/${details.value.id}`)).data
+    if (details.value?.id === fresh.id) details.value = fresh
+  } catch {
+    /* следующий опрос повторит */
+  }
+}
+
+// --- проверка восстановления ---
+const canVerify = (b: Backup) => !!b.backup_job && b.backup_job.type !== 'files' && b.status === 'success' && b.has_file && !isRestoreActive(b.restore_status)
+const verifying = ref<number | null>(null)
+const verifyError = ref('')
+async function verifyRestore(b: Backup) {
+  verifyError.value = ''
+  actionError.value = ''
+  verifying.value = b.id
+  try {
+    await api(`/backups/${b.id}/verify-restore`, { method: 'POST' })
+    await load(meta.value.current_page, true)
+    if (details.value?.id === b.id) await refreshDetails()
+  } catch (e) {
+    const msg =
+      e instanceof ApiError && e.status === 409 ? 'Проверка восстановления уже выполняется'
+      : e instanceof ApiError && e.status === 422 ? 'Проверка недоступна: для бекапа файлов её нет, а для БД проверьте настройки задания'
+      : e instanceof ApiError && e.status === 404 ? 'Файл бекапа недоступен — проверять нечего'
+      : errorMessage(e, 'Не удалось запустить проверку')
+    if (details.value) verifyError.value = msg
+    else actionError.value = msg
+  } finally {
+    verifying.value = null
   }
 }
 
@@ -146,7 +183,13 @@ async function remove() {
                 <div class="font-medium">{{ b.backup_job?.name ?? `#${b.backup_job_id}` }}</div>
                 <div class="text-xs text-muted-foreground">{{ b.backup_job ? typeLabel[b.backup_job.type] : '' }} · {{ b.trigger === 'manual' ? 'вручную' : 'по расписанию' }}</div>
               </td>
-              <td class="px-3 py-2"><StatusBadge :tone="statusBadge(b.status).tone" :label="statusBadge(b.status).label" /></td>
+              <td class="px-3 py-2">
+                <StatusBadge :tone="statusBadge(b.status).tone" :label="statusBadge(b.status).label" />
+                <div v-if="b.restore_status" class="mt-1 flex flex-col items-start gap-0.5">
+                  <StatusBadge :tone="restoreBadge(b.restore_status).tone" :label="restoreBadge(b.restore_status).label" />
+                  <span v-if="b.restore_checked_at" class="text-xs text-muted-foreground">{{ formatDate(b.restore_checked_at) }}</span>
+                </div>
+              </td>
               <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(b.started_at ?? b.created_at) }}</td>
               <td class="px-3 py-2 whitespace-nowrap tabular-nums">{{ formatDuration(b.duration_seconds) }}</td>
               <td class="px-3 py-2 text-right whitespace-nowrap tabular-nums">{{ formatBytes(b.size_bytes) }}</td>
@@ -160,6 +203,9 @@ async function remove() {
               <td class="px-3 py-2">
                 <div class="flex justify-end">
                   <button :class="btnClass.ghostSm" :title="b.error ? 'Лог и ошибка' : 'Лог'" @click="openDetails(b)"><Icon name="eye" /></button>
+                  <button v-if="canVerify(b) || isRestoreActive(b.restore_status)" :class="btnClass.ghostSm" title="Проверить восстановление" :disabled="verifying === b.id || isRestoreActive(b.restore_status)" @click="verifyRestore(b)">
+                    <Icon name="refresh" :class="(verifying === b.id || b.restore_status === 'running') && 'animate-spin'" />
+                  </button>
                   <button :class="btnClass.ghostSm" title="Скачать" :disabled="b.status !== 'success' || !b.has_file || downloading === b.id" @click="download(b)">
                     <Icon :name="downloading === b.id ? 'loader' : 'download'" :class="downloading === b.id && 'animate-spin'" />
                   </button>
@@ -179,6 +225,19 @@ async function remove() {
         <span class="text-xs text-muted-foreground">{{ formatBytes(details.size_bytes) }} · {{ formatDuration(details.duration_seconds) }} · {{ formatDate(details.finished_at) }}</span>
       </div>
       <div v-if="details.error" role="alert" class="rounded-lg border bg-card px-4 py-3 text-sm break-words text-destructive">{{ details.error }}</div>
+      <section v-if="details.backup_job && details.backup_job.type !== 'files'" class="grid gap-2 rounded-lg border p-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-sm font-medium">Проверка восстановления</span>
+          <StatusBadge v-if="details.restore_status" :tone="restoreBadge(details.restore_status).tone" :label="restoreBadge(details.restore_status).label" />
+          <span v-else class="text-xs text-muted-foreground">не проводилась</span>
+          <span v-if="details.restore_checked_at" class="text-xs text-muted-foreground">{{ formatDate(details.restore_checked_at) }}</span>
+          <button v-if="details.status === 'success' && details.has_file" type="button" :class="[btnClass.outlineSm, 'ml-auto']" :disabled="verifying === details.id || isRestoreActive(details.restore_status)" @click="verifyRestore(details)">
+            <Icon name="refresh" :class="isRestoreActive(details.restore_status) && 'animate-spin'" />Проверить восстановление
+          </button>
+        </div>
+        <div v-if="verifyError" role="alert" class="text-sm text-destructive">{{ verifyError }}</div>
+        <pre v-if="details.restore_log" class="max-h-60 overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap">{{ details.restore_log }}</pre>
+      </section>
       <div v-if="details.sha256" class="grid gap-1 text-xs">
         <div class="flex items-center gap-2"><span class="text-muted-foreground">SHA-256</span><CopyButton :text="details.sha256" /></div>
         <code class="font-mono break-all">{{ details.sha256 }}</code>

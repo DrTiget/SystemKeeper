@@ -1,4 +1,4 @@
-import type { BackupStatus, BackupType } from '@/api/types'
+import type { BackupStatus, BackupType, RestoreStatus } from '@/api/types'
 import { api } from '@/api/client'
 
 export const typeLabel: Record<BackupType, string> = { files: 'Файлы', mysql: 'MySQL', postgres: 'PostgreSQL' }
@@ -28,3 +28,13 @@ export async function downloadBackup(id: number, fallbackName: string | null): P
   a.click()
   a.remove()
 }
+
+const RESTORE_BADGE = {
+  pending: { tone: 'neutral', label: 'Проверка в очереди' },
+  running: { tone: 'info', label: 'Проверяется' },
+  ok: { tone: 'success', label: 'Восстановление ок' },
+  failed: { tone: 'danger', label: 'Восстановление не удалось' },
+  skipped: { tone: 'warning', label: 'Проверка пропущена' },
+} as const satisfies Record<RestoreStatus, { tone: string; label: string }>
+export const restoreBadge = (s: RestoreStatus) => RESTORE_BADGE[s]
+export const isRestoreActive = (s: RestoreStatus | null | undefined) => s === 'pending' || s === 'running'
