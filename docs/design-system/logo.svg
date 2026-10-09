@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Знак SystemKeeper (предложение): щит цвета текста и галочка Mint 400 -->
+    <path d="M32 6 10 14v16c0 14 9.5 23.5 22 28 12.5-4.5 22-14 22-28V14L32 6Z" stroke="#1f2a33"/>
+    <path d="m22 32 7 7 13-14" stroke="#14d9b0"/>
+</svg>

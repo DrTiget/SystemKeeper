@@ -1,0 +1,223 @@
+/*
+ * SystemKeeper — токены дизайн-системы (Tailwind CSS v4).
+ * Источник: DevPilot resources/css/app.css (shadcn-vue, стиль new-york-v4).
+ *
+ * Как подключить: заменить содержимое resources/css/app.css этим файлом
+ * и поставить зависимости:
+ *   npm i tw-animate-css @fontsource-variable/manrope @fontsource/jetbrains-mono
+ * Тёмная тема — класс .dark на <html> (см. README, раздел «Темы»).
+ */
+@import 'tailwindcss';
+
+@import 'tw-animate-css';
+
+/* Шрифты из npm, без внешних CDN: Manrope — интерфейс, JetBrains Mono — код */
+@import '@fontsource-variable/manrope/wght.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-sans:
+        'Manrope Variable', Manrope, ui-sans-serif, system-ui, sans-serif,
+        'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'Noto Color Emoji';
+    --font-mono:
+        'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    /* Базовая палитра: Mint (акцент) и Ink (нейтральные) */
+    --color-mint-50: #e8fbf6;
+    --color-mint-100: #c4f5e8;
+    --color-mint-200: #8aebd3;
+    --color-mint-300: #4fe2bf;
+    --color-mint-400: #14d9b0;
+    --color-mint-500: #0fb894;
+    --color-mint-600: #0a8f72;
+    --color-mint-700: #086b56;
+    --color-mint-800: #06473a;
+
+    --color-ink-50: #f4f6f7;
+    --color-ink-100: #e3e8eb;
+    --color-ink-200: #c5ced4;
+    --color-ink-300: #94a1ab;
+    --color-ink-400: #5b6873;
+    --color-ink-500: #3b4852;
+    --color-ink-600: #1f2a33;
+    --color-ink-700: #151d24;
+    --color-ink-800: #0c1116;
+
+    --color-success: var(--success);
+    --color-warning: var(--warning);
+    --color-info: var(--info);
+    --color-link: var(--link);
+    --color-success-text: var(--success-text);
+    --color-warning-text: var(--warning-text);
+
+    --radius-lg: var(--radius);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-sm: calc(var(--radius) - 4px);
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+
+    --color-sidebar: var(--sidebar-background);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* В Tailwind v4 цвет рамки по умолчанию — currentColor; возвращаем --border */
+@layer base {
+    *,
+    ::after,
+    ::before,
+    ::backdrop,
+    ::file-selector-button {
+        border-color: var(--color-border, currentColor);
+    }
+}
+
+:root {
+    /* Светлая тема: фон Cloud, карточки White, текст Ink, акцент Mint */
+    --background: #f4f6f7;
+    --foreground: #1f2a33;
+    --card: #ffffff;
+    --card-foreground: #1f2a33;
+    --popover: #ffffff;
+    --popover-foreground: #1f2a33;
+    /* Mint 400 — фон кнопок с тёмным текстом; текст на светлом — Mint 600 (--link) */
+    --primary: #14d9b0;
+    --primary-foreground: #1f2a33;
+    --secondary: #e3e8eb;
+    --secondary-foreground: #1f2a33;
+    --muted: #e3e8eb;
+    --muted-foreground: #5b6873;
+    --accent: #e8fbf6;
+    --accent-foreground: #086b56;
+    --destructive: #ef4459;
+    --destructive-foreground: #ffffff;
+    --success: #22c55e;
+    --warning: #f5a524;
+    --info: #3b82f6;
+    --link: #0a8f72;
+    /* Системные цвета для текста на светлом фоне — темнее, ради контраста */
+    --success-text: #15803d;
+    --warning-text: #a15c00;
+    --border: #e3e8eb;
+    --input: #c5ced4;
+    --ring: #14d9b0;
+    --chart-1: #14d9b0;
+    --chart-2: #1f2a33;
+    --chart-3: #3b82f6;
+    --chart-4: #f5a524;
+    --chart-5: #ef4459;
+    --radius: 0.75rem;
+    /* Боковая панель — тёмная «кабина» в обеих темах */
+    --sidebar-background: #1f2a33;
+    --sidebar: #1f2a33;
+    --sidebar-foreground: #c5ced4;
+    --sidebar-primary: #14d9b0;
+    --sidebar-primary-foreground: #1f2a33;
+    --sidebar-accent: #3b4852;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #3b4852;
+    --sidebar-ring: #14d9b0;
+}
+
+.dark {
+    /* Нативные элементы (option у select, скроллбары) — в тёмной теме */
+    color-scheme: dark;
+    --background: #0c1116;
+    --foreground: #f4f6f7;
+    --card: #151d24;
+    --card-foreground: #f4f6f7;
+    --popover: #151d24;
+    --popover-foreground: #f4f6f7;
+    --primary: #14d9b0;
+    --primary-foreground: #0c1116;
+    --secondary: #1f2a33;
+    --secondary-foreground: #f4f6f7;
+    --muted: #1f2a33;
+    --muted-foreground: #94a1ab;
+    --accent: #06473a;
+    --accent-foreground: #8aebd3;
+    --destructive: #ef4459;
+    --destructive-foreground: #ffffff;
+    --success: #22c55e;
+    --warning: #f5a524;
+    --info: #3b82f6;
+    --link: #14d9b0;
+    --success-text: #22c55e;
+    --warning-text: #f5a524;
+    --border: #1f2a33;
+    --input: #3b4852;
+    --ring: #14d9b0;
+    --chart-1: #14d9b0;
+    --chart-2: #94a1ab;
+    --chart-3: #3b82f6;
+    --chart-4: #f5a524;
+    --chart-5: #ef4459;
+    --sidebar-background: #151d24;
+    --sidebar: #151d24;
+    --sidebar-foreground: #c5ced4;
+    --sidebar-primary: #14d9b0;
+    --sidebar-primary-foreground: #0c1116;
+    --sidebar-accent: #1f2a33;
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: #1f2a33;
+    --sidebar-ring: #14d9b0;
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+    body {
+        @apply bg-background font-sans text-foreground antialiased;
+    }
+    code,
+    kbd,
+    pre,
+    samp {
+        @apply font-mono;
+    }
+    /* Тонкие скроллбары в цветах темы */
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--color-ink-200) transparent;
+    }
+    .dark * {
+        scrollbar-color: var(--color-ink-500) transparent;
+    }
+}

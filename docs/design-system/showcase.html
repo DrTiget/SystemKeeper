@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1f2a33">
+    <title>SystemKeeper — дизайн-система</title>
+    <style>
+        html { background-color: #f4f6f7; }
+        html.dark { background-color: #0c1116; }
+    </style>
+    <script>
+        // ?theme=dark|light — для скриншотов; иначе системная тема
+        (function () {
+            const q = new URLSearchParams(location.search).get('theme');
+            const dark = q ? q === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.classList.toggle('dark', dark);
+        })();
+    </script>
+    <link rel="stylesheet" href="showcase.css">
+</head>
+<body class="font-sans antialiased">
+
+<!-- ============ Шапка витрины ============ -->
+<header class="sticky top-0 z-40 border-b bg-background/90 backdrop-blur">
+    <div class="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
+        <div class="flex items-center gap-2">
+            <div class="flex size-8 items-center justify-center rounded-lg bg-ink-600 text-white">
+                <i data-icon="logo" class="size-5"></i>
+            </div>
+            <span class="text-lg leading-none font-extrabold tracking-tight">System<span class="text-link">Keeper</span></span>
+            <span class="ml-2 text-sm text-muted-foreground">дизайн-система</span>
+        </div>
+        <nav class="ml-auto hidden items-center gap-4 text-sm text-muted-foreground md:flex">
+            <a href="#app" class="hover:text-foreground">Экран</a>
+            <a href="#colors" class="hover:text-foreground">Цвет</a>
+            <a href="#type" class="hover:text-foreground">Шрифты</a>
+            <a href="#components" class="hover:text-foreground">Компоненты</a>
+            <a href="#patterns" class="hover:text-foreground">Паттерны</a>
+        </nav>
+        <div class="inline-flex gap-1 rounded-lg bg-muted p-1" id="theme-tabs">
+            <button data-theme="light" class="flex items-center rounded-md px-3.5 py-1.5 transition-colors"><i data-icon="sun" class="-ml-1 size-4"></i><span class="ml-1.5 text-sm">Светлая</span></button>
+            <button data-theme="dark" class="flex items-center rounded-md px-3.5 py-1.5 transition-colors"><i data-icon="moon" class="-ml-1 size-4"></i><span class="ml-1.5 text-sm">Тёмная</span></button>
+        </div>
+    </div>
+</header>
+
+<main class="mx-auto flex max-w-7xl flex-col gap-16 px-4 py-10">
+
+<!-- ============ 1. Экран приложения ============ -->
+<section id="app" class="flex flex-col gap-4">
+    <div>
+        <h2 class="text-xl font-semibold tracking-tight">Оболочка и дашборд</h2>
+        <p class="text-sm text-muted-foreground">Сайдбар <code class="rounded bg-muted px-1 py-0.5 text-[13px]">variant="inset"</code> 16rem, шапка h-16 с хлебными крошками, контент <code class="rounded bg-muted px-1 py-0.5 text-[13px]">flex flex-col gap-6 p-4</code></p>
+    </div>
+
+    <div id="shot-dashboard" class="flex overflow-hidden rounded-xl border bg-sidebar">
+        <!-- Сайдбар -->
+        <aside class="hidden w-64 shrink-0 flex-col text-sidebar-foreground md:flex">
+            <div class="p-2">
+                <a class="flex h-12 items-center gap-2 rounded-md p-2 hover:bg-sidebar-accent">
+                    <div class="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-ink-800/60 text-white">
+                        <i data-icon="logo" class="size-5" data-dark></i>
+                    </div>
+                    <span class="ml-1 truncate text-lg leading-none font-extrabold tracking-tight text-white">System<span class="text-mint-400">Keeper</span></span>
+                </a>
+            </div>
+            <div class="flex flex-1 flex-col gap-1 overflow-auto p-2">
+                <div class="flex h-8 items-center px-2 text-xs font-medium text-sidebar-foreground/70">Платформа</div>
+                <a class="flex h-8 items-center gap-2 rounded-md bg-sidebar-accent px-2 text-sm font-medium text-sidebar-accent-foreground"><i data-icon="dashboard" class="size-4"></i>Обзор</a>
+                <a class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><i data-icon="server" class="size-4"></i>Серверы</a>
+                <a class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><i data-icon="database" class="size-4"></i>Базы данных</a>
+                <a class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><i data-icon="archive" class="size-4"></i>Бекапы</a>
+                <a class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><i data-icon="drive" class="size-4"></i>Хранилища</a>
+                <a class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><i data-icon="activity" class="size-4"></i>Мониторинг</a>
+                <a class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><i data-icon="siren" class="size-4"></i>Инциденты<span class="ml-auto rounded-full bg-destructive px-1.5 text-xs font-medium text-white tabular-nums">2</span></a>
+                <a class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><i data-icon="bell" class="size-4"></i>Алерты</a>
+                <a class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><i data-icon="key" class="size-4"></i>SSH-ключи</a>
+                <a class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"><i data-icon="settings" class="size-4"></i>Настройки</a>
+            </div>
+            <div class="flex flex-col gap-2 p-2">
+                <div class="rounded-md px-2 py-1.5 text-xs">
+                    <div class="flex justify-between text-sidebar-foreground/70"><span>Локальный диск</span><span class="tabular-nums">64 %</span></div>
+                    <div class="mt-1 h-1.5 rounded-full bg-sidebar-accent"><div class="h-1.5 w-[64%] rounded-full bg-chart-1"></div></div>
+                </div>
+                <a class="flex h-12 items-center gap-2 rounded-md p-2 text-sm hover:bg-sidebar-accent">
+                    <span class="flex size-8 items-center justify-center rounded-lg bg-sidebar-accent text-xs font-medium text-white">АК</span>
+                    <span class="grid flex-1 text-left leading-tight"><span class="truncate font-medium text-white">Админ</span><span class="truncate text-xs">admin@example.com</span></span>
+                    <i data-icon="updown" class="size-4"></i>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Контент (SidebarInset) -->
+        <div class="m-2 min-w-0 flex-1 rounded-xl bg-background shadow-sm md:ml-0">
+            <header class="flex h-16 items-center gap-2 border-b border-sidebar-border/70 px-4">
+                <button class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground" title="Свернуть панель (Ctrl+B)"><i data-icon="panel" class="size-4"></i></button>
+                <nav class="flex items-center gap-1.5 text-sm text-muted-foreground"><span>SystemKeeper</span><i data-icon="chevron-right" class="size-3.5"></i><span class="text-foreground">Обзор</span></nav>
+            </header>
+
+            <div class="flex flex-col gap-6 p-4">
+                <div class="flex items-start justify-between gap-4">
+                    <header class="space-y-0.5">
+                        <h2 class="text-xl font-semibold tracking-tight">Обзор</h2>
+                        <p class="text-sm text-muted-foreground">Бекапы, хранилища и доступность серверов</p>
+                    </header>
+                    <button class="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90"><i data-icon="play" class="size-4"></i>Запустить бекап</button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <div class="rounded-xl border p-4"><div class="text-sm text-muted-foreground">Бекапов за сутки</div><div class="mt-1 text-2xl font-semibold tabular-nums">46</div><div class="mt-1 text-xs text-muted-foreground">44 готово · 1 частично · 1 ошибка</div></div>
+                    <div class="rounded-xl border p-4"><div class="text-sm text-muted-foreground">Объём за сутки</div><div class="mt-1 text-2xl font-semibold tabular-nums">38,4 ГБ</div><div class="mt-1 text-xs text-muted-foreground">сжато, без копий на Диске</div></div>
+                    <div class="rounded-xl border p-4"><div class="text-sm text-muted-foreground">Мониторы</div><div class="mt-1 text-2xl font-semibold tabular-nums">27 / 29</div><div class="mt-1 text-xs text-muted-foreground">работают сейчас</div></div>
+                    <div class="rounded-xl border p-4"><div class="text-sm text-muted-foreground">Аптайм за 30 дней</div><div class="mt-1 text-2xl font-semibold tabular-nums">99,94 %</div><div class="mt-1 text-xs text-muted-foreground">26 мин простоя</div></div>
+                </div>
+
+                <div class="grid gap-3 lg:grid-cols-3">
+                    <div class="rounded-xl border p-4 lg:col-span-2">
+                        <div class="mb-3 flex items-center justify-between gap-2">
+                            <h3 class="font-medium">За 14 дней</h3>
+                            <button class="inline-flex h-8 w-36 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs dark:bg-input/30">Объём <i data-icon="chevron-down" class="size-4 opacity-50"></i></button>
+                        </div>
+                        <div id="bar-chart" class="relative"></div>
+                    </div>
+
+                    <div class="rounded-xl border p-4">
+                        <div class="mb-3 flex items-center justify-between gap-2">
+                            <h3 class="font-medium">Хранилища</h3>
+                            <a class="text-xs text-muted-foreground hover:text-foreground" href="#">Все</a>
+                        </div>
+                        <div id="quotas"></div>
+                    </div>
+                </div>
+
+                <div class="grid gap-3 lg:grid-cols-3">
+                    <div class="rounded-xl border p-4 lg:col-span-2">
+                        <h3 class="mb-3 font-medium">Последние бекапы</h3>
+                        <div id="recent"></div>
+                    </div>
+                    <div class="flex flex-col gap-3">
+                        <div class="rounded-xl border p-4">
+                            <h3 class="mb-3 font-medium">Инциденты</h3>
+                            <a class="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"><i data-icon="siren" class="size-4 shrink-0 text-destructive"></i><span class="flex-1 truncate">api.shop.ru недоступен</span><span class="text-xs text-muted-foreground">12 мин</span></a>
+                            <a class="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"><i data-icon="siren" class="size-4 shrink-0 text-warning"></i><span class="flex-1 truncate">crm.local — медленно</span><span class="text-xs text-muted-foreground">1 ч</span></a>
+                            <a class="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"><i data-icon="shield-check" class="size-4 shrink-0 text-success"></i><span class="flex-1 truncate">mail.example.com — решён</span><span class="text-xs text-muted-foreground">вчера</span></a>
+                        </div>
+                        <div class="rounded-xl border p-4">
+                            <div class="mb-1 flex items-baseline justify-between text-sm"><span class="font-medium">Время ответа</span><span class="text-xs text-muted-foreground tabular-nums">api.shop.ru · 312 мс</span></div>
+                            <div id="sparkline"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ 2. Цвет ============ -->
+<section id="colors" class="flex flex-col gap-6">
+    <div>
+        <h2 class="text-xl font-semibold tracking-tight">Цвет</h2>
+        <p class="text-sm text-muted-foreground">Палитра Mint (акцент) и Ink (нейтральные), системные цвета и семантические токены текущей темы</p>
+    </div>
+    <div id="shot-colors" class="flex flex-col gap-6">
+        <div class="rounded-xl border bg-card p-4">
+            <h3 class="mb-3 font-medium">Mint</h3>
+            <div class="grid grid-cols-3 gap-2 sm:grid-cols-9" data-scale="mint"></div>
+            <h3 class="mt-6 mb-3 font-medium">Ink</h3>
+            <div class="grid grid-cols-3 gap-2 sm:grid-cols-9" data-scale="ink"></div>
+            <h3 class="mt-6 mb-3 font-medium">Системные</h3>
+            <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div><div class="h-14 rounded-lg bg-success"></div><div class="mt-1 text-xs font-medium">success</div><div class="font-mono text-xs text-muted-foreground">#22c55e</div></div>
+                <div><div class="h-14 rounded-lg bg-warning"></div><div class="mt-1 text-xs font-medium">warning</div><div class="font-mono text-xs text-muted-foreground">#f5a524</div></div>
+                <div><div class="h-14 rounded-lg bg-info"></div><div class="mt-1 text-xs font-medium">info</div><div class="font-mono text-xs text-muted-foreground">#3b82f6</div></div>
+                <div><div class="h-14 rounded-lg bg-destructive"></div><div class="mt-1 text-xs font-medium">destructive</div><div class="font-mono text-xs text-muted-foreground">#ef4459</div></div>
+            </div>
+        </div>
+        <div class="rounded-xl border bg-card p-4">
+            <h3 class="mb-3 font-medium">Семантические токены <span class="text-sm font-normal text-muted-foreground">значения меняются вместе с темой</span></h3>
+            <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" id="semantic"></div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ 3. Шрифты и форма ============ -->
+<section id="type" class="flex flex-col gap-6">
+    <div>
+        <h2 class="text-xl font-semibold tracking-tight">Шрифты, радиусы, тени</h2>
+        <p class="text-sm text-muted-foreground">Manrope Variable для интерфейса, JetBrains Mono для машинных значений</p>
+    </div>
+    <div id="shot-type" class="grid gap-3 lg:grid-cols-3">
+        <div class="flex flex-col gap-4 rounded-xl border bg-card p-4 lg:col-span-2">
+            <div class="grid grid-cols-[7rem_1fr] items-baseline gap-x-4 gap-y-4">
+                <span class="font-mono text-xs text-muted-foreground">2xl / 600</span><span class="text-2xl font-semibold tabular-nums">99,94 % · 38,4 ГБ</span>
+                <span class="font-mono text-xs text-muted-foreground">xl / 600</span><span class="text-xl font-semibold tracking-tight">Заголовок страницы</span>
+                <span class="font-mono text-xs text-muted-foreground">lg / 600</span><span class="text-lg leading-none font-semibold">Заголовок диалога</span>
+                <span class="font-mono text-xs text-muted-foreground">base / 500</span><span class="text-base font-medium">Малый заголовок секции</span>
+                <span class="font-mono text-xs text-muted-foreground">sm / 500</span><span class="font-medium">Заголовок панели (h3)</span>
+                <span class="font-mono text-xs text-muted-foreground">sm / 400</span><span class="text-sm">Основной текст интерфейса: бекап базы shop завершён, копии отправлены на два Яндекс.Диска.</span>
+                <span class="font-mono text-xs text-muted-foreground">xs / muted</span><span class="text-xs text-muted-foreground">Мета и подсказки: 09.10, 14:32 · 1,2 ГБ · 3 мин 12 с</span>
+                <span class="font-mono text-xs text-muted-foreground">11px</span><span class="text-[11px] text-muted-foreground">Подписи осей графика</span>
+                <span class="font-mono text-xs text-muted-foreground">mono</span><span class="font-mono text-sm">root@203.0.113.10:22 · /var/backups/shop/2026-10-09.sql.zst</span>
+                <span class="font-mono text-xs text-muted-foreground">800 brand</span><span class="text-2xl font-extrabold tracking-tight">System<span class="text-link">Keeper</span></span>
+            </div>
+        </div>
+        <div class="flex flex-col gap-4 rounded-xl border bg-card p-4">
+            <h3 class="font-medium">Радиусы</h3>
+            <div class="grid grid-cols-3 gap-3 text-center text-xs text-muted-foreground">
+                <div><div class="mx-auto size-14 rounded-sm border-2 border-primary bg-accent"></div><div class="mt-1">sm · 8px</div></div>
+                <div><div class="mx-auto size-14 rounded-md border-2 border-primary bg-accent"></div><div class="mt-1">md · 10px</div></div>
+                <div><div class="mx-auto size-14 rounded-lg border-2 border-primary bg-accent"></div><div class="mt-1">lg · 12px</div></div>
+                <div><div class="mx-auto size-14 rounded-xl border-2 border-primary bg-accent"></div><div class="mt-1">xl · 16px</div></div>
+                <div><div class="mx-auto size-14 rounded-2xl border-2 border-primary bg-accent"></div><div class="mt-1">2xl</div></div>
+                <div><div class="mx-auto size-14 rounded-full border-2 border-primary bg-accent"></div><div class="mt-1">full</div></div>
+            </div>
+            <h3 class="font-medium">Тени</h3>
+            <div class="grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                <div class="rounded-md border bg-background p-3 shadow-xs">xs: поля</div>
+                <div class="rounded-md border bg-background p-3 shadow-sm">sm: Card</div>
+                <div class="rounded-md border bg-background p-3 shadow-md">md: поповер</div>
+                <div class="rounded-md border bg-background p-3 shadow-lg">lg: диалог</div>
+            </div>
+            <h3 class="font-medium">Знак</h3>
+            <div class="flex items-center gap-3">
+                <div class="flex size-14 items-center justify-center rounded-2xl bg-ink-600 text-white shadow-sm"><i data-icon="logo" class="size-8"></i></div>
+                <div class="flex size-8 items-center justify-center rounded-lg bg-ink-600 text-white"><i data-icon="logo" class="size-5"></i></div>
+                <i data-icon="logo" class="size-8 text-foreground"></i>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ 4. Компоненты ============ -->
+<section id="components" class="flex flex-col gap-6">
+    <div>
+        <h2 class="text-xl font-semibold tracking-tight">Компоненты</h2>
+        <p class="text-sm text-muted-foreground">Классы совпадают с shadcn-vue (new-york-v4) из DevPilot</p>
+    </div>
+
+    <div id="shot-components" class="grid gap-4 lg:grid-cols-2">
+        <!-- Кнопки -->
+        <div class="flex flex-col gap-4 rounded-xl border bg-card p-4">
+            <h3 class="font-medium">Button</h3>
+            <div class="flex flex-wrap items-center gap-2">
+                <button class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90">Сохранить</button>
+                <button class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-secondary px-4 text-sm font-medium text-secondary-foreground transition-all hover:bg-secondary/80">Отмена</button>
+                <button class="inline-flex h-9 items-center justify-center gap-2 rounded-md border bg-background px-4 text-sm font-medium shadow-xs transition-all hover:bg-accent hover:text-accent-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50">Outline</button>
+                <button class="inline-flex h-9 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium transition-all hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50">Ghost</button>
+                <button class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-destructive px-4 text-sm font-medium text-white transition-all hover:bg-destructive/90 dark:bg-destructive/60">Удалить</button>
+                <button class="inline-flex h-9 items-center justify-center gap-2 px-4 text-sm font-medium text-link underline-offset-4 hover:underline">Ссылка</button>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <button class="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary px-2.5 text-sm font-medium text-primary-foreground"><i data-icon="plus" class="size-4"></i>sm</button>
+                <button class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground"><i data-icon="plus" class="size-4"></i>Добавить сервер</button>
+                <button class="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground">lg</button>
+                <button class="inline-flex size-9 items-center justify-center rounded-md border bg-background shadow-xs hover:bg-accent dark:border-input dark:bg-input/30" title="Обновить"><i data-icon="refresh" class="size-4"></i></button>
+                <button class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground" title="Изменить"><i data-icon="pencil" class="size-4"></i></button>
+                <button disabled class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground disabled:pointer-events-none disabled:opacity-50"><i data-icon="refresh" class="size-4 animate-spin"></i>Проверка…</button>
+                <button class="inline-flex h-9 items-center justify-center gap-2 rounded-md border bg-background px-4 text-sm font-medium shadow-xs ring-[3px] ring-ring/50 border-ring dark:bg-input/30">focus</button>
+            </div>
+            <div class="flex gap-2">
+                <button class="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground">Сгенерировать</button>
+                <button class="inline-flex h-8 items-center rounded-md border bg-background px-3 text-sm font-medium shadow-xs dark:border-input dark:bg-input/30">Импортировать</button>
+                <span class="self-center text-xs text-muted-foreground">← выбор режима</span>
+            </div>
+        </div>
+
+        <!-- Бейджи -->
+        <div class="flex flex-col gap-4 rounded-xl border bg-card p-4">
+            <h3 class="font-medium">StatusBadge и Badge</h3>
+            <div class="flex flex-wrap gap-2" id="status-badges"></div>
+            <div class="grid gap-2 text-sm sm:grid-cols-3" id="status-groups"></div>
+            <div class="flex flex-wrap gap-2">
+                <span class="inline-flex items-center rounded-full border border-transparent bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground">default</span>
+                <span class="inline-flex items-center rounded-full border border-transparent bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">secondary</span>
+                <span class="inline-flex items-center rounded-full border border-transparent bg-destructive px-2 py-0.5 text-xs font-medium text-white dark:bg-destructive/60">destructive</span>
+                <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium">outline</span>
+                <span class="text-xs text-muted-foreground uppercase">ed25519</span>
+            </div>
+        </div>
+
+        <!-- Форма -->
+        <div class="flex flex-col gap-4 rounded-xl border bg-card p-4">
+            <h3 class="font-medium">Поля формы</h3>
+            <div class="grid gap-2">
+                <label class="text-sm leading-none font-medium" for="f-name">Имя</label>
+                <input id="f-name" class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 font-mono text-base shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 md:text-sm dark:bg-input/30" placeholder="например, prod-db">
+                <p class="text-xs text-muted-foreground">Латиница в нижнем регистре, цифры, <code class="rounded bg-muted px-1 py-0.5 text-[13px]">.</code> <code class="rounded bg-muted px-1 py-0.5 text-[13px]">_</code> <code class="rounded bg-muted px-1 py-0.5 text-[13px]">-</code></p>
+            </div>
+            <div class="grid grid-cols-[1fr_2fr_6rem] items-start gap-4">
+                <div class="grid gap-2"><label class="text-sm leading-none font-medium">Пользователь</label><input class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 font-mono text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30" value="root"></div>
+                <div class="grid gap-2"><label class="text-sm leading-none font-medium">Хост или IP</label><input aria-invalid="true" class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 font-mono text-sm shadow-xs outline-none aria-invalid:border-destructive aria-invalid:ring-[3px] aria-invalid:ring-destructive/20 dark:bg-input/30 dark:aria-invalid:ring-destructive/40" value="203.0.113."><p class="text-sm text-destructive">Неверный адрес</p></div>
+                <div class="grid gap-2"><label class="text-sm leading-none font-medium">Порт</label><input class="h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none placeholder:text-muted-foreground dark:bg-input/30" placeholder="22"></div>
+            </div>
+            <div class="grid gap-2">
+                <label class="text-sm leading-none font-medium">Расписание</label>
+                <textarea rows="2" class="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30" placeholder="0 3 * * *"></textarea>
+            </div>
+            <div class="flex flex-wrap items-center gap-6 text-sm">
+                <label class="flex items-center gap-2"><span class="grid size-4 place-content-center rounded-[4px] border border-primary bg-primary text-primary-foreground shadow-xs"><i data-icon="check" class="size-3.5"></i></span>Копировать на Яндекс.Диск</label>
+                <label class="flex items-center gap-2"><span class="size-4 rounded-[4px] border border-input shadow-xs dark:bg-input/30"></span>Шифровать архив</label>
+                <span class="inline-flex gap-1 rounded-lg bg-muted p-1">
+                    <span class="rounded-md bg-card px-3.5 py-1.5 shadow-xs">Файлы</span>
+                    <span class="rounded-md px-3.5 py-1.5 text-muted-foreground">MySQL</span>
+                    <span class="rounded-md px-3.5 py-1.5 text-muted-foreground">PostgreSQL</span>
+                </span>
+            </div>
+        </div>
+
+        <!-- Алерты, пустое состояние, загрузка -->
+        <div class="flex flex-col gap-4 rounded-xl border bg-card p-4">
+            <h3 class="font-medium">Alert, пустое состояние, загрузка</h3>
+            <div class="relative grid w-full grid-cols-[calc(var(--spacing)*4)_1fr] items-start gap-x-3 gap-y-0.5 rounded-lg border bg-card px-4 py-3 text-sm">
+                <i data-icon="info" class="size-4 translate-y-0.5"></i>
+                <div class="font-medium">Токен Яндекс.Диска скоро истечёт</div>
+                <div class="col-start-2 text-muted-foreground">Аккаунт backup-2 — переподключите до 15.10, иначе копии перестанут отправляться.</div>
+            </div>
+            <div class="relative grid w-full grid-cols-[calc(var(--spacing)*4)_1fr] items-start gap-x-3 gap-y-0.5 rounded-lg border bg-card px-4 py-3 text-sm text-destructive">
+                <i data-icon="alert" class="size-4 translate-y-0.5"></i>
+                <div class="font-medium">Бекап не выполнен</div>
+                <div class="col-start-2 text-destructive/90">mysqldump: Got error 2013: Lost connection to server during query</div>
+            </div>
+            <div class="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">Серверов нет. Добавьте сервер и SSH-ключ, чтобы настроить первый бекап.</div>
+            <div class="flex items-center gap-3">
+                <div class="size-10 animate-pulse rounded-md bg-primary/10"></div>
+                <div class="flex flex-1 flex-col gap-2"><div class="h-3 w-2/3 animate-pulse rounded-md bg-primary/10"></div><div class="h-3 w-1/3 animate-pulse rounded-md bg-primary/10"></div></div>
+                <i data-icon="loader" class="size-4 animate-spin text-chart-1"></i>
+            </div>
+        </div>
+
+        <!-- Таблица -->
+        <div class="overflow-x-auto rounded-xl border bg-card p-4 lg:col-span-2">
+            <h3 class="mb-3 font-medium">Таблица</h3>
+            <table class="w-full text-sm">
+                <thead class="text-left text-xs text-muted-foreground">
+                    <tr><th class="pb-2 font-normal">Задание</th><th class="pb-2 font-normal">Статус</th><th class="pb-2 text-right font-normal">Размер</th><th class="pb-2 text-right font-normal">Длительность</th><th class="pb-2 text-right font-normal">Копии</th><th class="pb-2 text-right font-normal">Запуск</th><th class="pb-2"></th></tr>
+                </thead>
+                <tbody class="tabular-nums" id="table-body"></tbody>
+            </table>
+        </div>
+
+        <!-- Меню, тултип, код -->
+        <div class="flex flex-col gap-4 rounded-xl border bg-card p-4">
+            <h3 class="font-medium">Меню, тултип, код</h3>
+            <div class="flex flex-wrap items-start gap-6">
+                <div class="min-w-[12rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+                    <div class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm"><i data-icon="play" class="size-4 text-muted-foreground"></i>Запустить сейчас</div>
+                    <div class="flex items-center gap-2 rounded-sm bg-accent px-2 py-1.5 text-sm text-accent-foreground"><i data-icon="download" class="size-4 text-muted-foreground"></i>Скачать архив</div>
+                    <div class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm"><i data-icon="pencil" class="size-4 text-muted-foreground"></i>Изменить</div>
+                    <div class="-mx-1 my-1 h-px bg-border"></div>
+                    <div class="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-destructive"><i data-icon="trash" class="size-4"></i>Удалить</div>
+                </div>
+                <div class="flex flex-col items-center gap-2 pt-2">
+                    <div class="relative w-fit rounded-md bg-foreground px-3 py-1.5 text-xs text-background">Проверить подключение
+                        <span class="absolute -bottom-1 left-1/2 size-2.5 -translate-x-1/2 rotate-45 rounded-[2px] bg-foreground"></span>
+                    </div>
+                    <button class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent"><i data-icon="refresh" class="size-4"></i></button>
+                </div>
+            </div>
+            <div class="flex items-start gap-2">
+                <code class="min-w-0 flex-1 rounded-md bg-muted/40 px-2 py-1.5 text-xs break-all">ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM2kq8Zx0Hf3vYbYpKp1sYQx systemkeeper@backup</code>
+                <button class="inline-flex h-8 items-center justify-center rounded-md border bg-background px-2.5 shadow-xs hover:bg-accent dark:border-input dark:bg-input/30" title="Скопировать"><i data-icon="copy" class="size-4"></i></button>
+            </div>
+        </div>
+
+        <!-- Диалог и тост -->
+        <div class="relative flex min-h-[22rem] items-center justify-center overflow-hidden rounded-xl border bg-card p-4">
+            <div class="absolute inset-0 bg-black/80"></div>
+            <div class="relative grid w-full max-w-md gap-4 rounded-lg border bg-background p-6 shadow-lg">
+                <button class="absolute top-4 right-4 rounded-xs opacity-70 hover:opacity-100"><i data-icon="x" class="size-4"></i></button>
+                <div class="flex flex-col gap-2"><div class="text-lg leading-none font-semibold">Удалить бекап?</div><p class="text-sm text-muted-foreground">Архив <code class="rounded bg-muted px-1 py-0.5 font-mono text-[13px]">shop-2026-10-09.sql.zst</code> удалится локально и с обоих Яндекс.Дисков. Отменить нельзя.</p></div>
+                <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button class="inline-flex h-9 items-center justify-center rounded-md bg-secondary px-4 text-sm font-medium text-secondary-foreground">Отмена</button>
+                    <button class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-destructive px-4 text-sm font-medium text-white dark:bg-destructive/60"><i data-icon="trash" class="size-4"></i>Удалить</button>
+                </div>
+            </div>
+            <div class="absolute right-4 bottom-4 flex w-72 items-center gap-2 rounded-lg border bg-popover px-4 py-3 text-sm text-popover-foreground shadow-lg">
+                <i data-icon="check" class="size-4 text-success"></i>Бекап поставлен в очередь
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ 5. Паттерны страниц ============ -->
+<section id="patterns" class="flex flex-col gap-6">
+    <div>
+        <h2 class="text-xl font-semibold tracking-tight">Паттерны страниц</h2>
+        <p class="text-sm text-muted-foreground">Список сущностей карточками (по образцу SSH-ключей DevPilot) и экран входа</p>
+    </div>
+
+    <div id="shot-list" class="flex flex-col gap-6 rounded-xl border bg-background p-4">
+        <div class="flex flex-col items-start justify-between gap-4 sm:flex-row">
+            <header class="space-y-0.5">
+                <h2 class="text-xl font-semibold tracking-tight">Серверы</h2>
+                <p class="text-sm text-muted-foreground">Откуда SystemKeeper забирает бекапы по SSH. Открытый ключ сервиса добавьте в <code class="rounded bg-muted px-1 py-0.5 text-[13px]">~/.ssh/authorized_keys</code>.</p>
+            </header>
+            <button class="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"><i data-icon="plus" class="size-4"></i>Добавить сервер</button>
+        </div>
+        <div class="grid gap-4 lg:grid-cols-2" id="servers"></div>
+    </div>
+
+    <div id="shot-login" class="flex min-h-[36rem] flex-col items-center justify-center gap-6 rounded-xl border bg-background p-6 md:p-10">
+        <div class="w-full max-w-sm">
+            <div class="flex flex-col gap-8">
+                <div class="flex flex-col items-center gap-4">
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="mb-1 flex size-14 items-center justify-center rounded-2xl bg-ink-600 text-white shadow-sm"><i data-icon="logo" class="size-8"></i></div>
+                        <span class="text-2xl font-extrabold tracking-tight">System<span class="text-link">Keeper</span></span>
+                    </div>
+                    <div class="space-y-2 text-center">
+                        <h1 class="text-xl font-bold tracking-tight">Вход</h1>
+                        <p class="text-sm text-muted-foreground">Введите почту и пароль администратора</p>
+                    </div>
+                </div>
+                <form class="flex flex-col gap-6" onsubmit="return false">
+                    <div class="grid gap-2"><label class="text-sm leading-none font-medium">Почта</label><input class="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30" placeholder="admin@example.com"></div>
+                    <div class="grid gap-2"><div class="flex items-center justify-between"><label class="text-sm leading-none font-medium">Пароль</label><a class="text-sm text-link underline-offset-4 hover:underline" href="#">Забыли пароль?</a></div><input type="password" class="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30" value="secret123"></div>
+                    <label class="flex items-center gap-2 text-sm"><span class="size-4 rounded-[4px] border border-input shadow-xs dark:bg-input/30"></span>Запомнить меня</label>
+                    <button class="inline-flex h-9 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">Войти</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+<footer class="border-t pt-6 text-xs text-muted-foreground">Источник: DevPilot <code class="font-mono">resources/css/app.css</code>, <code class="font-mono">resources/js/components/ui/*</code>. Описание: <code class="font-mono">docs/design-system/README.md</code>.</footer>
+</main>
+
+<script>
+// ---------- Иконки Lucide (подмножество) ----------
+const ICONS = {
+    logo: '<path d="M32 6 10 14v16c0 14 9.5 23.5 22 28 12.5-4.5 22-14 22-28V14L32 6Z" stroke="currentColor"/><path d="m22 32 7 7 13-14" stroke="var(--color-mint-400)"/>',
+    dashboard: '<rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>',
+    server: '<rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/>',
+    database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/>',
+    archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+    drive: '<line x1="22" x2="2" y1="12" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" x2="6.01" y1="16" y2="16"/><line x1="10" x2="10.01" y1="16" y2="16"/>',
+    activity: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>',
+    siren: '<path d="M7 18v-6a5 5 0 1 1 10 0v6"/><path d="M5 21a1 1 0 0 1-1-1v-1a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1z"/><path d="M21 12h1"/><path d="M18.5 4.5 18 5"/><path d="M2 12h1"/><path d="M12 2v1"/><path d="m4.929 4.929.707.707"/><path d="M12 12v6"/>',
+    bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M22 8c0-2.3-.8-4.3-2-6"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/><path d="M4 2C2.8 3.7 2 5.7 2 8"/>',
+    key: '<path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/>',
+    settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+    refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+    copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+    loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
+    panel: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>',
+    'chevron-right': '<path d="m9 18 6-6-6-6"/>',
+    'chevron-down': '<path d="m6 9 6 6 6-6"/>',
+    updown: '<path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/>',
+    alert: '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>',
+    info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+    moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+    more: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+    play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+    'shield-check': '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+};
+function renderIcons(root = document) {
+    root.querySelectorAll('i[data-icon]').forEach((el) => {
+        const name = el.dataset.icon;
+        const logo = name === 'logo';
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${logo ? '0 0 64 64' : '0 0 24 24'}" fill="none" stroke="currentColor" stroke-width="${logo ? 7 : 2}" stroke-linecap="round" stroke-linejoin="round" class="${el.className} shrink-0" aria-hidden="true">${ICONS[name] ?? ''}</svg>`;
+        el.outerHTML = svg;
+    });
+}
+
+// ---------- Статусы: тоны как в DevPilot statusTone() ----------
+const TONE = {
+    neutral: 'bg-muted text-muted-foreground [--dot:var(--muted-foreground)]',
+    info: 'bg-info/12 text-foreground [--dot:var(--info)]',
+    success: 'bg-success/12 text-foreground [--dot:var(--success)]',
+    warning: 'bg-warning/15 text-foreground [--dot:var(--warning)]',
+    danger: 'bg-destructive/12 text-foreground [--dot:var(--destructive)]',
+};
+const STATUS = {
+    queued: ['info', 'В очереди'], running: ['info', 'Идёт'], success: ['success', 'Готов'],
+    partial: ['warning', 'Частично'], failed: ['danger', 'Ошибка'], skipped: ['neutral', 'Пропущен'],
+    up: ['success', 'Работает'], degraded: ['warning', 'Медленно'], down: ['danger', 'Недоступен'],
+    paused: ['neutral', 'На паузе'], pending: ['neutral', 'Не проверялся'],
+    open: ['danger', 'Открыт'], acknowledged: ['warning', 'Принят'], resolved: ['success', 'Решён'],
+};
+function badge(status, extra = '') {
+    const [tone, label] = STATUS[status];
+    return `<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${TONE[tone]} ${extra}"><span class="size-1.5 shrink-0 rounded-full bg-(--dot) ${status === 'running' ? 'animate-pulse' : ''}"></span>${label}</span>`;
+}
+document.getElementById('status-badges').innerHTML = Object.keys(TONE).map((t) =>
+    `<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${TONE[t]}"><span class="size-1.5 rounded-full bg-(--dot)"></span>${t}</span>`).join('');
+document.getElementById('status-groups').innerHTML = [
+    ['Бекап', ['queued', 'running', 'success', 'partial', 'failed', 'skipped']],
+    ['Монитор', ['pending', 'up', 'degraded', 'down', 'paused']],
+    ['Инцидент', ['open', 'acknowledged', 'resolved']],
+].map(([title, list]) => `<div><div class="mb-1.5 text-xs text-muted-foreground">${title}</div><div class="flex flex-wrap gap-1.5">${list.map((s) => badge(s)).join('')}</div></div>`).join('');
+
+// ---------- Палитра ----------
+const SCALES = {
+    mint: ['#e8fbf6', '#c4f5e8', '#8aebd3', '#4fe2bf', '#14d9b0', '#0fb894', '#0a8f72', '#086b56', '#06473a'],
+    ink: ['#f4f6f7', '#e3e8eb', '#c5ced4', '#94a1ab', '#5b6873', '#3b4852', '#1f2a33', '#151d24', '#0c1116'],
+};
+const STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800];
+document.querySelectorAll('[data-scale]').forEach((el) => {
+    const scale = el.dataset.scale;
+    el.innerHTML = SCALES[scale].map((hex, i) =>
+        `<div><div class="h-14 rounded-lg border" style="background:${hex}"></div><div class="mt-1 text-xs font-medium">${scale}-${STEPS[i]}${(scale === 'mint' && i === 4) || (scale === 'ink' && i === 6) ? ' ★' : ''}</div><div class="font-mono text-xs text-muted-foreground">${hex}</div></div>`).join('');
+});
+const SEMANTIC = ['background', 'foreground', 'card', 'popover', 'primary', 'primary-foreground', 'secondary', 'muted', 'muted-foreground', 'accent', 'accent-foreground', 'destructive', 'link', 'success-text', 'warning-text', 'border', 'input', 'ring', 'sidebar', 'sidebar-accent', 'chart-1', 'chart-2', 'chart-3', 'chart-4'];
+function renderSemantic() {
+    const css = getComputedStyle(document.documentElement);
+    document.getElementById('semantic').innerHTML = SEMANTIC.map((name) => {
+        const value = css.getPropertyValue('--' + name).trim();
+        return `<div class="flex items-center gap-2 rounded-md border p-2"><span class="size-8 shrink-0 rounded-md border" style="background:var(--${name})"></span><span class="min-w-0"><span class="block truncate font-mono text-xs">--${name}</span><span class="block font-mono text-xs text-muted-foreground">${value}</span></span></div>`;
+    }).join('');
+}
+
+// ---------- Данные дашборда ----------
+const BARS = [31.2, 33.8, 30.4, 35.1, 36.9, 29.7, 28.3, 34.4, 37.2, 39.8, 36.1, 41.5, 35.6, 38.4].map((v, i) => {
+    const d = new Date(2026, 8, 26 + i);
+    return { label: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }), value: v };
+});
+function barChart(el, bars, height = 180) {
+    const W = 600, TOP = 16, BOTTOM = 18, plot = height - TOP - BOTTOM;
+    const max = Math.max(...bars.map((b) => b.value));
+    const step = W / bars.length;
+    const h = (v) => (v / max) * plot;
+    const rects = bars.map((b, i) => `<g data-i="${i}"><rect x="${i * step + 2}" y="${TOP + plot - h(b.value)}" width="${step - 4}" height="${h(b.value)}" rx="2" class="fill-chart-1 transition-opacity bar"/><rect x="${i * step}" y="0" width="${step}" height="${height}" fill="transparent" class="hit"/></g>`).join('');
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${height}" preserveAspectRatio="none" class="block w-full" style="height:${height}px">
+        <line x1="0" x2="${W}" y1="${TOP + plot}" y2="${TOP + plot}" class="stroke-border" stroke-width="1" vector-effect="non-scaling-stroke"/>
+        <line x1="0" x2="${W}" y1="${TOP}" y2="${TOP}" class="stroke-border" stroke-dasharray="3 3" stroke-width="1" vector-effect="non-scaling-stroke"/>${rects}</svg>
+        <div class="pointer-events-none absolute inset-x-0 bottom-0 flex text-[11px] text-muted-foreground">${bars.map((b, i) => `<span class="flex-1 text-center whitespace-nowrap">${i % 2 === 0 ? b.label : ''}</span>`).join('')}</div>
+        <div class="pointer-events-none absolute top-0 left-0 text-[11px] text-muted-foreground">${max.toFixed(1).replace('.', ',')} ГБ</div>
+        <div class="tip pointer-events-none absolute top-0 z-10 hidden -translate-x-1/2 rounded-md border bg-popover px-2 py-1 text-xs whitespace-nowrap text-popover-foreground shadow-md"></div>`;
+    const tip = el.querySelector('.tip');
+    const groups = el.querySelectorAll('g[data-i]');
+    const show = (i) => {
+        groups.forEach((g, j) => g.querySelector('.bar').classList.toggle('opacity-50', i !== null && i !== j));
+        if (i === null) { tip.classList.add('hidden'); return; }
+        tip.classList.remove('hidden');
+        tip.style.left = Math.min(Math.max(((i + 0.5) / bars.length) * 100, 10), 90) + '%';
+        tip.innerHTML = `<div class="font-medium">${bars[i].label}</div><div>${bars[i].value.toFixed(1).replace('.', ',')} ГБ · 46 бекапов</div>`;
+    };
+    groups.forEach((g) => g.addEventListener('mouseenter', () => show(+g.dataset.i)));
+    el.addEventListener('mouseleave', () => show(null));
+    el.dataset.show = '';
+    el._show = show;
+}
+barChart(document.getElementById('bar-chart'), BARS);
+
+function sparkline(el, values) {
+    const W = 200, H = 40, max = Math.max(...values);
+    const d = values.map((v, i) => `${i ? 'L' : 'M'}${((i / (values.length - 1)) * W).toFixed(1)},${(H - 2 - (v / max) * (H - 4)).toFixed(1)}`).join(' ');
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="block h-10 w-full"><line x1="0" x2="${W}" y1="${H - 1}" y2="${H - 1}" class="stroke-border" vector-effect="non-scaling-stroke"/><path d="${d}" fill="none" class="stroke-chart-1" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
+}
+sparkline(document.getElementById('sparkline'), [180, 190, 175, 210, 205, 198, 220, 260, 240, 230, 280, 310, 295, 330, 312, 300, 290, 312]);
+
+const tone = (p) => (p === null ? 'bg-muted-foreground' : p >= 90 ? 'bg-destructive' : p >= 70 ? 'bg-warning' : 'bg-chart-1');
+document.getElementById('quotas').innerHTML = [
+    ['Локальное хранилище', 'сейчас', [['/var/backups', 64, '1,28 из 2 ТБ']]],
+    ['Яндекс.Диск backup-1', '5 мин назад', [['Квота', 78, '780 из 1000 ГБ']]],
+    ['Яндекс.Диск backup-2', '5 мин назад', [['Квота', 93, '930 из 1000 ГБ']]],
+    ['Яндекс.Диск archive', 'нет данных', [['Квота', null, '—']]],
+].map(([name, ago, windows]) => `<div class="mb-4 last:mb-0"><div class="mb-1 flex items-baseline justify-between gap-2 text-sm"><span class="truncate font-medium">${name}</span><span class="shrink-0 text-xs text-muted-foreground">${ago}</span></div>${windows.map(([label, p, hint]) => `<div class="mb-1.5" title="${hint}"><div class="flex justify-between text-xs text-muted-foreground"><span>${label}</span><span class="tabular-nums">${p === null ? '—' : p + ' %'}</span></div><div class="mt-0.5 h-1.5 rounded-full bg-muted"><div class="h-1.5 rounded-full ${tone(p)}" style="width:${Math.min(p ?? 0, 100)}%"></div></div></div>`).join('')}</div>`).join('');
+
+const RECENT = [
+    ['shop · MySQL', 'db-1.shop.ru', '1,2 ГБ', 'сейчас', 'running'],
+    ['crm · PostgreSQL', 'crm.local', '640 МБ', '8 мин назад', 'success'],
+    ['site · файлы', 'web-2.example.com', '14,8 ГБ', '23 мин назад', 'partial'],
+    ['mail · файлы', 'mail.example.com', '—', '1 ч назад', 'failed'],
+    ['wiki · MySQL', 'db-1.shop.ru', '82 МБ', '2 ч назад', 'success'],
+];
+document.getElementById('recent').innerHTML = RECENT.map(([title, host, size, ago, status]) =>
+    `<a class="-mx-2 flex items-center gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted" href="#">
+        ${status === 'running' ? '<i data-icon="loader" class="size-4 animate-spin text-chart-1"></i>' : '<i data-icon="archive" class="size-4 text-muted-foreground"></i>'}
+        <div class="min-w-0 flex-1"><div class="truncate">${title}</div><div class="truncate font-mono text-xs text-muted-foreground">${host}</div></div>
+        <span class="shrink-0 text-xs text-muted-foreground tabular-nums">${size}</span>
+        <span class="w-24 shrink-0 text-right text-xs text-muted-foreground">${ago}</span>
+        ${badge(status, 'w-24 justify-center')}
+    </a>`).join('');
+
+document.getElementById('table-body').innerHTML = [
+    ['shop · MySQL', 'running', '1,2 ГБ', '—', '0 / 2', '09.10, 14:30'],
+    ['crm · PostgreSQL', 'success', '640 МБ', '1 мин 48 с', '2 / 2', '09.10, 14:22'],
+    ['site · файлы', 'partial', '14,8 ГБ', '11 мин 03 с', '1 / 2', '09.10, 14:07'],
+    ['mail · файлы', 'failed', '—', '0 мин 12 с', '0 / 2', '09.10, 13:30'],
+    ['legacy · файлы', 'skipped', '—', '—', '—', '—'],
+].map(([name, status, size, dur, copies, at]) =>
+    `<tr class="border-t"><td class="max-w-56 truncate py-1.5 pr-2">${name}</td><td class="py-1.5">${badge(status)}</td><td class="py-1.5 text-right">${size}</td><td class="py-1.5 text-right">${dur}</td><td class="py-1.5 text-right">${copies}</td><td class="py-1.5 text-right text-muted-foreground">${at}</td><td class="py-1.5 text-right"><button class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent"><i data-icon="more" class="size-4"></i></button></td></tr>`).join('');
+
+document.getElementById('servers').innerHTML = [
+    ['db-1.shop.ru', 'MySQL', 'root', '203.0.113.10', 22, 'ok', 'Подключение работает', '09.10, 14:31', 3],
+    ['web-2.example.com', 'файлы', 'backup', '198.51.100.24', 2222, 'ok', 'Подключение работает', '09.10, 14:05', 2],
+    ['mail.example.com', 'файлы', 'root', '192.0.2.77', 22, 'error', 'Permission denied (publickey)', '09.10, 13:30', 1],
+    ['crm.local', 'PostgreSQL', 'postgres', '10.0.0.15', 22, null, 'Не проверялся', null, 1],
+].map(([name, type, user, host, port, status, message, checked, jobs]) => `
+    <div class="flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4">
+        <div class="flex items-center gap-2">
+            <i data-icon="server" class="size-4 text-muted-foreground"></i>
+            <span class="min-w-0 truncate font-mono font-medium" title="${name}">${name}</span>
+            <span class="shrink-0 text-xs text-muted-foreground uppercase">${type}</span>
+            <button class="ml-auto inline-flex h-8 shrink-0 items-center rounded-md px-2.5 hover:bg-accent hover:text-accent-foreground" title="Проверить подключение"><i data-icon="refresh" class="size-4"></i></button>
+            <button class="inline-flex h-8 shrink-0 items-center rounded-md px-2.5 hover:bg-accent hover:text-accent-foreground" title="Изменить"><i data-icon="pencil" class="size-4"></i></button>
+        </div>
+        <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+            <span class="text-muted-foreground">Сервер</span><span class="font-mono text-xs leading-5">${user}@${host}:${port}</span>
+            <span class="text-muted-foreground">Ключ</span><span class="font-mono text-xs leading-5">systemkeeper</span>
+            <span class="text-muted-foreground">Заданий</span><span class="tabular-nums">${jobs}</span>
+        </div>
+        <div class="flex items-center gap-2 text-sm">
+            <span class="size-2 shrink-0 rounded-full ${status === 'ok' ? 'bg-success' : status === 'error' ? 'bg-destructive' : 'bg-muted-foreground'}"></span>
+            <span class="min-w-0 break-words ${status === 'error' ? 'text-destructive' : 'text-muted-foreground'}">${message}</span>
+            ${checked ? `<span class="ml-auto shrink-0 text-xs text-muted-foreground">${checked}</span>` : ''}
+        </div>
+    </div>`).join('');
+
+// ---------- Тема ----------
+function syncTabs() {
+    const dark = document.documentElement.classList.contains('dark');
+    document.querySelectorAll('#theme-tabs button').forEach((b) => {
+        const active = (b.dataset.theme === 'dark') === dark;
+        b.className = 'flex items-center rounded-md px-3.5 py-1.5 transition-colors ' + (active ? 'bg-card shadow-xs' : 'text-muted-foreground hover:bg-muted hover:text-foreground');
+    });
+    renderSemantic();
+}
+document.querySelectorAll('#theme-tabs button').forEach((b) => b.addEventListener('click', () => {
+    document.documentElement.classList.toggle('dark', b.dataset.theme === 'dark');
+    syncTabs();
+}));
+syncTabs();
+renderIcons();
+// ?hover=N — подсветить столбец графика (для скриншотов)
+const hover = new URLSearchParams(location.search).get('hover');
+if (hover !== null) document.getElementById('bar-chart')._show(+hover);
+</script>
+</body>
+</html>
