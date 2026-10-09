@@ -19,6 +19,7 @@ const router = createRouter({
         { path: 'backups', name: 'backups', component: () => import('@/views/BackupsView.vue'), meta: { title: 'Бекапы' } },
         { path: 'monitoring', name: 'monitoring', component: () => import('@/views/MonitoringView.vue'), meta: { title: 'Мониторинг' } },
         { path: 'monitoring/:id(\\d+)', name: 'monitor', component: () => import('@/views/MonitorDetailView.vue'), meta: { title: 'Мониторинг' } },
+        { path: 'notifications', name: 'notifications', component: () => import('@/views/NotificationsView.vue'), meta: { title: 'Уведомления' } },
         { path: 'settings', name: 'settings', component: () => import('@/views/StubView.vue'), meta: { title: 'Настройки' } },
       ],
     },

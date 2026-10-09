@@ -16,6 +16,7 @@ const nav = [
   { to: '/storage-targets', label: 'Хранилища', icon: 'archive' },
   { to: '/backups', label: 'Бекапы', icon: 'archive' },
   { to: '/monitoring', label: 'Мониторинг', icon: 'activity' },
+  { to: '/notifications', label: 'Уведомления', icon: 'bell' },
   { to: '/settings', label: 'Настройки', icon: 'settings' },
 ]
 

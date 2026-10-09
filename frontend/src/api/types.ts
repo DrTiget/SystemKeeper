@@ -294,3 +294,48 @@ export interface MetricsHistory {
   bucket_seconds: number
   points: MetricPoint[]
 }
+
+export type AlertChannelType = 'telegram' | 'email' | 'webpush' | 'mobile'
+
+export interface AlertChannel {
+  id: number
+  name: string
+  type: AlertChannelType
+  enabled: boolean
+  settings: { chat_id?: string; has_bot_token?: boolean; recipients?: string[] }
+  created_at: string
+  updated_at: string
+}
+
+export type AlertTargetType = 'monitor' | 'backup_job' | 'server' | 'storage_target'
+
+export interface AlertRule {
+  id: number
+  name: string
+  event: string
+  target_type: AlertTargetType | null
+  target_id: number | null
+  channel_ids: number[]
+  channels: Pick<AlertChannel, 'id' | 'name' | 'type'>[]
+  quiet_hours_start: string | null
+  quiet_hours_end: string | null
+  throttle_minutes: number
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface AlertDelivery {
+  id: number
+  alert_rule_id: number | null
+  alert_channel_id: number | null
+  event: string
+  title: string
+  body: string | null
+  url: string | null
+  status: 'pending' | 'sent' | 'failed' | 'skipped'
+  error: string | null
+  attempts: number
+  sent_at: string | null
+  created_at: string
+}
