@@ -12,9 +12,9 @@ class UpdateServerRequest extends FormRequest
     {
         /** @var Server $server */
         $server = $this->route('server');
-        $auth = $this->input('auth_type', $server->auth_type);
-        $switchedToKey = $auth === Server::AUTH_KEY && $server->auth_type !== Server::AUTH_KEY;
-        $switchedToPassword = $auth === Server::AUTH_PASSWORD && $server->auth_type !== Server::AUTH_PASSWORD;
+        $auth = $this->input('auth_type', $server?->auth_type);
+        $switchedToKey = $auth === Server::AUTH_KEY && $server?->auth_type !== Server::AUTH_KEY;
+        $switchedToPassword = $auth === Server::AUTH_PASSWORD && $server?->auth_type !== Server::AUTH_PASSWORD;
 
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],

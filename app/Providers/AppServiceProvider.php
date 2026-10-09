@@ -10,6 +10,10 @@ use App\Services\Ssh\SshConnector;
 use App\Services\Ssh\SshConnectorInterface;
 use App\Services\Storage\StorageUploader;
 use App\Services\Storage\StorageUploaderInterface;
+use App\Support\StorageTargetOpenApi;
+use Dedoc\Scramble\Scramble;
+use Dedoc\Scramble\Support\Generator\OpenApi;
+use Dedoc\Scramble\Support\Generator\SecurityScheme;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -30,6 +34,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Документация OpenAPI: /api/docs и /api/docs.json (доступ — App\Http\Middleware\ApiDocsAccess)
+        Scramble::configure()
+            ->withDocumentTransformers(function (OpenApi $openApi) {
+                $openApi->secure(SecurityScheme::http('bearer'));
+            })
+            ->withDocumentTransformers(new StorageTargetOpenApi)
+            ->expose(ui: 'api/docs', document: 'api/docs.json');
     }
 }

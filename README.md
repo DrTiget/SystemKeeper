@@ -17,6 +17,14 @@ docker compose up -d frontend   # npm install и vite на порту FRONTEND_P
 
 Откройте `http://localhost:${FRONTEND_PORT:-5173}`. Запросы `/api` проксируются на `http://nginx:80`. Токен хранится в `localStorage`; без токена или при `401` от API происходит переход на `/login`. Проверка типов: `docker compose exec frontend npm run typecheck`; сборка: `docker compose exec frontend npm run build`.
 
+## Документация API (OpenAPI)
+
+Описание генерируется из кода пакетом [dedoc/scramble](https://scramble.dedoc.co): интерактивная страница — `/api/docs`, спецификация OpenAPI 3.1 — `/api/docs.json` (`php artisan scramble:export` — выгрузка в файл). В `APP_ENV=local` доступна всем, в остальных окружениях — только с `Authorization: Bearer <token>`. Авторизация в описании — Bearer (Sanctum). Поля запросов хранилищ, зависящие от `type`, дописываются в схему вручную (`App\Support\StorageTargetOpenApi`).
+
+## Ошибки API
+
+Стандартные ошибки возвращаются как `{"message": "…"}` на русском: `401` «Требуется авторизация.», `403` «Доступ запрещён.», `404` «Не найдено.», `405` «Метод не поддерживается.», `429` «Слишком много запросов. Повторите позже.», `500` «Внутренняя ошибка сервера.» (подробности — только в логах). Ошибки валидации `422` — `{"message", "errors": {поле: [..]}}`. Скачивание бекапов (`/api/v1/backups/{id}/file|download`) nginx отдаёт без буферизации ответа (`docker/nginx/default.conf`).
+
 ## API: авторизация
 
 Bearer-токены (Laravel Sanctum), без cookie/SPA-сессий. Все ответы — JSON, базовый путь `/api/v1`. Публичной регистрации нет. CORS включён для `/api/*`.
