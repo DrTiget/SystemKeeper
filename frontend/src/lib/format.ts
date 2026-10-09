@@ -28,3 +28,15 @@ export function errorMessage(e: unknown, fallback = 'Не удалось вып�
   if (e.status === 429) return 'Слишком много запросов. Подождите и повторите'
   return fallback
 }
+
+export function formatBytes(n: number | null | undefined): string {
+  if (n == null) return '—'
+  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ', 'ПБ']
+  let i = 0
+  let v = n
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i++
+  }
+  return `${v.toLocaleString('ru-RU', { maximumFractionDigits: i ? 1 : 0 })} ${units[i]}`
+}

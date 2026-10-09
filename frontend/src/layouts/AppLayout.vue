@@ -13,6 +13,7 @@ const nav = [
   { to: '/', label: 'Дашборд', icon: 'dashboard' },
   { to: '/servers', label: 'Серверы', icon: 'server' },
   { to: '/ssh-keys', label: 'SSH-ключи', icon: 'key' },
+  { to: '/storage-targets', label: 'Хранилища', icon: 'archive' },
   { to: '/backups', label: 'Бекапы', icon: 'archive' },
   { to: '/monitoring', label: 'Мониторинг', icon: 'activity' },
   { to: '/settings', label: 'Настройки', icon: 'settings' },

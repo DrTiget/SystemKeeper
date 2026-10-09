@@ -42,3 +42,25 @@ export interface CheckResult {
   checked_at: string
   server: Server
 }
+
+export interface StorageTarget {
+  id: number
+  name: string
+  type: 'local' | 'yandex_disk'
+  base_path: string
+  enabled: boolean
+  has_token: boolean
+  last_checked_at: string | null
+  last_check_status: 'ok' | 'failed' | null
+  last_check_error: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface StorageCheck {
+  status: 'ok' | 'failed'
+  error: string | null
+  total_space: number | null
+  used_space: number | null
+  free_space: number | null
+}
