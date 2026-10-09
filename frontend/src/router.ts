@@ -12,7 +12,8 @@ const router = createRouter({
       meta: { auth: true },
       children: [
         { path: '', name: 'dashboard', component: () => import('@/views/StubView.vue'), meta: { title: 'Дашборд' } },
-        { path: 'servers', name: 'servers', component: () => import('@/views/StubView.vue'), meta: { title: 'Серверы' } },
+        { path: 'servers', name: 'servers', component: () => import('@/views/ServersView.vue'), meta: { title: 'Серверы' } },
+        { path: 'ssh-keys', name: 'ssh-keys', component: () => import('@/views/SshKeysView.vue'), meta: { title: 'SSH-ключи' } },
         { path: 'backups', name: 'backups', component: () => import('@/views/StubView.vue'), meta: { title: 'Бекапы' } },
         { path: 'monitoring', name: 'monitoring', component: () => import('@/views/StubView.vue'), meta: { title: 'Мониторинг' } },
         { path: 'settings', name: 'settings', component: () => import('@/views/StubView.vue'), meta: { title: 'Настройки' } },
