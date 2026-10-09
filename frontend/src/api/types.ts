@@ -184,3 +184,41 @@ export interface MonitorCheck {
   error: string | null
   checked_at: string
 }
+
+export interface Dashboard {
+  servers: { total: number; check_ok: number; check_failed: number; unchecked: number }
+  backups: {
+    success_24h: number
+    failed_24h: number
+    success_7d: number
+    failed_7d: number
+    last_failed: { id: number; backup_job_id: number; job_name: string | null; error: string | null; finished_at: string }[]
+    upcoming: { backup_job_id: number; job_name: string; next_run_at: string }[]
+    local_size_bytes: number
+    size_by_storage: { storage_target_id: number; name: string; type: StorageTarget['type']; copies: number; size_bytes: number }[]
+    stale_days: number
+    stale_jobs: { backup_job_id: number; job_name: string; last_success_at: string | null }[]
+  }
+  monitoring: {
+    total: number
+    up: number
+    down: number
+    paused: number
+    pending: number
+    active_incidents_count: number
+    active_incidents: { id: number; monitor_id: number; monitor_name: string | null; reason: string | null; started_at: string }[]
+    uptime_24h: number | null
+    uptime_30d: number | null
+  }
+  storages: {
+    id: number
+    name: string
+    type: StorageTarget['type']
+    enabled: boolean
+    last_checked_at: string | null
+    last_check_status: 'ok' | 'failed' | null
+    total_space: number | null
+    free_space: number | null
+  }[]
+  generated_at: string
+}

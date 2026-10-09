@@ -77,6 +77,8 @@ class StorageTargetController extends Controller
             'last_checked_at' => now(),
             'last_check_status' => $error === null ? 'ok' : 'failed',
             'last_check_error' => $error === null ? null : Str::limit($error, 1000),
+            'last_total_space' => $space['total_space'] ?? null,
+            'last_free_space' => $space['free_space'] ?? null,
         ])->save();
 
         return response()->json(['data' => [

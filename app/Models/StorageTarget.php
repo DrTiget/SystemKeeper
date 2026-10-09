@@ -35,6 +35,8 @@ class StorageTarget extends Model
             'config' => 'array',
             'enabled' => 'boolean',
             'last_checked_at' => 'datetime',
+            'last_total_space' => 'integer',
+            'last_free_space' => 'integer',
         ];
     }
 

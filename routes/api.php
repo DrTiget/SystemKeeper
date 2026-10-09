@@ -3,10 +3,12 @@
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BackupController;
 use App\Http\Controllers\Api\V1\BackupJobController;
+use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\HeartbeatController;
 use App\Http\Controllers\Api\V1\IncidentController;
 use App\Http\Controllers\Api\V1\MonitorController;
 use App\Http\Controllers\Api\V1\ServerController;
+use App\Http\Controllers\Api\V1\ServerMetricController;
 use App\Http\Controllers\Api\V1\SshKeyController;
 use App\Http\Controllers\Api\V1\StorageTargetController;
 use Illuminate\Support\Facades\Route;
@@ -21,11 +23,16 @@ Route::prefix('auth')->group(function () {
 });
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('dashboard', DashboardController::class);
+
     Route::get('ssh-keys/{ssh_key}/public', [SshKeyController::class, 'publicKey']);
     Route::apiResource('ssh-keys', SshKeyController::class)->parameters(['ssh-keys' => 'ssh_key']);
 
     Route::post('servers/{server}/check', [ServerController::class, 'check']);
     Route::post('servers/{server}/reset-fingerprint', [ServerController::class, 'resetFingerprint']);
+    Route::get('servers/{server}/metrics/latest', [ServerMetricController::class, 'latest']);
+    Route::post('servers/{server}/metrics/collect', [ServerMetricController::class, 'collect']);
+    Route::get('servers/{server}/metrics', [ServerMetricController::class, 'history']);
     Route::apiResource('servers', ServerController::class);
 
     Route::post('storage-targets/{storage_target}/check', [StorageTargetController::class, 'check']);

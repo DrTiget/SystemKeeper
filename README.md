@@ -125,6 +125,19 @@ $copies = $uploader->upload($localPath, $targets, 'server-1/dump.sql.gz', $backu
 2. Откройте `https://oauth.yandex.ru/authorize?response_type=token&client_id=<ID приложения>` под нужным аккаунтом и разрешите доступ; токен будет в адресе страницы после `access_token=`.
 3. Передайте его в `token` при создании хранилища и проверьте через `POST /storage-targets/{id}/check`. Для каждого аккаунта ЯД — отдельное хранилище.
 
+## API: дашборд
+
+`GET /api/v1/dashboard` (Bearer-токен) — сводка одним запросом, на каждый блок фиксированное число SQL-запросов (без N+1). Необязательный параметр `stale_days` (1–365, по умолчанию 2) — порог для «заданий без свежего бекапа». Ответ `{data: {...}}`:
+
+| Блок | Поля |
+|---|---|
+| `servers` | `total`, `check_ok`, `check_failed`, `unchecked` — по последней проверке подключения |
+| `backups` | `success_24h`, `failed_24h`, `success_7d`, `failed_7d` (по времени завершения; `pending`/`running` не считаются); `last_failed` — 5 последних неудачных `[{id, backup_job_id, job_name, error (до 300 симв.), finished_at}]`; `upcoming` — 5 ближайших запусков по cron `[{backup_job_id, job_name, next_run_at}]`; `local_size_bytes` — объём успешных бекапов на локальном диске; `size_by_storage` — загруженные копии по хранилищам `[{storage_target_id, name, type, copies, size_bytes}]`; `stale_days`; `stale_jobs` — включённые задания, у которых последний успешный бекап старше `stale_days` (или его нет, а задание создано раньше) `[{backup_job_id, job_name, last_success_at|null}]` |
+| `monitoring` | `total`, `up`, `down`, `paused`, `pending` (включены, ещё не проверялись), `active_incidents_count`, `active_incidents` (до 10, новые первыми) `[{id, monitor_id, monitor_name, reason, started_at}]`, `uptime_24h`, `uptime_30d` — среднее по мониторам с проверками за окно (`null`, если проверок нет) |
+| `storages` | `[{id, name, type, enabled, last_checked_at, last_check_status, total_space, free_space}]` — место по результату последнего `POST /storage-targets/{id}/check` (байты; `null`, если не проверялось или хранилище место не сообщает, например S3) |
+
+Фронт (`/`) показывает эти данные плитками и списками со ссылками в разделы и обновляет их раз в 30 секунд.
+
 ## API: мониторинг
 
 Маршруты под `/api/v1` требуют `Authorization: Bearer <token>`, кроме публичного heartbeat. Пагинация как в остальных списках (`?page`, `?per_page`).
