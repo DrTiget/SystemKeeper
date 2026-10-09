@@ -30,7 +30,8 @@ class ServerController extends Controller
     {
         $server = Server::create($this->attributes(MetricsSettingsRules::flatten($request->validated())) + ['port' => 22]);
 
-        return (new ServerResource($server->load('sshKey')))->response()->setStatusCode(201);
+        // refresh() подтягивает значения по умолчанию, проставленные БД (настройки метрик)
+        return (new ServerResource($server->refresh()->load('sshKey')))->response()->setStatusCode(201);
     }
 
     public function show(Server $server): ServerResource

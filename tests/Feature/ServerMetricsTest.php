@@ -329,6 +329,22 @@ class ServerMetricsTest extends TestCase
         ]);
     }
 
+    public function test_create_server_without_settings_returns_defaults(): void
+    {
+        Sanctum::actingAs(User::factory()->create());
+        $key = SshKey::factory()->create();
+
+        $this->postJson('/api/v1/servers', [
+            'name' => 'plain', 'host' => '10.0.0.8', 'username' => 'root', 'auth_type' => 'key', 'ssh_key_id' => $key->id,
+        ])->assertCreated()
+            ->assertJsonPath('data.metrics_settings.enabled', true)
+            ->assertJsonPath('data.metrics_settings.interval_minutes', 5)
+            ->assertJsonPath('data.metrics_settings.confirmations', 2)
+            ->assertJsonPath('data.metrics_settings.thresholds.disk_percent', 90)
+            ->assertJsonPath('data.metrics_settings.thresholds.load_per_core', 2)
+            ->assertJsonPath('data.metrics_settings.thresholds.ram_percent', 90);
+    }
+
     public function test_create_server_with_metrics_settings(): void
     {
         Sanctum::actingAs(User::factory()->create());
