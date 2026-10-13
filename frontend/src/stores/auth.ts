@@ -7,7 +7,7 @@ export interface User {
   id: number
   name: string
   email: string
-  settings: { theme: Theme; timezone: string }
+  settings: { theme: Theme }
 }
 
 export const useAuthStore = defineStore('auth', () => {

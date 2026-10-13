@@ -39,7 +39,7 @@ class ProfileTest extends TestCase
         $this->api()->getJson('/api/v1/profile')
             ->assertOk()
             ->assertJsonPath('data.email', 'me@example.com')
-            ->assertJsonPath('data.settings', ['theme' => 'system', 'timezone' => 'Europe/Moscow'])
+            ->assertJsonPath('data.settings', ['theme' => 'system'])
             ->assertJsonMissingPath('data.password');
     }
 
@@ -48,11 +48,11 @@ class ProfileTest extends TestCase
         $this->api()->patchJson('/api/v1/profile', ['name' => 'Новое имя', 'settings' => ['theme' => 'dark']])
             ->assertOk()
             ->assertJsonPath('data.name', 'Новое имя')
-            ->assertJsonPath('data.settings', ['theme' => 'dark', 'timezone' => 'Europe/Moscow']);
+            ->assertJsonPath('data.settings', ['theme' => 'dark']);
 
-        $this->api()->patchJson('/api/v1/profile', ['settings' => ['timezone' => 'Asia/Yekaterinburg']])
+        $this->api()->patchJson('/api/v1/profile', ['settings' => []])
             ->assertOk()
-            ->assertJsonPath('data.settings', ['theme' => 'dark', 'timezone' => 'Asia/Yekaterinburg']);
+            ->assertJsonPath('data.settings', ['theme' => 'dark']);
 
         $this->assertSame('Новое имя', $this->user->fresh()->name);
     }
@@ -61,9 +61,9 @@ class ProfileTest extends TestCase
     {
         $response = $this->api()->patchJson('/api/v1/profile', [
             'name' => '',
-            'settings' => ['theme' => 'neon', 'timezone' => 'Mars/Base', 'unknown' => 1],
+            'settings' => ['theme' => 'neon', 'timezone' => 'Europe/Moscow'],
         ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['name', 'settings', 'settings.theme', 'settings.timezone']);
+            ->assertJsonValidationErrors(['name', 'settings', 'settings.theme']);
 
         $this->assertSame('Поле «имя» обязательно для заполнения.', $response->json('errors.name.0'));
     }

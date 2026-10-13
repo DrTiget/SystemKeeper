@@ -53,14 +53,14 @@ docker compose exec app php artisan user:create
 | Метод и путь | Тело | Ответ |
 |---|---|---|
 | `GET /api/v1/profile` | — | `200 {data: {id, name, email, settings, created_at}}` |
-| `PATCH /api/v1/profile` (или `PUT`) | любые из `{name, email, current_password, settings: {theme, timezone}}` | `200 {data: …}` — обновлённый профиль |
+| `PATCH /api/v1/profile` (или `PUT`) | любые из `{name, email, current_password, settings: {theme}}` | `200 {data: …}` — обновлённый профиль |
 | `PUT /api/v1/profile/password` | `{current_password, password, password_confirmation}` | `204`; все сеансы, кроме текущего, завершаются |
 | `GET /api/v1/profile/tokens` | — | `200 {data: [{id, name, current, last_used_at, created_at}]}` — сеансы, новые сверху |
 | `DELETE /api/v1/profile/tokens/{id}` | — | `204`; чужой или несуществующий — `404` |
 | `DELETE /api/v1/profile/tokens` | — | `204` — завершены все сеансы, кроме текущего |
 
 - Смена `email` требует `current_password`.
-- `settings` передаются частично и сливаются с текущими; неизвестные ключи — `422`. Значения по умолчанию: `theme: "system"` (`light`, `dark`, `system`), `timezone: "Europe/Moscow"` (идентификатор IANA).
+- `settings` передаются частично и сливаются с текущими; неизвестные ключи — `422`. Сейчас там одна настройка — `theme`: `light`, `dark` или `system` (по умолчанию).
 - Имя сеанса — `device_name` из `POST /auth/login` (сайт передаёт `web`); приложению стоит передавать название устройства.
 - `GET /auth/me` оставлен, он возвращает то же, что `GET /profile`.
 

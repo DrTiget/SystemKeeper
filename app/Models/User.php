@@ -21,7 +21,6 @@ class User extends Authenticatable
     /** Настройки пользователя по умолчанию; в БД хранятся только изменённые. */
     public const DEFAULT_SETTINGS = [
         'theme' => 'system',
-        'timezone' => 'Europe/Moscow',
     ];
 
     public const THEMES = ['light', 'dark', 'system'];
@@ -29,7 +28,7 @@ class User extends Authenticatable
     /**
      * Настройки с подставленными значениями по умолчанию.
      *
-     * @return array{theme: string, timezone: string}
+     * @return array{theme: string}
      */
     public function resolvedSettings(): array
     {

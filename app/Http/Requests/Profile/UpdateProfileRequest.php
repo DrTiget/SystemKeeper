@@ -20,7 +20,6 @@ class UpdateProfileRequest extends FormRequest
             'current_password' => ['required_with:email', 'nullable', 'string', 'current_password:sanctum'],
             'settings' => ['sometimes', 'array:'.implode(',', array_keys(User::DEFAULT_SETTINGS))],
             'settings.theme' => ['sometimes', 'string', Rule::in(User::THEMES)],
-            'settings.timezone' => ['sometimes', 'string', 'timezone:all'],
         ];
     }
 
@@ -34,7 +33,6 @@ class UpdateProfileRequest extends FormRequest
             'current_password' => 'текущий пароль',
             'settings' => 'настройки',
             'settings.theme' => 'тема',
-            'settings.timezone' => 'часовой пояс',
         ];
     }
 }
