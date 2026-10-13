@@ -12,7 +12,7 @@ use Illuminate\Support\Carbon;
 /**
  * Настройки бекапа сервера: какие каталоги, по какому расписанию и что выполнить перед бекапом.
  */
-#[Fillable(['enabled', 'paths', 'excludes', 'schedule', 'pre_command', 'pre_command_timeout'])]
+#[Fillable(['enabled', 'paths', 'excludes', 'schedule', 'pre_command', 'pre_command_timeout', 'pre_command_continue_on_error'])]
 class ServerBackupSettings extends Model
 {
     protected $table = 'server_backup_settings';
@@ -24,6 +24,7 @@ class ServerBackupSettings extends Model
             'paths' => 'array',
             'excludes' => 'array',
             'pre_command_timeout' => 'integer',
+            'pre_command_continue_on_error' => 'boolean',
         ];
     }
 
@@ -37,6 +38,7 @@ class ServerBackupSettings extends Model
             'schedule' => config('backup.default_schedule'),
             'pre_command' => null,
             'pre_command_timeout' => config('backup.pre_command_timeout'),
+            'pre_command_continue_on_error' => false,
         ]);
         $settings->server()->associate($server);
 

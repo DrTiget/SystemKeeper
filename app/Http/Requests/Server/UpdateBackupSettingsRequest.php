@@ -25,6 +25,7 @@ class UpdateBackupSettingsRequest extends FormRequest
             'schedule' => ['sometimes', 'string', 'max:100'],
             'pre_command' => ['sometimes', 'nullable', 'string', 'max:5000'],
             'pre_command_timeout' => ['sometimes', 'integer', 'between:10,86400'],
+            'pre_command_continue_on_error' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -76,6 +77,7 @@ class UpdateBackupSettingsRequest extends FormRequest
             'schedule' => 'расписание',
             'pre_command' => 'команда перед бекапом',
             'pre_command_timeout' => 'таймаут команды',
+            'pre_command_continue_on_error' => 'продолжать при ошибке команды',
         ];
     }
 

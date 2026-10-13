@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AuthController;
+use App\Http\Controllers\Api\V1\BackupTemplateController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\ServerBackupSettingsController;
 use App\Http\Controllers\Api\V1\ServerController;
+use App\Http\Controllers\Api\V1\ServerFilesController;
 use App\Http\Controllers\Api\V1\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -32,6 +34,8 @@ Route::middleware(['auth:sanctum', 'can:manage-users'])->group(function () {
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('servers/{server}/check', [ServerController::class, 'check']);
     Route::post('servers/{server}/reset-fingerprint', [ServerController::class, 'resetFingerprint']);
+    Route::get('servers/{server}/files', [ServerFilesController::class, 'index'])->middleware('throttle:120,1');
+    Route::get('backup/pre-command-templates', [BackupTemplateController::class, 'preCommands']);
     Route::get('servers/{server}/backup-settings', [ServerBackupSettingsController::class, 'show']);
     Route::match(['put', 'patch'], 'servers/{server}/backup-settings', [ServerBackupSettingsController::class, 'update']);
     Route::apiResource('servers', ServerController::class);

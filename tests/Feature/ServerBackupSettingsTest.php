@@ -42,6 +42,7 @@ class ServerBackupSettingsTest extends TestCase
                 'next_run_at' => null,
                 'pre_command' => null,
                 'pre_command_timeout' => 300,
+                'pre_command_continue_on_error' => false,
                 'updated_at' => null,
             ]]);
         $this->assertDatabaseCount('server_backup_settings', 0);
@@ -56,7 +57,9 @@ class ServerBackupSettingsTest extends TestCase
             'schedule' => '30 2 * * *',
             'pre_command' => "  cd /var/www && php artisan down  \n",
             'pre_command_timeout' => 600,
+            'pre_command_continue_on_error' => true,
         ])->assertOk()
+            ->assertJsonPath('data.pre_command_continue_on_error', true)
             ->assertJsonPath('data.enabled', true)
             ->assertJsonPath('data.paths', ['/var/www', '/etc/nginx'])
             ->assertJsonPath('data.pre_command', 'cd /var/www && php artisan down')

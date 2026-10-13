@@ -25,6 +25,7 @@ class ServerBackupSettingsResource extends JsonResource
             'next_run_at' => $this->nextRunAt()?->toIso8601String(),
             'pre_command' => $this->pre_command,
             'pre_command_timeout' => $this->pre_command_timeout,
+            'pre_command_continue_on_error' => $this->pre_command_continue_on_error,
             'updated_at' => $this->updated_at,
         ];
     }
