@@ -63,6 +63,9 @@ const linkBase = 'flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-s
             <span class="truncate font-medium text-white">{{ auth.user?.name }}</span>
             <span class="truncate text-xs">{{ auth.user?.email }}</span>
           </span>
+          <button class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-sidebar-accent hover:text-white" title="Выйти" @click="logout">
+            <Icon name="logout" />
+          </button>
         </div>
       </div>
     </aside>
@@ -75,12 +78,6 @@ const linkBase = 'flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-s
         <nav class="flex items-center gap-1.5 text-sm text-muted-foreground">
           <span>SystemKeeper</span><span>/</span><span class="text-foreground">{{ route.meta.title }}</span>
         </nav>
-        <div class="ml-auto flex items-center gap-3">
-          <span class="hidden truncate text-sm sm:inline">{{ auth.user?.name }}</span>
-          <button class="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium shadow-xs hover:bg-accent hover:text-accent-foreground dark:bg-input/30" @click="logout">
-            <Icon name="logout" />Выйти
-          </button>
-        </div>
       </header>
       <RouterView />
     </div>
