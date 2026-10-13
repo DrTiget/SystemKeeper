@@ -91,8 +91,10 @@ docker compose exec app php artisan user:create
 | `DELETE /api/v1/servers/{id}` | — | `204` |
 | `POST /api/v1/servers/{id}/check` | — | `200 {data: {status: ok\|failed, error, output, server}}` — выполняет `uname -a && uptime` |
 | `POST /api/v1/servers/{id}/reset-fingerprint` | — | `200 {data: …}` — забыть отпечаток хоста |
+| `GET /api/v1/servers/{id}/files?path=/var` | — | `200 {data: {path, entries: [{name, path, type: dir\|file\|other, link, size}], truncated}}` — содержимое каталога по SSH; `422` — путь не найден / нет доступа, `502` — нет SSH |
+| `GET /api/v1/backup/pre-command-templates` | — | `200 {data: [{key, group, title, description, command}]}` — шаблоны команды перед бекапом |
 | `GET /api/v1/servers/{id}/backup-settings` | — | `200 {data: …}` — настройки бекапа (см. ниже) |
-| `PUT /api/v1/servers/{id}/backup-settings` (или `PATCH`) | любые из `{enabled, paths, excludes, schedule, pre_command, pre_command_timeout}` | `200 {data: …}` |
+| `PUT /api/v1/servers/{id}/backup-settings` (или `PATCH`) | любые из `{enabled, paths, excludes, schedule, pre_command, pre_command_timeout, pre_command_continue_on_error}` | `200 {data: …}` |
 
 - `auth_type`: `key` — нужен `private_key` (OpenSSH/PEM/PuTTY, `passphrase`, если ключ зашифрован; ключ проверяется при сохранении), `password` — нужен `password`. `port` по умолчанию 22.
 - Генерация ключа: `auth_type: "key"` и `generate_key: true` (+ `key_type`: `ed25519` по умолчанию или `rsa` — RSA 4096) вместо `private_key` — пара создаётся в сервисе, закрытый ключ остаётся в БД, в ответе `public_key` для `authorized_keys` (комментарий `systemkeeper@<название>`). То же в `PATCH` заменяет текущий ключ. `public_key` заполняется и для вставленного ключа.
@@ -107,11 +109,12 @@ docker compose exec app php artisan user:create
 ```json
 {"data": {"enabled": true, "paths": ["/var/www", "/etc/nginx"], "excludes": ["*.log", "/var/www/cache"],
   "schedule": "0 3 * * *", "timezone": "Europe/Moscow", "next_run_at": "2026-10-14T03:00:00+03:00",
-  "pre_command": "mysqldump app > /var/backups/app.sql", "pre_command_timeout": 300, "updated_at": "…"}}
+  "pre_command": "mysqldump app > /var/backups/app.sql", "pre_command_timeout": 300, "pre_command_continue_on_error": false, "updated_at": "…"}}
 ```
 
 - `paths` — абсолютные пути каталогов (до 50), `excludes` — пути или маски, которые не попадают в бекап (до 100). Включить бекап (`enabled: true`) можно только хотя бы с одним каталогом.
 - `schedule` — cron-выражение из 5 полей, по умолчанию `0 3 * * *` (каждый день в 03:00); понимается в часовом поясе `BACKUP_TIMEZONE` (по умолчанию `Europe/Moscow`). `next_run_at` — ближайший запуск, `null`, если бекап выключен.
-- `pre_command` — команда, которая выполняется на сервере по SSH перед бекапом (например, дамп базы в один из каталогов); если она завершится с ошибкой или не уложится в `pre_command_timeout` секунд (10–86400, по умолчанию 300), бекап не делается. Пустая строка — без команды.
+- `pre_command` — команда, которая выполняется на сервере по SSH перед бекапом (например, дамп базы в один из каталогов); если она завершится с ошибкой или не уложится в `pre_command_timeout` секунд (10–86400, по умолчанию 300), бекап не делается — либо делается всё равно при `pre_command_continue_on_error: true`. Пустая строка — без команды. Шаблоны частых команд — `GET /backup/pre-command-templates` (`config/backup.php`).
+- Обзор файлов (`/files`) использует GNU `find`, на системах без него (busybox) — запасной вариант на shell; в ответе не больше `browse_limit` (2000) элементов, сначала каталоги.
 - В списке и карточке сервера — краткая сводка `backup: {enabled, schedule, paths_count, next_run_at}`.
 

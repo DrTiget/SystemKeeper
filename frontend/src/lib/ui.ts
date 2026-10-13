@@ -13,3 +13,13 @@ export const btnClass = {
 export function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
 }
+
+export function formatBytes(n: number): string {
+  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
+  let i = 0
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024
+    i++
+  }
+  return `${i ? n.toFixed(n < 10 ? 1 : 0) : n} ${units[i]}`
+}
