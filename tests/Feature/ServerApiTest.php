@@ -11,6 +11,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 use phpseclib3\Crypt\EC;
+use phpseclib3\Crypt\PublicKeyLoader;
 use Tests\Support\FakeSshConnector;
 use Tests\TestCase;
 
@@ -181,6 +182,50 @@ class ServerApiTest extends TestCase
         $this->postJson("/api/v1/servers/{$server->id}/check")->assertJsonPath('data.error', 'Команда завершилась с кодом 127: uname: not found');
 
         $this->assertSame('failed', $server->fresh()->last_check_status);
+    }
+
+    public function test_generate_ed25519_key_on_create(): void
+    {
+        $response = $this->postJson('/api/v1/servers', [
+            'name' => 'gen', 'host' => 'h', 'username' => 'root', 'auth_type' => 'key', 'generate_key' => true,
+        ])->assertCreated()
+            ->assertJsonPath('data.has_private_key', true)
+            ->assertJsonPath('data.has_passphrase', false);
+
+        $public = $response->json('data.public_key');
+        $this->assertMatchesRegularExpression('#^ssh-ed25519 [A-Za-z0-9+/=]+ systemkeeper@gen$#', $public);
+        $this->assertStringNotContainsString('PRIVATE KEY', $response->getContent());
+
+        $server = Server::find($response->json('data.id'));
+        $this->assertSame($public, PublicKeyLoader::load($server->private_key)->getPublicKey()->toString('OpenSSH', ['comment' => 'systemkeeper@gen']));
+    }
+
+    public function test_regenerate_rsa_key_on_update_replaces_old(): void
+    {
+        $server = Server::factory()->create(['name' => 'srv']);
+
+        $this->patchJson("/api/v1/servers/{$server->id}", ['auth_type' => 'key', 'generate_key' => true, 'key_type' => 'rsa'])
+            ->assertOk()
+            ->assertJsonPath('data.has_password', false);
+        $first = $server->fresh();
+        $this->assertStringStartsWith('ssh-rsa ', $first->public_key);
+
+        $this->patchJson("/api/v1/servers/{$server->id}", ['generate_key' => true])->assertOk();
+        $this->assertNotSame($first->private_key, $server->fresh()->private_key);
+        $this->assertStringStartsWith('ssh-ed25519 ', $server->fresh()->public_key);
+
+        $this->patchJson("/api/v1/servers/{$server->id}", ['generate_key' => true, 'key_type' => 'dsa'])->assertJsonValidationErrors('key_type');
+    }
+
+    public function test_pasted_key_gets_public_key_and_password_clears_it(): void
+    {
+        $response = $this->postJson('/api/v1/servers', [
+            'name' => 'p', 'host' => 'h', 'username' => 'u', 'auth_type' => 'key', 'private_key' => self::privateKey('phrase'), 'passphrase' => 'phrase',
+        ])->assertCreated();
+        $this->assertStringStartsWith('ssh-ed25519 ', $response->json('data.public_key'));
+
+        $this->patchJson('/api/v1/servers/'.$response->json('data.id'), ['auth_type' => 'password', 'password' => 'x'])
+            ->assertOk()->assertJsonPath('data.public_key', null);
     }
 
     public function test_reset_fingerprint(): void

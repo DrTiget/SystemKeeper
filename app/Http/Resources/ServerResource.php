@@ -29,6 +29,7 @@ class ServerResource extends JsonResource
             'has_private_key' => $this->private_key !== null,
             'has_passphrase' => $this->passphrase !== null,
             'has_password' => $this->password !== null,
+            'public_key' => $this->public_key,
             'host_fingerprint' => $this->host_fingerprint,
             'last_check' => [
                 'status' => $this->last_check_status,

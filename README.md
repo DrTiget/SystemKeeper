@@ -85,7 +85,7 @@ docker compose exec app php artisan user:create
 | Метод и путь | Тело | Ответ |
 |---|---|---|
 | `GET /api/v1/servers?search=&page=&per_page=` | — | `200` — страница серверов по названию; `search` — по названию, хосту и описанию |
-| `POST /api/v1/servers` | `{name, description?, host, port?, username, auth_type, private_key?, passphrase?, password?}` | `201 {data: …}` |
+| `POST /api/v1/servers` | `{name, description?, host, port?, username, auth_type, generate_key?, key_type?, private_key?, passphrase?, password?}` | `201 {data: …}` |
 | `GET /api/v1/servers/{id}` | — | `200 {data: …}` |
 | `PATCH /api/v1/servers/{id}` (или `PUT`) | любые поля из `POST` | `200 {data: …}` |
 | `DELETE /api/v1/servers/{id}` | — | `204` |
@@ -93,6 +93,7 @@ docker compose exec app php artisan user:create
 | `POST /api/v1/servers/{id}/reset-fingerprint` | — | `200 {data: …}` — забыть отпечаток хоста |
 
 - `auth_type`: `key` — нужен `private_key` (OpenSSH/PEM/PuTTY, `passphrase`, если ключ зашифрован; ключ проверяется при сохранении), `password` — нужен `password`. `port` по умолчанию 22.
+- Генерация ключа: `auth_type: "key"` и `generate_key: true` (+ `key_type`: `ed25519` по умолчанию или `rsa` — RSA 4096) вместо `private_key` — пара создаётся в сервисе, закрытый ключ остаётся в БД, в ответе `public_key` для `authorized_keys` (комментарий `systemkeeper@<название>`). То же в `PATCH` заменяет текущий ключ. `public_key` заполняется и для вставленного ключа.
 - Ключ, фраза и пароль хранятся в БД зашифрованными (`APP_KEY`) и никогда не отдаются: в ответе только `has_private_key`, `has_passphrase`, `has_password`. При изменении их можно не передавать — останутся прежние; при смене `auth_type` нужны новые, данные другого способа удаляются.
 - Отпечаток хоста (`host_fingerprint`, SHA256 как в `ssh-keygen -l`) запоминается при первом успешном подключении; если ключ сервера потом изменится, проверка вернёт `failed` с ошибкой «Отпечаток хоста изменился». Смена `host` или `port` сбрасывает отпечаток.
 - Результат последней проверки — в `last_check: {status, error, checked_at}`. Таймауты — `SSH_CONNECT_TIMEOUT` (10 с) и `SSH_EXEC_TIMEOUT` (30 с).

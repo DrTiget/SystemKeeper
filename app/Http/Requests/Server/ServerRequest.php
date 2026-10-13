@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Server;
 
 use App\Models\Server;
+use App\Services\Ssh\SshKeys;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -48,7 +49,10 @@ class ServerRequest extends FormRequest
             'port' => ['sometimes', 'integer', 'between:1,65535'],
             'username' => [$required, 'string', 'max:255'],
             'auth_type' => [$required, Rule::in(Server::AUTH_TYPES)],
-            'private_key' => [Rule::requiredIf($needsCredential && $this->authType() === Server::AUTH_KEY), 'nullable', 'string', 'max:20000'],
+            // generate_key: true — сгенерировать новую пару ключей вместо переданного private_key
+            'generate_key' => ['sometimes', 'boolean'],
+            'key_type' => ['sometimes', Rule::in(SshKeys::TYPES)],
+            'private_key' => [Rule::requiredIf($needsCredential && $this->authType() === Server::AUTH_KEY && ! $this->boolean('generate_key')), 'nullable', 'string', 'max:20000'],
             'passphrase' => ['nullable', 'string', 'max:1000'],
             'password' => [Rule::requiredIf($needsCredential && $this->authType() === Server::AUTH_PASSWORD), 'nullable', 'string', 'max:1000'],
         ];
@@ -62,7 +66,7 @@ class ServerRequest extends FormRequest
     public function after(): array
     {
         return [function (Validator $validator) {
-            if ($validator->errors()->isNotEmpty() || $this->authType() !== Server::AUTH_KEY || ! $this->filled('private_key')) {
+            if ($validator->errors()->isNotEmpty() || $this->authType() !== Server::AUTH_KEY || $this->boolean('generate_key') || ! $this->filled('private_key')) {
                 return;
             }
             try {
@@ -85,16 +89,20 @@ class ServerRequest extends FormRequest
      */
     public function serverData(): array
     {
-        $data = $this->safe()->except(['private_key', 'passphrase', 'password']);
+        $data = $this->safe()->except(['private_key', 'passphrase', 'password', 'generate_key', 'key_type']);
+        $comment = 'systemkeeper@'.($data['name'] ?? $this->route('server')?->name);
 
         if ($this->authType() === Server::AUTH_KEY) {
             $data['password'] = null;
-            if ($this->filled('private_key')) {
+            if ($this->boolean('generate_key')) {
+                $data = [...$data, ...SshKeys::generate($this->input('key_type', 'ed25519'), $comment), 'passphrase' => null];
+            } elseif ($this->filled('private_key')) {
                 $data['private_key'] = $this->input('private_key');
                 $data['passphrase'] = $this->input('passphrase') ?: null;
+                $data['public_key'] = SshKeys::publicKeyOf($data['private_key'], $data['passphrase'], $comment);
             }
         } else {
-            $data['private_key'] = $data['passphrase'] = null;
+            $data['private_key'] = $data['passphrase'] = $data['public_key'] = null;
             if ($this->filled('password')) {
                 $data['password'] = $this->input('password');
             }
@@ -118,6 +126,8 @@ class ServerRequest extends FormRequest
             'private_key' => 'закрытый ключ',
             'passphrase' => 'парольная фраза',
             'password' => 'пароль',
+            'generate_key' => 'сгенерировать ключ',
+            'key_type' => 'тип ключа',
         ];
     }
 

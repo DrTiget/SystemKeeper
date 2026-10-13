@@ -6,6 +6,8 @@ import Modal from '@/components/Modal.vue'
 import { btnClass, formatDate, inputClass } from '@/lib/ui'
 
 type AuthType = 'key' | 'password'
+/** keep — оставить сохранённый ключ, generate — сгенерировать пару в сервисе, paste — вставить свой. */
+type KeySource = 'keep' | 'generate' | 'paste'
 
 interface Server {
   id: number
@@ -18,6 +20,7 @@ interface Server {
   has_private_key: boolean
   has_passphrase: boolean
   has_password: boolean
+  public_key: string | null
   host_fingerprint: string | null
   last_check: { status: 'ok' | 'failed' | null; error: string | null; checked_at: string | null }
 }
@@ -78,6 +81,8 @@ const form = reactive({
   port: 22,
   username: 'root',
   auth_type: 'key' as AuthType,
+  key_source: 'generate' as KeySource,
+  key_type: 'ed25519' as 'ed25519' | 'rsa',
   private_key: '',
   passphrase: '',
   password: '',
@@ -89,6 +94,25 @@ const saving = ref(false)
 /** При редактировании без смены способа авторизации учётные данные можно не вводить — останутся прежние. */
 const keepsCredential = computed(() => !!editing.value && editing.value.auth_type === form.auth_type)
 
+watch(keepsCredential, (keeps) => {
+  if (!keeps && form.key_source === 'keep') form.key_source = 'generate'
+})
+
+// Открытый ключ для authorized_keys — показывается после генерации и по кнопке
+const publicKeyFor = ref<Server | null>(null)
+const copied = ref(false)
+
+async function copyPublicKey() {
+  if (!publicKeyFor.value?.public_key) return
+  await navigator.clipboard.writeText(publicKeyFor.value.public_key)
+  copied.value = true
+  setTimeout(() => (copied.value = false), 1500)
+}
+
+function installCommand(key: string) {
+  return `mkdir -p ~/.ssh && chmod 700 ~/.ssh && echo '${key}' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`
+}
+
 function openForm(server: Server | null) {
   editing.value = server
   Object.assign(form, {
@@ -98,6 +122,8 @@ function openForm(server: Server | null) {
     port: server?.port ?? 22,
     username: server?.username ?? 'root',
     auth_type: server?.auth_type ?? 'key',
+    key_source: server?.auth_type === 'key' ? 'keep' : 'generate',
+    key_type: 'ed25519',
     private_key: '',
     passphrase: '',
     password: '',
@@ -119,7 +145,11 @@ async function save() {
     username: form.username,
     auth_type: form.auth_type,
   }
-  if (form.auth_type === 'key' && form.private_key.trim()) {
+  if (form.auth_type === 'key' && form.key_source === 'generate') {
+    body.generate_key = true
+    body.key_type = form.key_type
+  }
+  if (form.auth_type === 'key' && form.key_source === 'paste') {
     body.private_key = form.private_key.trim() + '\n'
     body.passphrase = form.passphrase || null
   }
@@ -130,8 +160,14 @@ async function save() {
       : await api<{ data: Server }>('/servers', { method: 'POST', body })
     formOpen.value = false
     await load()
-    // Новый сервер сразу проверяем — чтобы было видно, работает ли подключение
-    if (!editing.value) check(res.data)
+    if (body.generate_key) {
+      // Новый ключ ещё не установлен на сервере — показываем открытый ключ, проверять рано
+      copied.value = false
+      publicKeyFor.value = res.data
+    } else if (!editing.value) {
+      // Новый сервер сразу проверяем — чтобы было видно, работает ли подключение
+      check(res.data)
+    }
   } catch (e) {
     if (e instanceof ApiError && e.status === 422) formErrors.value = e.errors
     else formError.value = e instanceof ApiError ? e.message : 'Не удалось сохранить'
@@ -212,7 +248,7 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
             <th class="px-4 py-3 font-medium">Подключение</th>
             <th class="px-4 py-3 font-medium">Авторизация</th>
             <th class="px-4 py-3 font-medium">SSH</th>
-            <th class="w-32 px-4 py-3" />
+            <th class="w-40 px-4 py-3" />
           </tr>
         </thead>
         <tbody class="divide-y">
@@ -228,13 +264,14 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
               <span v-else-if="s.last_check.status === 'ok'" class="inline-flex items-center gap-1.5" :title="`Проверено ${formatDate(s.last_check.checked_at)}`">
                 <span class="size-2 rounded-full bg-emerald-500" />Работает
               </span>
-              <span v-else-if="s.last_check.status === 'failed'" class="inline-flex max-w-xs items-center gap-1.5 text-destructive" :title="s.last_check.error ?? ''">
+              <span v-else-if="s.last_check.status === 'failed'" class="inline-flex max-w-56 items-center gap-1.5 text-destructive" :title="s.last_check.error ?? ''">
                 <span class="size-2 shrink-0 rounded-full bg-destructive" /><span class="truncate">{{ s.last_check.error }}</span>
               </span>
               <span v-else class="text-muted-foreground">Не проверялся</span>
             </td>
             <td class="px-4 py-2">
               <div class="flex justify-end gap-1">
+                <button v-if="s.public_key" :class="iconBtn" title="Открытый ключ" @click="(publicKeyFor = s), (copied = false)"><Icon name="key" /></button>
                 <button :class="iconBtn" title="Проверить подключение" :disabled="checking.has(s.id)" @click="check(s, true)"><Icon name="plug" /></button>
                 <button :class="iconBtn" title="Изменить" @click="openForm(s)"><Icon name="pencil" /></button>
                 <button :class="iconBtn" class="text-destructive" title="Удалить" @click="(deleting = s), (deleteError = '')"><Icon name="trash" /></button>
@@ -296,14 +333,37 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
 
         <template v-if="form.auth_type === 'key'">
           <div class="grid gap-2">
+            <span :class="label">Ключ</span>
+            <div class="flex gap-2">
+              <label v-if="keepsCredential" :class="segment"><input v-model="form.key_source" type="radio" value="keep" class="sr-only" />Текущий</label>
+              <label :class="segment"><input v-model="form.key_source" type="radio" value="generate" class="sr-only" />{{ keepsCredential ? 'Новый' : 'Сгенерировать' }}</label>
+              <label :class="segment"><input v-model="form.key_source" type="radio" value="paste" class="sr-only" />Вставить свой</label>
+            </div>
+          </div>
+          <div v-if="form.key_source === 'generate'" class="grid gap-2">
+            <span :class="label">Тип ключа</span>
+            <div class="flex gap-2">
+              <label :class="segment"><input v-model="form.key_type" type="radio" value="ed25519" class="sr-only" />Ed25519</label>
+              <label :class="segment"><input v-model="form.key_type" type="radio" value="rsa" class="sr-only" />RSA 4096</label>
+            </div>
+            <p class="text-sm text-muted-foreground">
+              Пара ключей создаётся в SystemKeeper, закрытый ключ хранится зашифрованным и никуда не выдаётся. После сохранения покажем открытый ключ — его нужно добавить в <code class="font-mono text-xs">~/.ssh/authorized_keys</code> на сервере.
+              <template v-if="keepsCredential"> Текущий ключ будет заменён.</template>
+            </p>
+          </div>
+          <div v-if="form.key_source === 'keep' && editing?.public_key" class="grid gap-2">
+            <button type="button" :class="btnClass.outline" class="justify-self-start" @click="(publicKeyFor = editing), (copied = false)">Показать открытый ключ</button>
+          </div>
+          <template v-if="form.key_source === 'paste'">
+          <div class="grid gap-2">
             <label for="s-key" :class="label">Закрытый ключ</label>
             <textarea
               id="s-key"
               v-model="form.private_key"
-              :required="!keepsCredential"
+              required
               rows="6"
               spellcheck="false"
-              :placeholder="keepsCredential ? 'Ключ сохранён. Вставьте новый, чтобы заменить' : '-----BEGIN OPENSSH PRIVATE KEY-----'"
+              placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
               :class="inputClass"
               class="h-auto py-2 font-mono text-xs"
               :aria-invalid="!!formErrors.private_key"
@@ -315,6 +375,7 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
             <input id="s-passphrase" v-model="form.passphrase" type="password" autocomplete="new-password" placeholder="Если ключ зашифрован" :class="inputClass" :aria-invalid="!!formErrors.passphrase" />
             <p v-for="m in formErrors.passphrase" :key="m" class="text-sm text-destructive">{{ m }}</p>
           </div>
+          </template>
         </template>
         <div v-else class="grid gap-2">
           <label for="s-password" :class="label">Пароль</label>
@@ -354,6 +415,23 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
         <div class="flex justify-end gap-2">
           <button v-if="checkOutput.server.host_fingerprint" :class="btnClass.outline" @click="resetFingerprint(checkOutput.server)">Сбросить отпечаток</button>
           <button :class="btnClass.primary" :disabled="checking.has(checkOutput.server.id)" @click="check(checkOutput.server, true)">Проверить снова</button>
+        </div>
+      </div>
+    </Modal>
+
+    <Modal v-if="publicKeyFor" wide :title="`Открытый ключ: ${publicKeyFor.name}`" @close="publicKeyFor = null">
+      <div class="grid gap-4 text-sm">
+        <p class="text-muted-foreground">
+          Добавьте ключ в <code class="font-mono text-xs">~/.ssh/authorized_keys</code> пользователя <b class="text-foreground">{{ publicKeyFor.username }}</b> на {{ publicKeyFor.host }}, затем проверьте подключение.
+        </p>
+        <pre class="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs break-all whitespace-pre-wrap">{{ publicKeyFor.public_key }}</pre>
+        <div class="grid gap-1">
+          <span class="text-muted-foreground">Или выполните на сервере:</span>
+          <pre class="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs break-all whitespace-pre-wrap">{{ installCommand(publicKeyFor.public_key ?? '') }}</pre>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button :class="btnClass.outline" @click="copyPublicKey">{{ copied ? 'Скопировано' : 'Скопировать ключ' }}</button>
+          <button :class="btnClass.primary" @click="check(publicKeyFor, true), (publicKeyFor = null)">Проверить подключение</button>
         </div>
       </div>
     </Modal>

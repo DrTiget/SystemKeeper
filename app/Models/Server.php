@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * Сервер с SSH-подключением: по ключу (private_key + необязательная passphrase) или по паролю.
  */
 #[Fillable([
-    'name', 'description', 'host', 'port', 'username', 'auth_type', 'private_key', 'passphrase', 'password',
+    'name', 'description', 'host', 'port', 'username', 'auth_type', 'private_key', 'passphrase', 'public_key', 'password',
     'host_fingerprint', 'last_checked_at', 'last_check_status', 'last_check_error',
 ])]
 #[Hidden(['private_key', 'passphrase', 'password'])]
