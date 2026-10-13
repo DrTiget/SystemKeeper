@@ -1,0 +1,43 @@
+<?php
+
+namespace App\Models;
+
+use Database\Factories\ServerFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * Сервер с SSH-подключением: по ключу (private_key + необязательная passphrase) или по паролю.
+ */
+#[Fillable([
+    'name', 'description', 'host', 'port', 'username', 'auth_type', 'private_key', 'passphrase', 'password',
+    'host_fingerprint', 'last_checked_at', 'last_check_status', 'last_check_error',
+])]
+#[Hidden(['private_key', 'passphrase', 'password'])]
+class Server extends Model
+{
+    /** @use HasFactory<ServerFactory> */
+    use HasFactory;
+
+    public const AUTH_KEY = 'key';
+
+    public const AUTH_PASSWORD = 'password';
+
+    public const AUTH_TYPES = [self::AUTH_KEY, self::AUTH_PASSWORD];
+
+    /** @var array<string, mixed> */
+    protected $attributes = ['port' => 22];
+
+    protected function casts(): array
+    {
+        return [
+            'port' => 'integer',
+            'private_key' => 'encrypted',
+            'passphrase' => 'encrypted',
+            'password' => 'encrypted',
+            'last_checked_at' => 'datetime',
+        ];
+    }
+}

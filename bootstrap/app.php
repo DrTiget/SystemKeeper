@@ -23,6 +23,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // API-only: никогда не редиректим на страницу логина
         $middleware->redirectGuestsTo(fn () => null);
+        // Секреты SSH передаются как есть: у ключа значимы переводы строк, у паролей — пробелы
+        $middleware->trimStrings(except: ['private_key', 'passphrase', 'password']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

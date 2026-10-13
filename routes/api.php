@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ProfileController;
+use App\Http\Controllers\Api\V1\ServerController;
 use App\Http\Controllers\Api\V1\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -25,4 +26,10 @@ Route::middleware('auth:sanctum')->prefix('profile')->group(function () {
 
 Route::middleware(['auth:sanctum', 'can:manage-users'])->group(function () {
     Route::apiResource('users', UserController::class);
+});
+
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('servers/{server}/check', [ServerController::class, 'check']);
+    Route::post('servers/{server}/reset-fingerprint', [ServerController::class, 'resetFingerprint']);
+    Route::apiResource('servers', ServerController::class);
 });
