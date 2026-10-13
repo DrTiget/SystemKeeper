@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Validator;
 
 #[Signature('user:create {--name= : Имя} {--email= : Email} {--password= : Пароль (мин. 8 символов)}')]
-#[Description('Создать пользователя API')]
+#[Description('Создать администратора (первого пользователя); остальных заводят через API /users')]
 class CreateUser extends Command
 {
     public function handle(): int
@@ -34,7 +34,7 @@ class CreateUser extends Command
             return self::FAILURE;
         }
 
-        $user = User::create($data);
+        $user = User::create([...$data, 'is_admin' => true]);
 
         $this->info("Пользователь создан: #{$user->id} {$user->name} <{$user->email}>");
 

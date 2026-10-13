@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\ProfileController;
+use App\Http\Controllers\Api\V1\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function () {
@@ -20,4 +21,8 @@ Route::middleware('auth:sanctum')->prefix('profile')->group(function () {
     Route::get('tokens', [ProfileController::class, 'tokens']);
     Route::delete('tokens', [ProfileController::class, 'destroyOtherTokens']);
     Route::delete('tokens/{token}', [ProfileController::class, 'destroyToken'])->whereNumber('token');
+});
+
+Route::middleware(['auth:sanctum', 'can:manage-users'])->group(function () {
+    Route::apiResource('users', UserController::class);
 });

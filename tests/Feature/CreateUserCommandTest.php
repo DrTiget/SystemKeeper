@@ -15,7 +15,7 @@ class CreateUserCommandTest extends TestCase
         $this->artisan('user:create', ['--name' => 'Ann', '--email' => 'ann@example.com', '--password' => 'password1'])
             ->assertSuccessful();
 
-        $this->assertDatabaseHas('users', ['email' => 'ann@example.com', 'name' => 'Ann']);
+        $this->assertDatabaseHas('users', ['email' => 'ann@example.com', 'name' => 'Ann', 'is_admin' => true]);
     }
 
     public function test_asks_missing_fields_interactively(): void

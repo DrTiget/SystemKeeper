@@ -36,7 +36,17 @@ async function logout() {
           <span class="ml-1 truncate text-lg leading-none font-extrabold tracking-tight text-white">System<span class="text-mint-400">Keeper</span></span>
         </RouterLink>
       </div>
-      <div class="flex-1" />
+      <nav class="flex flex-1 flex-col gap-1 overflow-auto p-2">
+        <RouterLink
+          v-if="auth.user?.is_admin"
+          to="/users"
+          class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          active-class="bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+          @click="open = false"
+        >
+          <Icon name="users" />Пользователи
+        </RouterLink>
+      </nav>
       <div class="p-2">
         <div class="flex h-12 items-center gap-1 rounded-md text-sm">
           <RouterLink
