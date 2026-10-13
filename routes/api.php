@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BackupTemplateController;
+use App\Http\Controllers\Api\V1\DatabaseConnectionController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\ServerBackupSettingsController;
 use App\Http\Controllers\Api\V1\ServerController;
@@ -39,4 +40,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('servers/{server}/backup-settings', [ServerBackupSettingsController::class, 'show']);
     Route::match(['put', 'patch'], 'servers/{server}/backup-settings', [ServerBackupSettingsController::class, 'update']);
     Route::apiResource('servers', ServerController::class);
+
+    Route::post('databases/{database}/check', [DatabaseConnectionController::class, 'check']);
+    Route::get('databases/{database}/schemas', [DatabaseConnectionController::class, 'schemas'])->middleware('throttle:120,1');
+    Route::get('databases/{database}/tables', [DatabaseConnectionController::class, 'tables'])->middleware('throttle:120,1');
+    Route::apiResource('databases', DatabaseConnectionController::class);
 });

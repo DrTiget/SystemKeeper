@@ -118,3 +118,29 @@ docker compose exec app php artisan user:create
 - Обзор файлов (`/files`) использует GNU `find`, на системах без него (busybox) — запасной вариант на shell; в ответе не больше `browse_limit` (2000) элементов, сначала каталоги.
 - В списке и карточке сервера — краткая сводка `backup: {enabled, schedule, paths_count, next_run_at}`.
 
+## API: базы данных
+
+Подключение к СУБД (MySQL/MariaDB или PostgreSQL) и настройки её бекапа — одна сущность `databases`. Доступно всем пользователям.
+
+| Метод и путь | Тело | Ответ |
+|---|---|---|
+| `GET /api/v1/databases?search=&server_id=&page=` | — | `200` — страница подключений по названию; `server_id` — подключения через этот сервер |
+| `POST /api/v1/databases` | см. ниже | `201 {data: …}` |
+| `GET /api/v1/databases/{id}` | — | `200 {data: …}` |
+| `PATCH /api/v1/databases/{id}` (или `PUT`) | любые поля | `200 {data: …}` |
+| `DELETE /api/v1/databases/{id}` | — | `204` (сама база на сервере не затрагивается) |
+| `POST /api/v1/databases/{id}/check` | — | `200 {data: {status, error, version, databases, connection}}` |
+| `GET /api/v1/databases/{id}/schemas` | — | `200 {data: [{name, size, system}]}` — базы на сервере СУБД |
+| `GET /api/v1/databases/{id}/tables?database=shop` | — | `200 {data: [{name, rows, size}]}` — таблицы (для PostgreSQL — `схема.таблица`) |
+
+Ошибки `schemas`/`tables`: `422` — ошибка СУБД (доступ, клиент не найден), `502` — не удалось подключиться по SSH.
+
+**Подключение:** `name`, `description?`, `engine` (`mysql` | `postgres`), `via` (`ssh` — клиент `mysql`/`psql` запускается на сервере `server_id`, при `docker_container` — внутри контейнера через `docker exec`; `direct` — из SystemKeeper), `host`, `port` (по умолчанию 3306/5432), `username`, `password?` (зашифрован, наружу только `has_password`; при изменении можно не передавать), `maintenance_database?` (PostgreSQL, по умолчанию `postgres`). Пароль передаётся клиенту через stdin и переменную окружения (`MYSQL_PWD`/`PGPASSWORD`) — в аргументы процессов на сервере не попадает. Сервер, через который подключены базы, удалить нельзя (`409`).
+
+**Бекап** (в ответе — объект `backup`): `backup_enabled`, `schedule` (cron, как у серверов), `databases` (пустой — все, кроме служебных), `exclude_tables` и `schema_only_tables` — таблицы «база.таблица» (PostgreSQL — «база.схема.таблица»), которые пропускаются или дампятся без данных, `options`:
+
+- MySQL: `lock_mode` — `single_transaction` (по умолчанию: снимок без блокировки, для InnoDB), `lock_tables` (блокировка таблиц базы на чтение на время её дампа, для MyISAM), `none` (без блокировок, возможна неконсистентность); `routines`, `events`, `triggers` (по умолчанию `true`), `compress`.
+- PostgreSQL: `format` — `custom` (для `pg_restore`, по умолчанию) или `plain` (SQL), `no_owner` (без владельцев и прав), `compress`. pg_dump всегда делает консистентный снимок без блокировки записи.
+
+Смена `engine` сбрасывает `options` к значениям по умолчанию. Сам запуск дампов будет добавлен вместе с хранилищами.
+

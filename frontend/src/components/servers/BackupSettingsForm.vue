@@ -4,9 +4,8 @@ import { api, ApiError } from '@/api/client'
 import type { BackupSettings, PreCommandTemplate } from '@/api/servers'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
-import SelectMenu from '@/components/SelectMenu.vue'
+import SchedulePicker from '@/components/SchedulePicker.vue'
 import FileBrowserModal from '@/components/servers/FileBrowserModal.vue'
-import { buildCron, parseCron, WEEKDAYS } from '@/lib/cron'
 import { btnClass, formatDate, inputClass } from '@/lib/ui'
 
 const props = defineProps<{ serverId: number }>()
@@ -31,33 +30,7 @@ const form = reactive({
 const newExclude = ref('')
 const newPath = ref('')
 
-// Расписание: пресет + время
-type Kind = 'hourly' | 'daily' | 'weekly' | 'custom'
-const schedule = reactive({ kind: 'daily' as Kind, time: '03:00', minute: 0, weekday: 1, cron: '0 3 * * *' })
-const weekdayOptions = [1, 2, 3, 4, 5, 6, 0].map((d) => ({ value: d, label: WEEKDAYS[d]! }))
-
-const cron = computed(() => {
-  const [h, m] = schedule.time.split(':').map(Number) as [number, number]
-  switch (schedule.kind) {
-    case 'hourly':
-      return buildCron({ kind: 'hourly', minute: schedule.minute })
-    case 'daily':
-      return buildCron({ kind: 'daily', hour: h, minute: m })
-    case 'weekly':
-      return buildCron({ kind: 'weekly', weekday: schedule.weekday, hour: h, minute: m })
-    default:
-      return buildCron({ kind: 'custom', cron: schedule.cron })
-  }
-})
-
-function applySchedule(value: string) {
-  const p = parseCron(value)
-  schedule.cron = value
-  schedule.kind = p.kind
-  if (p.kind === 'hourly') schedule.minute = p.minute
-  if (p.kind === 'daily' || p.kind === 'weekly') schedule.time = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`
-  if (p.kind === 'weekly') schedule.weekday = p.weekday
-}
+const schedule = ref('0 3 * * *')
 
 function fill(s: BackupSettings) {
   saved.value = s
@@ -67,7 +40,7 @@ function fill(s: BackupSettings) {
   form.pre_command = s.pre_command ?? ''
   form.pre_command_timeout = s.pre_command_timeout
   form.pre_command_continue_on_error = s.pre_command_continue_on_error
-  applySchedule(s.schedule)
+  schedule.value = s.schedule
 }
 
 // Каталоги: файловый менеджер и ручной ввод
@@ -143,7 +116,7 @@ async function save() {
         enabled: form.enabled,
         paths: form.paths,
         excludes: form.excludes,
-        schedule: cron.value,
+        schedule: schedule.value,
         pre_command: form.pre_command,
         pre_command_timeout: form.pre_command_timeout,
         pre_command_continue_on_error: form.pre_command_continue_on_error,
@@ -224,29 +197,7 @@ const chip = 'inline-flex items-center gap-1 rounded-md border bg-background py-
 
     <section class="grid gap-2">
       <span :class="label">Как часто</span>
-      <div class="flex flex-wrap gap-2">
-        <label :class="segment"><input v-model="schedule.kind" type="radio" value="hourly" class="sr-only" />Каждый час</label>
-        <label :class="segment"><input v-model="schedule.kind" type="radio" value="daily" class="sr-only" />Каждый день</label>
-        <label :class="segment"><input v-model="schedule.kind" type="radio" value="weekly" class="sr-only" />Раз в неделю</label>
-        <label :class="segment"><input v-model="schedule.kind" type="radio" value="custom" class="sr-only" />Cron</label>
-      </div>
-      <div v-if="schedule.kind === 'hourly'" class="flex items-center gap-2 text-sm">
-        В
-        <input v-model.number="schedule.minute" type="number" min="0" max="59" required :class="inputClass" class="w-20!" />
-        минут каждого часа
-      </div>
-      <div v-else-if="schedule.kind === 'daily'" class="flex items-center gap-2 text-sm">
-        В <input v-model="schedule.time" type="time" required :class="inputClass" class="w-32!" />
-      </div>
-      <div v-else-if="schedule.kind === 'weekly'" class="flex items-center gap-2 text-sm">
-        <SelectMenu v-model="schedule.weekday" :options="weekdayOptions" class="w-48" />
-        в <input v-model="schedule.time" type="time" required :class="inputClass" class="w-32!" />
-      </div>
-      <div v-else class="grid gap-1">
-        <input v-model="schedule.cron" required placeholder="0 3 * * *" spellcheck="false" :class="inputClass" class="font-mono" :aria-invalid="!!errors.schedule" />
-        <p :class="hint">Минута, час, день месяца, месяц, день недели.</p>
-      </div>
-      <p :class="hint">Время — {{ saved?.timezone }}.</p>
+      <SchedulePicker v-model="schedule" :timezone="saved?.timezone" :invalid="!!errors.schedule" />
       <p v-for="m in errors.schedule" :key="m" class="text-sm text-destructive">{{ m }}</p>
     </section>
 

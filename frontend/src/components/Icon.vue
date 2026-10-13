@@ -23,6 +23,7 @@ const ICONS: Record<string, string> = {
   'chevron-right': '<path d="m9 18 6-6-6-6"/>',
   'arrow-left': '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
   terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
+  database: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/>',
   loader: '<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',
 }
 

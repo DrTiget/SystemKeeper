@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Server\ServerRequest;
 use App\Http\Resources\ServerResource;
+use App\Models\DatabaseConnection;
 use App\Models\Server;
 use App\Services\Ssh\SshConnectorInterface;
 use Illuminate\Http\JsonResponse;
@@ -68,6 +69,8 @@ class ServerController extends Controller
 
     public function destroy(Server $server): Response
     {
+        abort_if(DatabaseConnection::where('server_id', $server->id)->exists(), 409, 'Через сервер подключены базы данных — сначала удалите или перенесите их.');
+
         $server->delete();
 
         return response()->noContent();

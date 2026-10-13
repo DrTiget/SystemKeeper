@@ -19,7 +19,13 @@ interface NavItem {
 // Меню по группам; группа без доступных пунктов показывается только заголовком
 const navGroups: { title: string; admin?: boolean; items: NavItem[] }[] = [
   { title: 'Администрирование', admin: true, items: [{ to: '/users', label: 'Пользователи', icon: 'users', admin: true }] },
-  { title: 'Бекапы', items: [{ to: '/servers', label: 'Сервера', icon: 'server' }] },
+  {
+    title: 'Бекапы',
+    items: [
+      { to: '/servers', label: 'Сервера', icon: 'server' },
+      { to: '/databases', label: 'Базы данных', icon: 'database' },
+    ],
+  },
   { title: 'Хранение бекапов', items: [] },
 ]
 

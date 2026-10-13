@@ -11,14 +11,14 @@ use Throwable;
 
 class SshConnector implements SshConnectorInterface
 {
-    public function exec(Server $server, string $command, ?int $timeout = null): array
+    public function exec(Server $server, string $command, ?int $timeout = null, ?string $stdin = null): array
     {
         $ssh = $this->connect($server);
         $ssh->setTimeout($timeout ?? (int) config('ssh.exec_timeout'));
         $ssh->enableQuietMode();
 
         try {
-            $stdout = (string) $ssh->exec($command);
+            $stdout = $stdin === null ? (string) $ssh->exec($command) : $this->execWithStdin($ssh, $command, $stdin);
         } catch (Throwable $e) {
             throw new SshConnectionException("Ошибка выполнения команды: {$e->getMessage()}", previous: $e);
         } finally {
@@ -35,6 +35,24 @@ class SshConnector implements SshConnectorInterface
             'stdout' => $stdout,
             'stderr' => (string) $stderr,
         ];
+    }
+
+    /** Запускает команду без ожидания, пишет в её stdin и читает stdout до закрытия канала. */
+    private function execWithStdin(SSH2 $ssh, string $command, string $stdin): string
+    {
+        $ssh->exec($command, false);
+        $ssh->write($stdin, SSH2::CHANNEL_EXEC);
+
+        $stdout = '';
+        while (true) {
+            $chunk = $ssh->read('', SSH2::READ_NEXT, SSH2::CHANNEL_EXEC);
+            if ($chunk === true || $chunk === false || $ssh->isTimeout()) {
+                break;
+            }
+            $stdout .= $chunk;
+        }
+
+        return $stdout;
     }
 
     private function connect(Server $server): SSH2
@@ -70,7 +88,11 @@ class SshConnector implements SshConnectorInterface
 
         // Отпечаток запоминаем только после успешной авторизации
         if ($server->host_fingerprint === null) {
-            $server->forceFill(['host_fingerprint' => $fingerprint])->save();
+            $server->forceFill(['host_fingerprint' => $fingerprint]);
+            // Несохранённую модель (разовое подключение) в БД не записываем
+            if ($server->exists) {
+                $server->save();
+            }
         }
 
         return $ssh;

@@ -14,6 +14,8 @@ const router = createRouter({
         { path: '', name: 'dashboard', component: () => import('@/views/StubView.vue'), meta: { title: 'Дашборд' } },
         { path: 'servers', name: 'servers', component: () => import('@/views/ServersView.vue'), meta: { title: 'Сервера' } },
         { path: 'servers/:id(\\d+)', name: 'server', component: () => import('@/views/ServerDetailView.vue'), meta: { title: 'Сервера' } },
+        { path: 'databases', name: 'databases', component: () => import('@/views/DatabasesView.vue'), meta: { title: 'Базы данных' } },
+        { path: 'databases/:id(\\d+)', name: 'database', component: () => import('@/views/DatabaseDetailView.vue'), meta: { title: 'Базы данных' } },
         { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue'), meta: { title: 'Пользователи', admin: true } },
         { path: 'profile', name: 'profile', component: () => import('@/views/ProfileView.vue'), meta: { title: 'Профиль' } },
       ],

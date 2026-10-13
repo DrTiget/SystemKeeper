@@ -14,6 +14,9 @@ return [
     'browse_limit' => 2000,
     'browse_timeout' => 20,
 
+    // Таймаут служебных запросов к БД (проверка, списки баз и таблиц), секунд
+    'db_query_timeout' => 30,
+
     // Шаблоны команды перед бекапом — подставляются в поле и правятся под себя (GET /backup/pre-command-templates)
     'pre_command_templates' => [
         [

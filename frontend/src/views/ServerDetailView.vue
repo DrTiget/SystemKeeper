@@ -5,6 +5,8 @@ import { api, ApiError } from '@/api/client'
 import type { CheckResult, Server } from '@/api/servers'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
+import { type DatabaseConnection, ENGINE_LABELS } from '@/api/databases'
+import DatabaseFormModal from '@/components/databases/DatabaseFormModal.vue'
 import BackupSettingsForm from '@/components/servers/BackupSettingsForm.vue'
 import CheckResultModal from '@/components/servers/CheckResultModal.vue'
 import PublicKeyModal from '@/components/servers/PublicKeyModal.vue'
@@ -58,6 +60,23 @@ function onSaved(updated: Server, generatedKey: boolean) {
   if (generatedKey) keyOpen.value = true
 }
 
+// Базы данных, подключённые через этот сервер
+const databases = ref<DatabaseConnection[]>([])
+const dbCreateOpen = ref(false)
+
+async function loadDatabases() {
+  try {
+    databases.value = (await api<{ data: DatabaseConnection[] }>(`/databases?server_id=${id}&per_page=100`)).data
+  } catch {
+    databases.value = []
+  }
+}
+
+function onDatabaseCreated(c: DatabaseConnection) {
+  dbCreateOpen.value = false
+  router.push({ name: 'database', params: { id: c.id }, query: { check: '1' } })
+}
+
 // Удаление
 const deleteOpen = ref(false)
 const deleteError = ref('')
@@ -74,6 +93,7 @@ async function destroy() {
 
 onMounted(async () => {
   await load()
+  loadDatabases()
   // После создания со сгенерированным ключом список передаёт ?key=1 — сразу показываем открытый ключ
   // а с готовыми учётными данными (?check=1) — сразу проверяем подключение
   if (route.query.key && server.value?.public_key) keyOpen.value = true
@@ -148,6 +168,28 @@ const dt = 'text-xs text-muted-foreground'
         </div>
         <BackupSettingsForm :server-id="server.id" />
       </section>
+
+      <section :class="card" class="grid gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="grid gap-1">
+            <h3 class="font-semibold">Базы данных</h3>
+            <p class="text-sm text-muted-foreground">СУБД, которые дампятся через этот сервер.</p>
+          </div>
+          <button :class="btnClass.outline" @click="dbCreateOpen = true"><Icon name="plus" />Добавить базу</button>
+        </div>
+        <ul v-if="databases.length" class="divide-y rounded-md border text-sm">
+          <li v-for="d in databases" :key="d.id">
+            <RouterLink :to="{ name: 'database', params: { id: d.id } }" class="flex items-center gap-3 px-3 py-2 hover:bg-accent/40">
+              <Icon name="database" class="size-4 text-primary" />
+              <span class="font-medium">{{ d.name }}</span>
+              <span class="text-xs text-muted-foreground">{{ ENGINE_LABELS[d.engine] }}<template v-if="d.docker_container"> · {{ d.docker_container }}</template></span>
+              <span class="ml-auto text-xs" :class="d.backup.enabled ? '' : 'text-muted-foreground'">{{ d.backup.enabled ? 'бекап включён' : 'бекап не настроен' }}</span>
+              <Icon name="chevron-right" class="size-4 text-muted-foreground" />
+            </RouterLink>
+          </li>
+        </ul>
+        <p v-else class="text-sm text-muted-foreground">Пока нет.</p>
+      </section>
     </template>
 
     <ServerFormModal v-if="editOpen && server" :server="server" @close="editOpen = false" @saved="onSaved" @show-key="keyOpen = true" />
@@ -162,6 +204,8 @@ const dt = 'text-xs text-muted-foreground'
       @recheck="check"
       @reset-fingerprint="resetFingerprint"
     />
+
+    <DatabaseFormModal v-if="dbCreateOpen && server" :connection="null" :server-id="server.id" @close="dbCreateOpen = false" @saved="onDatabaseCreated" />
 
     <Modal v-if="deleteOpen && server" title="Удалить сервер?" @close="deleteOpen = false">
       <p class="text-sm text-muted-foreground">{{ server.name }} ({{ server.host }}), его учётные данные SSH и настройки бекапа будут удалены.</p>

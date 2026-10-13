@@ -8,7 +8,7 @@ use Throwable;
 
 class FakeSshConnector implements SshConnectorInterface
 {
-    /** @var list<array{server: int, command: string}> */
+    /** @var list<array{server: int, command: string, stdin: string|null}> */
     public array $calls = [];
 
     /**
@@ -20,9 +20,9 @@ class FakeSshConnector implements SshConnectorInterface
         public ?string $rememberFingerprint = null,
     ) {}
 
-    public function exec(Server $server, string $command, ?int $timeout = null): array
+    public function exec(Server $server, string $command, ?int $timeout = null, ?string $stdin = null): array
     {
-        $this->calls[] = ['server' => $server->id, 'command' => $command];
+        $this->calls[] = ['server' => $server->id, 'command' => $command, 'stdin' => $stdin];
 
         if ($this->throw) {
             throw $this->throw;
