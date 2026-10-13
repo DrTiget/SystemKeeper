@@ -2,6 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api, ApiError } from '@/api/client'
+import SelectMenu, { type SelectOption } from '@/components/SelectMenu.vue'
 import type { Theme } from '@/lib/theme'
 import { btnClass, formatDate, inputClass } from '@/lib/ui'
 import { useAuthStore, type User } from '@/stores/auth'
@@ -22,7 +23,13 @@ const themes: { value: Theme; label: string }[] = [
   { value: 'light', label: 'Светлая' },
   { value: 'dark', label: 'Тёмная' },
 ]
-const timezones = Intl.supportedValuesOf('timeZone')
+// Часовые пояса IANA со смещением от UTC на текущий момент
+const timezones: SelectOption<string>[] = Intl.supportedValuesOf('timeZone').map((tz) => {
+  const offset = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'shortOffset' })
+    .formatToParts()
+    .find((p) => p.type === 'timeZoneName')?.value
+  return { value: tz, label: tz.replaceAll('_', ' '), hint: offset?.replace('GMT', 'UTC').replace(/^UTC$/, 'UTC+0') }
+})
 
 /** Состояние формы: ошибки полей, общий текст ошибки/успеха, флаг отправки. */
 function formState() {
@@ -167,9 +174,7 @@ const label = 'text-sm leading-none font-medium'
       </div>
       <div class="grid gap-2">
         <label for="timezone" :class="label">Часовой пояс</label>
-        <select id="timezone" v-model="settings.timezone" :class="inputClass" :aria-invalid="!!settingsState.errors['settings.timezone']">
-          <option v-for="tz in timezones" :key="tz" :value="tz">{{ tz }}</option>
-        </select>
+        <SelectMenu id="timezone" v-model="settings.timezone" :options="timezones" :invalid="!!settingsState.errors['settings.timezone']" />
         <p v-for="m in settingsState.errors['settings.timezone']" :key="m" class="text-sm text-destructive">{{ m }}</p>
       </div>
       <div class="flex items-center gap-3">
