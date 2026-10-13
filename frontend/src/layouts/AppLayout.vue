@@ -30,7 +30,7 @@ async function logout() {
     >
       <div class="p-2">
         <RouterLink to="/" class="flex h-12 items-center gap-2 rounded-md p-2 hover:bg-sidebar-accent">
-          <div class="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-ink-800/60 text-white">
+          <div class="flex size-8 shrink-0 items-center justify-center text-white">
             <Icon name="logo" class="size-5" />
           </div>
           <span class="ml-1 truncate text-lg leading-none font-extrabold tracking-tight text-white">System<span class="text-mint-400">Keeper</span></span>
