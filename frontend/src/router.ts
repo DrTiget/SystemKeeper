@@ -12,7 +12,6 @@ const router = createRouter({
       meta: { auth: true },
       children: [
         { path: '', name: 'dashboard', component: () => import('@/views/StubView.vue'), meta: { title: 'Дашборд' } },
-        { path: 'settings', name: 'settings', component: () => import('@/views/StubView.vue'), meta: { title: 'Настройки' } },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

@@ -9,11 +9,6 @@ const route = useRoute()
 const router = useRouter()
 const open = ref(false)
 
-const nav = [
-  { to: '/', label: 'Дашборд', icon: 'dashboard' },
-  { to: '/settings', label: 'Настройки', icon: 'settings' },
-]
-
 const initials = computed(() =>
   (auth.user?.name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join(''),
 )
@@ -24,8 +19,6 @@ async function logout() {
   await auth.logout()
   router.push({ name: 'login' })
 }
-
-const linkBase = 'flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
 </script>
 
 <template>
@@ -43,19 +36,7 @@ const linkBase = 'flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-s
           <span class="ml-1 truncate text-lg leading-none font-extrabold tracking-tight text-white">System<span class="text-mint-400">Keeper</span></span>
         </RouterLink>
       </div>
-      <nav class="flex flex-1 flex-col gap-1 overflow-auto p-2">
-        <RouterLink
-          v-for="item in nav"
-          :key="item.to"
-          :to="item.to"
-          :class="linkBase"
-          active-class="bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-          exact-active-class="bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-          @click="open = false"
-        >
-          <Icon :name="item.icon" />{{ item.label }}
-        </RouterLink>
-      </nav>
+      <div class="flex-1" />
       <div class="p-2">
         <div class="flex h-12 items-center gap-2 rounded-md p-2 text-sm">
           <span class="flex size-8 items-center justify-center rounded-lg bg-sidebar-accent text-xs font-medium text-white">{{ initials }}</span>
