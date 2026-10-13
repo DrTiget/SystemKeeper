@@ -133,8 +133,8 @@ class DatabaseConnectionApiTest extends TestCase
         $call = $fake->calls[0];
         $this->assertSame("db-secret\n", $call['stdin']);
         $this->assertStringNotContainsString('db-secret', $call['command']);
-        $this->assertStringContainsString("docker exec -i -e MYSQL_PWD 'mysql-1' mysql --batch", $call['command']);
-        $this->assertStringContainsString("-e 'SELECT VERSION()'", $call['command']);
+        $this->assertStringContainsString("docker exec -i -e MYSQL_PWD 'mysql-1' sh -c 'LC_ALL=C \"$(command -v mysql || command -v mariadb || echo mysql)\" --batch", $call['command']);
+        $this->assertStringContainsString('SELECT VERSION()', $call['command']);
     }
 
     public function test_check_failures_are_explained(): void

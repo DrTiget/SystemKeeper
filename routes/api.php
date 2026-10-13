@@ -41,6 +41,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::match(['put', 'patch'], 'servers/{server}/backup-settings', [ServerBackupSettingsController::class, 'update']);
     Route::apiResource('servers', ServerController::class);
 
+    Route::post('databases/{database}/provision-user', [DatabaseConnectionController::class, 'provisionUser']);
     Route::post('databases/{database}/check', [DatabaseConnectionController::class, 'check']);
     Route::get('databases/{database}/schemas', [DatabaseConnectionController::class, 'schemas'])->middleware('throttle:120,1');
     Route::get('databases/{database}/tables', [DatabaseConnectionController::class, 'tables'])->middleware('throttle:120,1');

@@ -42,6 +42,8 @@ class SshConnector implements SshConnectorInterface
     {
         $ssh->exec($command, false);
         $ssh->write($stdin, SSH2::CHANNEL_EXEC);
+        // Конец ввода: команды, читающие stdin целиком (mysql < sql), иначе ждут вечно
+        $ssh->sendEOF(SSH2::CHANNEL_EXEC);
 
         $stdout = '';
         while (true) {

@@ -72,9 +72,9 @@ async function loadDatabases() {
   }
 }
 
-function onDatabaseCreated(c: DatabaseConnection) {
+function onDatabaseCreated(c: DatabaseConnection, provision: boolean) {
   dbCreateOpen.value = false
-  router.push({ name: 'database', params: { id: c.id }, query: { check: '1' } })
+  router.push({ name: 'database', params: { id: c.id }, query: provision ? { provision: '1' } : { check: '1' } })
 }
 
 // Удаление

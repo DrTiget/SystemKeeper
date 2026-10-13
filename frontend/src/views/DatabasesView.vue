@@ -54,9 +54,9 @@ function goTo(p: number) {
 
 const createOpen = ref(false)
 
-function onCreated(c: DatabaseConnection) {
+function onCreated(c: DatabaseConnection, provision: boolean) {
   createOpen.value = false
-  router.push({ name: 'database', params: { id: c.id }, query: { check: '1' } })
+  router.push({ name: 'database', params: { id: c.id }, query: provision ? { provision: '1' } : { check: '1' } })
 }
 
 const whatDumped = (c: DatabaseConnection) =>

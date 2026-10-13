@@ -129,6 +129,7 @@ docker compose exec app php artisan user:create
 | `GET /api/v1/databases/{id}` | — | `200 {data: …}` |
 | `PATCH /api/v1/databases/{id}` (или `PUT`) | любые поля | `200 {data: …}` |
 | `DELETE /api/v1/databases/{id}` | — | `204` (сама база на сервере не затрагивается) |
+| `POST /api/v1/databases/{id}/provision-user` | `{username?, admin: {mode: local\|credentials, username?, password?}}` | `200 {data: {log, connection}}` — создать в СУБД пользователя для бекапов (только `via=ssh`) |
 | `POST /api/v1/databases/{id}/check` | — | `200 {data: {status, error, version, databases, connection}}` |
 | `GET /api/v1/databases/{id}/schemas` | — | `200 {data: [{name, size, system}]}` — базы на сервере СУБД |
 | `GET /api/v1/databases/{id}/tables?database=shop` | — | `200 {data: [{name, rows, size}]}` — таблицы (для PostgreSQL — `схема.таблица`) |
@@ -143,4 +144,13 @@ docker compose exec app php artisan user:create
 - PostgreSQL: `format` — `custom` (для `pg_restore`, по умолчанию) или `plain` (SQL), `no_owner` (без владельцев и прав), `compress`. pg_dump всегда делает консистентный снимок без блокировки записи.
 
 Смена `engine` сбрасывает `options` к значениям по умолчанию. Сам запуск дампов будет добавлен вместе с хранилищами.
+
+### Автонастройка пользователя для бекапов
+
+`POST /databases/{id}/provision-user` подключается к серверу по SSH и создаёт в СУБД пользователя (по умолчанию `systemkeeper_backup`) с правами только на чтение и случайным паролем из 32 символов, сохраняет логин и пароль в подключении и проверяет вход под ним. Если пользователь уже есть, ему задаётся новый пароль.
+
+- MySQL/MariaDB: `SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT, PROCESS ON *.*` (+ `SHOW_ROUTINE` в MySQL 8.0.20+) для `localhost`/`127.0.0.1`/`::1`, если хост СУБД локальный, иначе для `%`.
+- PostgreSQL 14+: роль с `LOGIN` и членством в `pg_read_all_data`.
+- Права администратора: `admin.mode = local` — root MySQL по сокету или пользователь `postgres` (от root или через `sudo -n`), в Docker — root-пароль из `MYSQL_ROOT_PASSWORD`/`MARIADB_ROOT_PASSWORD` или `POSTGRES_USER`; `credentials` — логин и пароль администратора, используются один раз и не сохраняются.
+- SQL и все пароли передаются через stdin команды, в аргументы процессов на сервере не попадают.
 

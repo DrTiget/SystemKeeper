@@ -19,20 +19,34 @@ class DatabaseClient
     public static function withPassword(DatabaseConnection $c, string $client): string
     {
         $env = $c->engine === DatabaseConnection::MYSQL ? 'MYSQL_PWD' : 'PGPASSWORD';
+
+        return 'IFS= read -r SK_DB_PASSWORD; '.$env.'="$SK_DB_PASSWORD"; export '.$env.'; unset SK_DB_PASSWORD; '
+            .self::inContainer($c, $client, '-e '.$env);
+    }
+
+    /**
+     * Команда клиента — на сервере как есть, а при docker_container — внутри контейнера через `docker exec`
+     * (`-e NAME` без значения передаёт переменную из окружения вызывающего shell).
+     */
+    public static function inContainer(DatabaseConnection $c, string $client, string $dockerFlags = ''): string
+    {
         if ($c->via === DatabaseConnection::VIA_SSH && $c->docker_container) {
-            // docker exec -e NAME без значения берёт значение из окружения вызывающего shell
-            $client = 'docker exec -i -e '.$env.' '.escapeshellarg($c->docker_container).' '.$client;
+            return 'docker exec -i '.($dockerFlags !== '' ? $dockerFlags.' ' : '').escapeshellarg($c->docker_container)
+                .' sh -c '.escapeshellarg('LC_ALL=C '.$client);
         }
 
-        return 'IFS= read -r SK_DB_PASSWORD; '.$env.'="$SK_DB_PASSWORD"; export '.$env.'; unset SK_DB_PASSWORD; LC_ALL=C '.$client;
+        return 'LC_ALL=C '.$client;
     }
+
+    /** Клиент MySQL: в новых образах MariaDB вместо mysql есть только mariadb. */
+    public const MYSQL_BIN = '"$(command -v mysql || command -v mariadb || echo mysql)"';
 
     /** Командная строка клиента с параметрами подключения и SQL. */
     public static function queryCommand(DatabaseConnection $c, string $sql, ?string $database = null): string
     {
         $q = 'escapeshellarg';
         if ($c->engine === DatabaseConnection::MYSQL) {
-            $client = 'mysql --batch --skip-column-names --connect-timeout=10'
+            $client = self::MYSQL_BIN.' --batch --skip-column-names --connect-timeout=10'
                 .' -h '.$q($c->host).' -P '.(int) $c->port.' -u '.$q($c->username)
                 .($database !== null ? ' -D '.$q($database) : '')
                 .' -e '.$q($sql);

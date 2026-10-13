@@ -24,7 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // API-only: никогда не редиректим на страницу логина
         $middleware->redirectGuestsTo(fn () => null);
         // Секреты SSH и БД передаются как есть: у ключа значимы переводы строк, у паролей — пробелы
-        $middleware->trimStrings(except: ['private_key', 'passphrase', 'password']);
+        $middleware->trimStrings(except: ['private_key', 'passphrase', 'password', 'admin.password']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

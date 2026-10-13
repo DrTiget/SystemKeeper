@@ -8,7 +8,7 @@ import SelectMenu from '@/components/SelectMenu.vue'
 import { btnClass, inputClass } from '@/lib/ui'
 
 const props = defineProps<{ connection: DatabaseConnection | null; serverId?: number }>()
-const emit = defineEmits<{ close: []; saved: [connection: DatabaseConnection] }>()
+const emit = defineEmits<{ close: []; saved: [connection: DatabaseConnection, provision: boolean] }>()
 
 const editing = props.connection
 const DEFAULT_PORTS: Record<Engine, number> = { mysql: 3306, postgres: 5432 }
@@ -26,7 +26,10 @@ const form = reactive({
   username: editing?.username ?? 'root',
   password: '',
   maintenance_database: editing?.maintenance_database ?? '',
+  // Новое подключение через сервер: пользователя для бекапов SystemKeeper может создать сам
+  auto_user: !editing,
 })
+const autoUser = computed(() => form.auto_user && form.via === 'ssh' && !editing)
 const errors = ref<Record<string, string[]>>({})
 const formError = ref('')
 const saving = ref(false)
@@ -70,12 +73,16 @@ async function save() {
     body.server_id = form.server_id
     body.docker_container = form.use_docker ? form.docker_container.trim() || null : null
   }
-  if (form.password || !editing) body.password = form.password || null
+  if (autoUser.value) {
+    // временно — после сохранения откроется автонастройка, она заменит логин и пароль
+    body.username = 'systemkeeper_backup'
+    body.password = null
+  } else if (form.password || !editing) body.password = form.password || null
   try {
     const res = editing
       ? await api<{ data: DatabaseConnection }>(`/databases/${editing.id}`, { method: 'PATCH', body })
       : await api<{ data: DatabaseConnection }>('/databases', { method: 'POST', body })
-    emit('saved', res.data)
+    emit('saved', res.data, autoUser.value)
   } catch (e) {
     if (e instanceof ApiError && e.status === 422) errors.value = e.errors
     else formError.value = e instanceof ApiError ? e.message : 'Не удалось сохранить'
@@ -152,7 +159,16 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
       </div>
       <p v-for="m in [...(errors.host ?? []), ...(errors.port ?? [])]" :key="m" class="-mt-2 text-sm text-destructive">{{ m }}</p>
 
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div v-if="form.via === 'ssh' && !editing" class="grid gap-2">
+        <span :class="label">Пользователь БД</span>
+        <div class="flex gap-2">
+          <label :class="segment"><input v-model="form.auto_user" type="radio" :value="true" class="sr-only" />Создать автоматически</label>
+          <label :class="segment"><input v-model="form.auto_user" type="radio" :value="false" class="sr-only" />Указать свой</label>
+        </div>
+        <p v-if="autoUser" :class="hint">После сохранения SystemKeeper создаст в СУБД пользователя только для чтения со случайным паролем — вводить логин и пароль не нужно.</p>
+      </div>
+
+      <div v-if="!autoUser" class="grid gap-4 sm:grid-cols-2">
         <div class="grid gap-2">
           <label for="d-user" :class="label">Пользователь</label>
           <input id="d-user" v-model="form.username" required autocomplete="off" :class="inputClass" :aria-invalid="!!errors.username" />
@@ -172,7 +188,7 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
           <p v-for="m in errors.password" :key="m" class="text-sm text-destructive">{{ m }}</p>
         </div>
       </div>
-      <p :class="hint" class="-mt-2">Достаточно пользователя с правами на чтение: {{ form.engine === 'mysql' ? 'SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT' : 'CONNECT и SELECT на нужные базы' }}.</p>
+      <p v-if="!autoUser" :class="hint" class="-mt-2">Достаточно пользователя с правами на чтение: {{ form.engine === 'mysql' ? 'SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT' : 'CONNECT и SELECT на нужные базы' }}.</p>
 
       <div v-if="form.engine === 'postgres'" class="grid gap-2">
         <label for="d-maint" :class="label">База для подключения</label>

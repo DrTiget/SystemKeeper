@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Database\DatabaseConnectionRequest;
 use App\Http\Resources\DatabaseConnectionResource;
 use App\Models\DatabaseConnection;
+use App\Services\Database\BackupUserProvisioner;
 use App\Services\Database\DatabaseClient;
 use App\Services\Database\DatabaseException;
 use Illuminate\Http\JsonResponse;
@@ -122,6 +123,39 @@ class DatabaseConnectionController extends Controller
         $request->validate(['database' => ['required', 'string', 'max:255']]);
 
         return $this->guard(fn () => $client->tables($database, $request->string('database')->value()));
+    }
+
+    /**
+     * Создать в СУБД пользователя для бекапов (только чтение) и сохранить его в подключении. Только для via=ssh.
+     *
+     * Тело: `{username?: "systemkeeper_backup", admin: {mode: "local"|"credentials", username?, password?}}`.
+     * Учётные данные администратора не сохраняются. Ошибки: `422` — СУБД/права, `502` — нет SSH.
+     */
+    public function provisionUser(Request $request, DatabaseConnection $database, BackupUserProvisioner $provisioner): JsonResponse
+    {
+        abort_if($database->via !== DatabaseConnection::VIA_SSH || ! $database->server, 422, 'Автонастройка пользователя доступна только при подключении через сервер.');
+
+        $data = $request->validate([
+            'username' => ['nullable', 'string', 'regex:/^[a-z_][a-z0-9_]{0,31}$/'],
+            'admin.mode' => ['required', 'in:local,credentials'],
+            'admin.username' => ['required_if:admin.mode,credentials', 'nullable', 'string', 'max:255'],
+            'admin.password' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'username.regex' => 'Имя пользователя: латинские строчные буквы, цифры и _, до 32 символов.',
+        ], ['admin.username' => 'логин администратора']);
+
+        try {
+            $log = $provisioner->provision($database, $data['username'] ?? 'systemkeeper_backup', $data['admin']);
+        } catch (DatabaseException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (SshConnectionException $e) {
+            return response()->json(['message' => $e->getMessage()], 502);
+        }
+
+        return response()->json(['data' => [
+            'log' => $log,
+            'connection' => new DatabaseConnectionResource($database->refresh()->load('server')),
+        ]]);
     }
 
     private function guard(callable $fn): JsonResponse

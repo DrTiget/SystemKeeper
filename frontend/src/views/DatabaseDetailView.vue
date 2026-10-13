@@ -7,6 +7,7 @@ import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
 import DatabaseBackupForm from '@/components/databases/DatabaseBackupForm.vue'
 import DatabaseFormModal from '@/components/databases/DatabaseFormModal.vue'
+import ProvisionUserModal from '@/components/databases/ProvisionUserModal.vue'
 import { btnClass, formatDate } from '@/lib/ui'
 
 interface CheckResult {
@@ -54,6 +55,12 @@ async function check() {
 }
 
 const editOpen = ref(false)
+const provisionOpen = ref(false)
+
+function onProvisioned(c: DatabaseConnection) {
+  connection.value = c
+  formKey.value++
+}
 
 function onSaved(c: DatabaseConnection) {
   connection.value = c
@@ -76,10 +83,9 @@ async function destroy() {
 
 onMounted(async () => {
   await load()
-  if (route.query.check && connection.value) {
-    router.replace({ query: {} })
-    check()
-  }
+  if (route.query.provision && connection.value) provisionOpen.value = true
+  else if (route.query.check && connection.value) check()
+  if (route.query.provision || route.query.check) router.replace({ query: {} })
 })
 
 const card = 'rounded-xl border bg-card p-6 shadow-xs'
@@ -108,6 +114,7 @@ const dt = 'text-xs text-muted-foreground'
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h3 class="font-semibold">Подключение</h3>
           <div class="flex flex-wrap gap-2">
+            <button v-if="connection.via === 'ssh'" :class="btnClass.outline" title="Создать в СУБД пользователя только для чтения" @click="provisionOpen = true"><Icon name="users" />Пользователь для бекапов</button>
             <button :class="btnClass.outline" @click="editOpen = true"><Icon name="pencil" />Изменить</button>
             <button :class="btnClass.primary" :disabled="checking" @click="check"><Icon :name="checking ? 'loader' : 'plug'" :class="checking && 'animate-spin'" />Проверить</button>
           </div>
@@ -160,11 +167,15 @@ const dt = 'text-xs text-muted-foreground'
           <h3 class="font-semibold">Бекап</h3>
           <p class="text-sm text-muted-foreground">Какие базы и таблицы дампить, как часто и с какой блокировкой.</p>
         </div>
-        <DatabaseBackupForm :key="formKey" :connection="connection" @saved="connection = $event" />
+        <!-- пока пользователь для бекапов создаётся, к СУБД подключаться ещё нечем -->
+        <p v-if="provisionOpen && !connection.has_password" class="text-sm text-muted-foreground">Настройки станут доступны после создания пользователя.</p>
+        <DatabaseBackupForm v-else :key="formKey" :connection="connection" @saved="connection = $event" />
       </section>
     </template>
 
     <DatabaseFormModal v-if="editOpen && connection" :connection="connection" @close="editOpen = false" @saved="onSaved" />
+
+    <ProvisionUserModal v-if="provisionOpen && connection" :connection="connection" @close="provisionOpen = false" @done="onProvisioned" />
 
     <Modal v-if="deleteOpen && connection" title="Удалить базу данных?" @close="deleteOpen = false">
       <p class="text-sm text-muted-foreground">Подключение «{{ connection.name }}» и настройки его бекапа будут удалены. Сама база на сервере не затрагивается.</p>
