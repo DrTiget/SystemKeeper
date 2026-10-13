@@ -11,7 +11,9 @@
       html.dark { background: #0c1116 }
     </style>
     <script>
-      if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark')
+      // Тема из настроек профиля (кешируется в localStorage, см. src/lib/theme.ts), до загрузки приложения — без мигания
+      var theme = localStorage.getItem('systemkeeper_theme') || 'system'
+      if (theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('dark')
     </script>
   </head>
   <body>

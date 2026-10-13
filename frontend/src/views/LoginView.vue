@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import { ApiError } from '@/api/client'
+import { inputClass } from '@/lib/ui'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -13,9 +14,6 @@ const password = ref('')
 const loading = ref(false)
 const error = ref('')
 const fieldErrors = ref<Record<string, string[]>>({})
-
-const inputClass =
-  'h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base md:text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:bg-input/30'
 
 async function submit() {
   loading.value = true

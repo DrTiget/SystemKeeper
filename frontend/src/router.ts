@@ -12,6 +12,7 @@ const router = createRouter({
       meta: { auth: true },
       children: [
         { path: '', name: 'dashboard', component: () => import('@/views/StubView.vue'), meta: { title: 'Дашборд' } },
+        { path: 'profile', name: 'profile', component: () => import('@/views/ProfileView.vue'), meta: { title: 'Профиль' } },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },

@@ -25,7 +25,7 @@ async function logout() {
   <div class="flex min-h-svh bg-sidebar">
     <div v-if="open" class="fixed inset-0 z-30 bg-black/80 md:hidden" @click="open = false" />
     <aside
-      class="fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground transition-transform md:static md:translate-x-0"
+      class="fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground transition-transform md:sticky md:top-0 md:h-svh md:translate-x-0"
       :class="open ? 'translate-x-0' : '-translate-x-full'"
     >
       <div class="p-2">
@@ -38,12 +38,20 @@ async function logout() {
       </div>
       <div class="flex-1" />
       <div class="p-2">
-        <div class="flex h-12 items-center gap-2 rounded-md p-2 text-sm">
+        <div class="flex h-12 items-center gap-1 rounded-md text-sm">
+          <RouterLink
+            to="/profile"
+            class="flex min-w-0 flex-1 items-center gap-2 rounded-md p-2 hover:bg-sidebar-accent"
+            active-class="bg-sidebar-accent"
+            title="Профиль и настройки"
+            @click="open = false"
+          >
           <span class="flex size-8 items-center justify-center rounded-lg bg-sidebar-accent text-xs font-medium text-white">{{ initials }}</span>
           <span class="grid min-w-0 flex-1 text-left leading-tight">
             <span class="truncate font-medium text-white">{{ auth.user?.name }}</span>
             <span class="truncate text-xs">{{ auth.user?.email }}</span>
           </span>
+          </RouterLink>
           <button class="inline-flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-sidebar-accent hover:text-white" title="Выйти" @click="logout">
             <Icon name="logout" />
           </button>

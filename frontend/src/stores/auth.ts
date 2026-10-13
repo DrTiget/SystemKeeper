@@ -1,16 +1,23 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { api, ApiError, getToken, setToken } from '@/api/client'
+import { applyTheme, type Theme } from '@/lib/theme'
 
 export interface User {
   id: number
   name: string
   email: string
+  settings: { theme: Theme; timezone: string }
 }
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(getToken())
   const user = ref<User | null>(null)
+
+  function setUser(value: User) {
+    user.value = value
+    applyTheme(value.settings.theme)
+  }
 
   function clear() {
     token.value = null
@@ -25,12 +32,12 @@ export const useAuthStore = defineStore('auth', () => {
     })
     setToken(res.token)
     token.value = res.token
-    user.value = res.user
+    setUser(res.user)
   }
 
   async function fetchUser() {
     try {
-      user.value = (await api<{ data: User }>('/auth/me')).data
+      setUser((await api<{ data: User }>('/profile')).data)
     } catch (e) {
       if (!(e instanceof ApiError) || e.status !== 401) throw e
     }
@@ -45,5 +52,5 @@ export const useAuthStore = defineStore('auth', () => {
     clear()
   }
 
-  return { token, user, login, fetchUser, logout, clear }
+  return { token, user, setUser, login, fetchUser, logout, clear }
 })
