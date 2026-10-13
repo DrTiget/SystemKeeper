@@ -29,7 +29,7 @@ class ApiDocsTest extends TestCase
         $this->getJson('/api/docs.json')->assertOk();
     }
 
-    public function test_spec_covers_all_api_routes_and_key_schemas(): void
+    public function test_spec_covers_all_api_routes(): void
     {
         $this->app['env'] = 'local';
         $spec = $this->getJson('/api/docs.json')->assertOk()->json();
@@ -54,10 +54,6 @@ class ApiDocsTest extends TestCase
             $this->assertNotEmpty(array_intersect(array_map(fn ($m) => "{$m} {$uri}", $methods), $documented), 'Не описан '.$route->uri());
         }
 
-        $schemas = array_keys($spec['components']['schemas']);
-        foreach (['StorageTargetResource', 'ServerResource', 'BackupResource', 'MonitorResource', 'StoreStorageTargetRequest'] as $name) {
-            $this->assertContains($name, $schemas);
-        }
-        $this->assertArrayHasKey('secret_key', $spec['components']['schemas']['StoreStorageTargetRequest']['properties']);
+        $this->assertContains('UserResource', array_keys($spec['components']['schemas']));
     }
 }

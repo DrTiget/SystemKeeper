@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\Backup;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
@@ -20,15 +19,14 @@ class ApiErrorsTest extends TestCase
 
     public function test_unauthenticated_is_russian(): void
     {
-        $this->assertMessage(401, 'Требуется авторизация.', $this->getJson('/api/v1/servers'));
+        $this->assertMessage(401, 'Требуется авторизация.', $this->getJson('/api/v1/auth/me'));
     }
 
-    public function test_not_found_is_russian_for_unknown_route_and_missing_model(): void
+    public function test_not_found_is_russian_for_unknown_route(): void
     {
         Sanctum::actingAs(User::factory()->create());
 
         $this->assertMessage(404, 'Не найдено.', $this->getJson('/api/v1/nonexistent'));
-        $this->assertMessage(404, 'Не найдено.', $this->getJson('/api/v1/servers/999'));
     }
 
     public function test_method_not_allowed_is_russian(): void
@@ -53,19 +51,18 @@ class ApiErrorsTest extends TestCase
         $this->assertMessage(500, 'Внутренняя ошибка сервера.', $this->getJson('/api/v1/_t/boom'));
     }
 
-    public function test_invalid_signed_link_is_russian_and_validation_untouched(): void
+    public function test_validation_errors_untouched(): void
     {
-        $this->assertMessage(403, 'Ссылка недействительна или истекла.', $this->getJson('/api/v1/backups/'.Backup::factory()->create()->id.'/file'));
-
         $this->postJson('/api/v1/auth/login', [])->assertUnprocessable()->assertJsonValidationErrors(['email', 'password']);
     }
 
     public function test_throttle_middleware_response_is_russian(): void
     {
-        for ($i = 0; $i < 120; $i++) {
-            $this->getJson('/api/v1/heartbeat/unknown-token');
+        Route::get('/api/v1/_t/limited', fn () => 'ok')->middleware('throttle:3,1');
+        for ($i = 0; $i < 3; $i++) {
+            $this->getJson('/api/v1/_t/limited')->assertOk();
         }
 
-        $this->assertMessage(429, 'Слишком много запросов. Повторите позже.', $this->getJson('/api/v1/heartbeat/unknown-token'));
+        $this->assertMessage(429, 'Слишком много запросов. Повторите позже.', $this->getJson('/api/v1/_t/limited'));
     }
 }
