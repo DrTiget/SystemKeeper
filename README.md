@@ -91,10 +91,27 @@ docker compose exec app php artisan user:create
 | `DELETE /api/v1/servers/{id}` | — | `204` |
 | `POST /api/v1/servers/{id}/check` | — | `200 {data: {status: ok\|failed, error, output, server}}` — выполняет `uname -a && uptime` |
 | `POST /api/v1/servers/{id}/reset-fingerprint` | — | `200 {data: …}` — забыть отпечаток хоста |
+| `GET /api/v1/servers/{id}/backup-settings` | — | `200 {data: …}` — настройки бекапа (см. ниже) |
+| `PUT /api/v1/servers/{id}/backup-settings` (или `PATCH`) | любые из `{enabled, paths, excludes, schedule, pre_command, pre_command_timeout}` | `200 {data: …}` |
 
 - `auth_type`: `key` — нужен `private_key` (OpenSSH/PEM/PuTTY, `passphrase`, если ключ зашифрован; ключ проверяется при сохранении), `password` — нужен `password`. `port` по умолчанию 22.
 - Генерация ключа: `auth_type: "key"` и `generate_key: true` (+ `key_type`: `ed25519` по умолчанию или `rsa` — RSA 4096) вместо `private_key` — пара создаётся в сервисе, закрытый ключ остаётся в БД, в ответе `public_key` для `authorized_keys` (комментарий `systemkeeper@<название>`). То же в `PATCH` заменяет текущий ключ. `public_key` заполняется и для вставленного ключа.
 - Ключ, фраза и пароль хранятся в БД зашифрованными (`APP_KEY`) и никогда не отдаются: в ответе только `has_private_key`, `has_passphrase`, `has_password`. При изменении их можно не передавать — останутся прежние; при смене `auth_type` нужны новые, данные другого способа удаляются.
 - Отпечаток хоста (`host_fingerprint`, SHA256 как в `ssh-keygen -l`) запоминается при первом успешном подключении; если ключ сервера потом изменится, проверка вернёт `failed` с ошибкой «Отпечаток хоста изменился». Смена `host` или `port` сбрасывает отпечаток.
 - Результат последней проверки — в `last_check: {status, error, checked_at}`. Таймауты — `SSH_CONNECT_TIMEOUT` (10 с) и `SSH_EXEC_TIMEOUT` (30 с).
+
+### Настройки бекапа сервера
+
+Одни на сервер; пока не сохранены, `GET` отдаёт значения по умолчанию. Удаляются вместе с сервером. Сам запуск бекапов будет добавлен позже — сейчас хранятся только настройки.
+
+```json
+{"data": {"enabled": true, "paths": ["/var/www", "/etc/nginx"], "excludes": ["*.log", "/var/www/cache"],
+  "schedule": "0 3 * * *", "timezone": "Europe/Moscow", "next_run_at": "2026-10-14T03:00:00+03:00",
+  "pre_command": "mysqldump app > /var/backups/app.sql", "pre_command_timeout": 300, "updated_at": "…"}}
+```
+
+- `paths` — абсолютные пути каталогов (до 50), `excludes` — пути или маски, которые не попадают в бекап (до 100). Включить бекап (`enabled: true`) можно только хотя бы с одним каталогом.
+- `schedule` — cron-выражение из 5 полей, по умолчанию `0 3 * * *` (каждый день в 03:00); понимается в часовом поясе `BACKUP_TIMEZONE` (по умолчанию `Europe/Moscow`). `next_run_at` — ближайший запуск, `null`, если бекап выключен.
+- `pre_command` — команда, которая выполняется на сервере по SSH перед бекапом (например, дамп базы в один из каталогов); если она завершится с ошибкой или не уложится в `pre_command_timeout` секунд (10–86400, по умолчанию 300), бекап не делается. Пустая строка — без команды.
+- В списке и карточке сервера — краткая сводка `backup: {enabled, schedule, paths_count, next_run_at}`.
 

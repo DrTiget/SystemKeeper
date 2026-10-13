@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Сервер с SSH-подключением: по ключу (private_key + необязательная passphrase) или по паролю.
@@ -29,6 +30,17 @@ class Server extends Model
 
     /** @var array<string, mixed> */
     protected $attributes = ['port' => 22];
+
+    public function backupSettings(): HasOne
+    {
+        return $this->hasOne(ServerBackupSettings::class);
+    }
+
+    /** Сохранённые настройки бекапа или значения по умолчанию. */
+    public function backupSettingsOrDefault(): ServerBackupSettings
+    {
+        return $this->backupSettings ?? ServerBackupSettings::defaultsFor($this);
+    }
 
     protected function casts(): array
     {

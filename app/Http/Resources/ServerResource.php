@@ -36,6 +36,12 @@ class ServerResource extends JsonResource
                 'error' => $this->last_check_error,
                 'checked_at' => $this->last_checked_at,
             ],
+            'backup' => $this->whenLoaded('backupSettings', fn () => [
+                'enabled' => (bool) $this->backupSettings?->enabled,
+                'schedule' => $this->backupSettings?->schedule,
+                'paths_count' => count($this->backupSettings?->paths ?? []),
+                'next_run_at' => $this->backupSettings?->nextRunAt()?->toIso8601String(),
+            ]),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

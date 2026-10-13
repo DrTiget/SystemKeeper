@@ -33,6 +33,7 @@ class ServerController extends Controller
             ->when($request->string('search')->trim()->value(), fn ($q, $s) => $q->where(
                 fn ($q) => $q->where('name', 'like', "%{$s}%")->orWhere('host', 'like', "%{$s}%")->orWhere('description', 'like', "%{$s}%"),
             ))
+            ->with('backupSettings')
             ->orderBy('name')
             ->paginate($request->integer('per_page', 25));
 
@@ -48,7 +49,7 @@ class ServerController extends Controller
 
     public function show(Server $server): ServerResource
     {
-        return new ServerResource($server);
+        return new ServerResource($server->load('backupSettings'));
     }
 
     /**

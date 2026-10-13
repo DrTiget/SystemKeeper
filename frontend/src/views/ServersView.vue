@@ -2,7 +2,9 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { api, ApiError } from '@/api/client'
 import Icon from '@/components/Icon.vue'
+import BackupSettingsModal from '@/components/BackupSettingsModal.vue'
 import Modal from '@/components/Modal.vue'
+import { describeCron } from '@/lib/cron'
 import { btnClass, formatDate, inputClass } from '@/lib/ui'
 
 type AuthType = 'key' | 'password'
@@ -21,6 +23,7 @@ interface Server {
   has_passphrase: boolean
   has_password: boolean
   public_key: string | null
+  backup?: { enabled: boolean; schedule: string | null; paths_count: number; next_run_at: string | null }
   host_fingerprint: string | null
   last_check: { status: 'ok' | 'failed' | null; error: string | null; checked_at: string | null }
 }
@@ -203,6 +206,14 @@ async function resetFingerprint(server: Server) {
 }
 
 // Удаление
+// Настройки бекапа
+const backupFor = ref<Server | null>(null)
+
+async function onBackupSaved() {
+  backupFor.value = null
+  await load()
+}
+
 const deleting = ref<Server | null>(null)
 const deleteError = ref('')
 
@@ -246,9 +257,9 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
           <tr>
             <th class="px-4 py-3 font-medium">Название</th>
             <th class="px-4 py-3 font-medium">Подключение</th>
-            <th class="px-4 py-3 font-medium">Авторизация</th>
             <th class="px-4 py-3 font-medium">SSH</th>
-            <th class="w-40 px-4 py-3" />
+            <th class="px-4 py-3 font-medium">Бекап</th>
+            <th class="w-48 px-4 py-3" />
           </tr>
         </thead>
         <tbody class="divide-y">
@@ -257,8 +268,10 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
               <div class="font-medium">{{ s.name }}</div>
               <div v-if="s.description" class="max-w-xs truncate text-xs text-muted-foreground">{{ s.description }}</div>
             </td>
-            <td class="px-4 py-3 font-mono text-xs whitespace-nowrap">{{ s.username }}@{{ s.host }}{{ s.port === 22 ? '' : `:${s.port}` }}</td>
-            <td class="px-4 py-3">{{ s.auth_type === 'key' ? 'Ключ' : 'Пароль' }}</td>
+            <td class="px-4 py-3 whitespace-nowrap">
+              <div class="font-mono text-xs">{{ s.username }}@{{ s.host }}{{ s.port === 22 ? '' : `:${s.port}` }}</div>
+              <div class="text-xs text-muted-foreground">{{ s.auth_type === 'key' ? 'по ключу' : 'по паролю' }}</div>
+            </td>
             <td class="px-4 py-3">
               <span v-if="checking.has(s.id)" class="inline-flex items-center gap-1.5 text-muted-foreground"><Icon name="loader" class="size-4 animate-spin" />Проверка…</span>
               <span v-else-if="s.last_check.status === 'ok'" class="inline-flex items-center gap-1.5" :title="`Проверено ${formatDate(s.last_check.checked_at)}`">
@@ -269,8 +282,20 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
               </span>
               <span v-else class="text-muted-foreground">Не проверялся</span>
             </td>
+            <td class="px-4 py-3">
+              <button type="button" class="text-left hover:underline" @click="backupFor = s">
+                <template v-if="s.backup?.enabled && s.backup.schedule">
+                  <div class="whitespace-nowrap">{{ describeCron(s.backup.schedule) }}</div>
+                  <div class="text-xs text-muted-foreground">
+                    {{ s.backup.paths_count }} {{ s.backup.paths_count === 1 ? 'каталог' : s.backup.paths_count < 5 ? 'каталога' : 'каталогов' }}<template v-if="s.backup.next_run_at"> · след. {{ formatDate(s.backup.next_run_at) }}</template>
+                  </div>
+                </template>
+                <span v-else class="text-muted-foreground">Не настроен</span>
+              </button>
+            </td>
             <td class="px-4 py-2">
               <div class="flex justify-end gap-1">
+                <button :class="iconBtn" title="Настройки бекапа" @click="backupFor = s"><Icon name="archive" /></button>
                 <button v-if="s.public_key" :class="iconBtn" title="Открытый ключ" @click="(publicKeyFor = s), (copied = false)"><Icon name="key" /></button>
                 <button :class="iconBtn" title="Проверить подключение" :disabled="checking.has(s.id)" @click="check(s, true)"><Icon name="plug" /></button>
                 <button :class="iconBtn" title="Изменить" @click="openForm(s)"><Icon name="pencil" /></button>
@@ -435,6 +460,8 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
         </div>
       </div>
     </Modal>
+
+    <BackupSettingsModal v-if="backupFor" :server="backupFor" @close="backupFor = null" @saved="onBackupSaved" />
 
     <Modal v-if="deleting" title="Удалить сервер?" @close="deleting = null">
       <p class="text-sm text-muted-foreground">{{ deleting.name }} ({{ deleting.host }}) и его учётные данные SSH будут удалены.</p>
