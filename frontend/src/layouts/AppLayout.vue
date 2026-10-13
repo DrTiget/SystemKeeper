@@ -9,6 +9,26 @@ const route = useRoute()
 const router = useRouter()
 const open = ref(false)
 
+interface NavItem {
+  to: string
+  label: string
+  icon: string
+  admin?: boolean
+}
+
+// Меню по группам; группа без доступных пунктов показывается только заголовком
+const navGroups: { title: string; admin?: boolean; items: NavItem[] }[] = [
+  { title: 'Администрирование', admin: true, items: [{ to: '/users', label: 'Пользователи', icon: 'users', admin: true }] },
+  { title: 'Бекапы', items: [{ to: '/servers', label: 'Сервера', icon: 'server' }] },
+  { title: 'Хранение бекапов', items: [] },
+]
+
+const visibleGroups = computed(() =>
+  navGroups
+    .filter((g) => !g.admin || auth.user?.is_admin)
+    .map((g) => ({ ...g, items: g.items.filter((i) => !i.admin || auth.user?.is_admin) })),
+)
+
 const initials = computed(() =>
   (auth.user?.name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join(''),
 )
@@ -36,16 +56,20 @@ async function logout() {
           <span class="ml-1 truncate text-lg leading-none font-extrabold tracking-tight text-white">System<span class="text-mint-400">Keeper</span></span>
         </RouterLink>
       </div>
-      <nav class="flex flex-1 flex-col gap-1 overflow-auto p-2">
-        <RouterLink
-          v-if="auth.user?.is_admin"
-          to="/users"
-          class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-          active-class="bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-          @click="open = false"
-        >
-          <Icon name="users" />Пользователи
-        </RouterLink>
+      <nav class="flex flex-1 flex-col gap-4 overflow-auto p-2">
+        <div v-for="g in visibleGroups" :key="g.title" class="flex flex-col gap-1">
+          <div class="px-2 text-xs font-medium text-sidebar-foreground/60">{{ g.title }}</div>
+          <RouterLink
+            v-for="i in g.items"
+            :key="i.to"
+            :to="i.to"
+            class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            active-class="bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+            @click="open = false"
+          >
+            <Icon :name="i.icon" />{{ i.label }}
+          </RouterLink>
+        </div>
       </nav>
       <div class="p-2">
         <div class="flex h-12 items-center gap-1 rounded-md text-sm">
