@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 /**
  * Сервер с SSH-подключением: по ключу (private_key + необязательная passphrase) или по паролю.
@@ -40,6 +41,17 @@ class Server extends Model
     public function backupSettingsOrDefault(): ServerBackupSettings
     {
         return $this->backupSettings ?? ServerBackupSettings::defaultsFor($this);
+    }
+
+    public function backups(): MorphMany
+    {
+        return $this->morphMany(Backup::class, 'source');
+    }
+
+    protected static function booted(): void
+    {
+        // по одному, чтобы удалились и файлы бекапов
+        static::deleting(fn (self $model) => $model->backups()->each(fn (Backup $b) => $b->delete()));
     }
 
     protected function casts(): array

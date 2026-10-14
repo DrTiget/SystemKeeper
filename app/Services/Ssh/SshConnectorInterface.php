@@ -20,4 +20,16 @@ interface SshConnectorInterface
      * @throws SshConnectionException
      */
     public function exec(Server $server, string $command, ?int $timeout = null, ?string $stdin = null): array;
+
+    /**
+     * Выполняет команду, отдавая stdout частями в $onOutput — для больших потоков (архивы, дампы),
+     * которые нельзя держать в памяти целиком.
+     *
+     * @param  callable(string): void  $onOutput
+     * @return array{exit_code: int|null, stderr: string}
+     *
+     * @throws HostFingerprintChangedException
+     * @throws SshConnectionException
+     */
+    public function stream(Server $server, string $command, callable $onOutput, ?int $timeout = null, ?string $stdin = null): array;
 }

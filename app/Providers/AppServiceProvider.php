@@ -2,12 +2,15 @@
 
 namespace App\Providers;
 
+use App\Models\DatabaseConnection;
+use App\Models\Server;
 use App\Models\User;
 use App\Services\Ssh\SshConnector;
 use App\Services\Ssh\SshConnectorInterface;
 use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\Support\Generator\OpenApi;
 use Dedoc\Scramble\Support\Generator\SecurityScheme;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -26,6 +29,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Источники бекапов — короткими именами в БД и в путях файлов
+        Relation::morphMap(['server' => Server::class, 'database' => DatabaseConnection::class]);
+
         // Управление пользователями — только администраторам
         Gate::define('manage-users', fn (User $user) => $user->is_admin);
 

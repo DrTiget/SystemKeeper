@@ -87,7 +87,7 @@ class DatabaseClient
     }
 
     /** Понятный текст типичных ошибок клиента. */
-    private static function explain(DatabaseConnection $c, ?int $code, string $stderr): string
+    public static function explain(DatabaseConnection $c, ?int $code, string $stderr): string
     {
         $client = $c->engine === DatabaseConnection::MYSQL ? 'mysql' : 'psql';
         // Предупреждения клиентов (пароль в окружении, устаревшее имя программы и т. п.) — не ошибка

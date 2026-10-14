@@ -1,0 +1,103 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Http\Resources\BackupResource;
+use App\Jobs\RunBackup;
+use App\Models\Backup;
+use App\Models\DatabaseConnection;
+use App\Models\Server;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
+/**
+ * Запуски бекапов серверов и баз данных: история, ручной запуск, скачивание файлов.
+ */
+class BackupController extends Controller
+{
+    /** История бекапов сервера, новые сверху. */
+    public function serverIndex(Request $request, Server $server): AnonymousResourceCollection
+    {
+        return $this->history($request, $server);
+    }
+
+    /**
+     * Запустить бекап сервера сейчас. 202 — бекап поставлен в очередь, ход — в `GET /backups/{id}`.
+     * 409 — бекап уже идёт; 422 — не выбраны каталоги.
+     */
+    public function serverRun(Request $request, Server $server): JsonResponse
+    {
+        if ($server->backupSettingsOrDefault()->paths === []) {
+            throw ValidationException::withMessages(['paths' => 'Сначала выберите каталоги для бекапа.']);
+        }
+
+        return $this->start($request, $server);
+    }
+
+    /** История бекапов базы данных, новые сверху. */
+    public function databaseIndex(Request $request, DatabaseConnection $database): AnonymousResourceCollection
+    {
+        return $this->history($request, $database);
+    }
+
+    /**
+     * Запустить бекап базы данных сейчас. 202 — поставлен в очередь; 409 — бекап уже идёт.
+     */
+    public function databaseRun(Request $request, DatabaseConnection $database): JsonResponse
+    {
+        return $this->start($request, $database);
+    }
+
+    public function show(Backup $backup): BackupResource
+    {
+        return new BackupResource($backup->load('user'));
+    }
+
+    /** Удаляет запись и файлы бекапа. 409 — бекап ещё выполняется. */
+    public function destroy(Backup $backup): Response
+    {
+        abort_if($backup->isActive(), 409, 'Бекап ещё выполняется.');
+        $backup->delete();
+
+        return response()->noContent();
+    }
+
+    /** Скачать файл бекапа (имя — из `files[].name`). */
+    public function download(Backup $backup, string $file): StreamedResponse
+    {
+        abort_unless($backup->path && in_array($file, array_column($backup->files ?? [], 'name'), true), 404, 'Файл не найден.');
+
+        $disk = Storage::disk('backups');
+        abort_unless($disk->exists($backup->path.'/'.$file), 404, 'Файл не найден.');
+
+        return $disk->download($backup->path.'/'.$file, $file);
+    }
+
+    private function history(Request $request, Model $source): AnonymousResourceCollection
+    {
+        $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:100']]);
+
+        return BackupResource::collection(
+            Backup::query()->whereMorphedTo('source', $source)->with('user')->latest('id')->paginate($request->integer('per_page', 20)),
+        );
+    }
+
+    private function start(Request $request, Model $source): JsonResponse
+    {
+        $active = Backup::query()->whereMorphedTo('source', $source)->whereIn('status', [Backup::QUEUED, Backup::RUNNING])->exists();
+        abort_if($active, 409, 'Бекап уже выполняется.');
+
+        $backup = new Backup(['trigger' => Backup::TRIGGER_MANUAL, 'status' => Backup::QUEUED, 'user_id' => $request->user()->id]);
+        $backup->source()->associate($source)->save();
+        RunBackup::dispatch($backup);
+
+        return (new BackupResource($backup->load('user')))->response()->setStatusCode(202);
+    }
+}

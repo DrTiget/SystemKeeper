@@ -38,4 +38,30 @@ class DatabaseCommandRunner
             'stderr' => $process->getErrorOutput(),
         ];
     }
+
+    /**
+     * Как run(), но stdout отдаётся частями в $onOutput (дампы).
+     *
+     * @param  callable(string): void  $onOutput
+     * @return array{exit_code: int|null, stderr: string}
+     *
+     * @throws SshConnectionException
+     */
+    public function stream(DatabaseConnection $connection, string $command, callable $onOutput, int $timeout): array
+    {
+        $stdin = ($connection->password ?? '')."\n";
+
+        if ($connection->via === DatabaseConnection::VIA_SSH) {
+            return $this->ssh->stream($connection->server, $command, $onOutput, $timeout, $stdin);
+        }
+
+        $stderr = '';
+        $process = Process::fromShellCommandline($command, timeout: $timeout);
+        $process->setInput($stdin);
+        $process->run(function (string $type, string $data) use ($onOutput, &$stderr) {
+            $type === Process::OUT ? $onOutput($data) : $stderr .= $data;
+        });
+
+        return ['exit_code' => $process->getExitCode(), 'stderr' => $stderr];
+    }
 }

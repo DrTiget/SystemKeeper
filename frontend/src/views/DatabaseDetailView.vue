@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, ApiError } from '@/api/client'
 import { type DatabaseConnection, type DbSchema, ENGINE_LABELS } from '@/api/databases'
 import Icon from '@/components/Icon.vue'
+import BackupHistory from '@/components/BackupHistory.vue'
 import Modal from '@/components/Modal.vue'
 import DatabaseBackupForm from '@/components/databases/DatabaseBackupForm.vue'
 import DatabaseFormModal from '@/components/databases/DatabaseFormModal.vue'
@@ -170,6 +171,14 @@ const dt = 'text-xs text-muted-foreground'
         <!-- пока пользователь для бекапов создаётся, к СУБД подключаться ещё нечем -->
         <p v-if="provisionOpen && !connection.has_password" class="text-sm text-muted-foreground">Настройки станут доступны после создания пользователя.</p>
         <DatabaseBackupForm v-else :key="formKey" :connection="connection" @saved="connection = $event" />
+      </section>
+
+      <section :class="card" class="grid gap-4">
+        <div class="grid gap-1">
+          <h3 class="font-semibold">Бекапы</h3>
+          <p class="text-sm text-muted-foreground">Запуск вручную и последние дампы — по файлу на базу. Пока хранилищ нет, они лежат в SystemKeeper.</p>
+        </div>
+        <BackupHistory :source="`databases/${connection.id}`" />
       </section>
     </template>
 

@@ -21,6 +21,12 @@ services:
     command: php artisan queue:work --tries=3 --sleep=3
     restart: unless-stopped
 
+  # Бекапы — отдельный воркер: длинные задачи не задерживают остальную очередь
+  backups:
+    <<: *app
+    command: php artisan queue:work --queue=backups --tries=1 --timeout=14400 --sleep=3
+    restart: unless-stopped
+
   scheduler:
     <<: *app
     command: php artisan schedule:work

@@ -37,6 +37,44 @@ class SshConnector implements SshConnectorInterface
         ];
     }
 
+    public function stream(Server $server, string $command, callable $onOutput, ?int $timeout = null, ?string $stdin = null): array
+    {
+        $ssh = $this->connect($server);
+        $ssh->setTimeout($timeout ?? (int) config('ssh.exec_timeout'));
+        $ssh->enableQuietMode();
+
+        try {
+            $ssh->exec($command, false);
+            if ($stdin !== null) {
+                $ssh->write($stdin, SSH2::CHANNEL_EXEC);
+            }
+            $ssh->sendEOF(SSH2::CHANNEL_EXEC);
+            while (true) {
+                $chunk = $ssh->read('', SSH2::READ_NEXT, SSH2::CHANNEL_EXEC);
+                if ($chunk === true || $chunk === false || $ssh->isTimeout()) {
+                    break;
+                }
+                if ($chunk !== '') {
+                    $onOutput($chunk);
+                }
+            }
+        } catch (Throwable $e) {
+            throw new SshConnectionException("Ошибка выполнения команды: {$e->getMessage()}", previous: $e);
+        } finally {
+            $stderr = $ssh->getStdError();
+            $ssh->disconnect();
+        }
+
+        if ($ssh->isTimeout()) {
+            throw new SshConnectionException('Команда не завершилась за отведённое время.');
+        }
+
+        return [
+            'exit_code' => $ssh->getExitStatus() === false ? null : $ssh->getExitStatus(),
+            'stderr' => (string) $stderr,
+        ];
+    }
+
     /** Запускает команду без ожидания, пишет в её stdin и читает stdout до закрытия канала. */
     private function execWithStdin(SSH2 $ssh, string $command, string $stdin): string
     {

@@ -12,6 +12,13 @@ class FakeSshConnector implements SshConnectorInterface
     public array $calls = [];
 
     /**
+     * Ответы по подстроке команды — для сценариев из нескольких команд (команда перед бекапом, архив).
+     *
+     * @var array<string, array{exit_code: int|null, stdout: string, stderr: string}>
+     */
+    public array $results = [];
+
+    /**
      * @param  array{exit_code: int|null, stdout: string, stderr: string}  $result
      */
     public function __construct(
@@ -32,6 +39,22 @@ class FakeSshConnector implements SshConnectorInterface
             $server->forceFill(['host_fingerprint' => $this->rememberFingerprint])->save();
         }
 
+        foreach ($this->results as $needle => $result) {
+            if (str_contains($command, $needle)) {
+                return $result;
+            }
+        }
+
         return $this->result;
+    }
+
+    public function stream(Server $server, string $command, callable $onOutput, ?int $timeout = null, ?string $stdin = null): array
+    {
+        $result = $this->exec($server, $command, $timeout, $stdin);
+        if ($result['stdout'] !== '') {
+            $onOutput($result['stdout']);
+        }
+
+        return ['exit_code' => $result['exit_code'], 'stderr' => $result['stderr']];
     }
 }

@@ -8,6 +8,7 @@ import Modal from '@/components/Modal.vue'
 import { type DatabaseConnection, ENGINE_LABELS } from '@/api/databases'
 import DatabaseFormModal from '@/components/databases/DatabaseFormModal.vue'
 import BackupSettingsForm from '@/components/servers/BackupSettingsForm.vue'
+import BackupHistory from '@/components/BackupHistory.vue'
 import CheckResultModal from '@/components/servers/CheckResultModal.vue'
 import PublicKeyModal from '@/components/servers/PublicKeyModal.vue'
 import ServerFormModal from '@/components/servers/ServerFormModal.vue'
@@ -18,11 +19,14 @@ const router = useRouter()
 const id = Number(route.params.id)
 
 const server = ref<Server | null>(null)
+// Есть ли сохранённые каталоги — без них бекап запускать нечего
+const hasPaths = ref(false)
 const loadError = ref('')
 
 async function load() {
   try {
     server.value = (await api<{ data: Server }>(`/servers/${id}`)).data
+    hasPaths.value = (server.value.backup?.paths_count ?? 0) > 0
   } catch (e) {
     loadError.value = e instanceof ApiError && e.status === 404 ? 'Сервер не найден' : 'Не удалось загрузить сервер'
   }
@@ -166,7 +170,15 @@ const dt = 'text-xs text-muted-foreground'
           <h3 class="font-semibold">Бекап файлов</h3>
           <p class="text-sm text-muted-foreground">Какие каталоги копировать, как часто и что выполнить перед этим.</p>
         </div>
-        <BackupSettingsForm :server-id="server.id" />
+        <BackupSettingsForm :server-id="server.id" @saved="hasPaths = $event.paths.length > 0" />
+      </section>
+
+      <section :class="card" class="grid gap-4">
+        <div class="grid gap-1">
+          <h3 class="font-semibold">Бекапы</h3>
+          <p class="text-sm text-muted-foreground">Запуск вручную и последние бекапы файлов. Пока хранилищ нет, архивы лежат в SystemKeeper.</p>
+        </div>
+        <BackupHistory :source="`servers/${server.id}`" :disabled-reason="hasPaths ? undefined : 'Сначала выберите и сохраните каталоги'" />
       </section>
 
       <section :class="card" class="grid gap-4">
