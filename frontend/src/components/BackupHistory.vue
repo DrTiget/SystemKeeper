@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api, ApiError } from '@/api/client'
-import { type Backup, downloadBackupFile, isActive } from '@/api/backups'
+import { type Backup, BACKUP_STATUS as STATUS, backupDuration as duration, backupTrigger, downloadBackupFile, isActive } from '@/api/backups'
 import Icon from '@/components/Icon.vue'
 import { btnClass, formatBytes, formatDate } from '@/lib/ui'
 
@@ -62,19 +62,6 @@ async function download(b: Backup, name: string) {
   }
 }
 
-function duration(b: Backup): string {
-  if (!b.started_at) return ''
-  const s = Math.round(((b.finished_at ? new Date(b.finished_at) : new Date()).getTime() - new Date(b.started_at).getTime()) / 1000)
-  return s < 60 ? `${s} с` : `${Math.floor(s / 60)} мин ${s % 60} с`
-}
-
-const STATUS = {
-  queued: { label: 'В очереди', dot: 'bg-muted-foreground' },
-  running: { label: 'Выполняется', dot: 'bg-amber-500 animate-pulse' },
-  success: { label: 'Готово', dot: 'bg-emerald-500' },
-  failed: { label: 'Ошибка', dot: 'bg-destructive' },
-}
-
 onMounted(load)
 onBeforeUnmount(() => clearTimeout(timer))
 defineExpose({ load })
@@ -102,7 +89,7 @@ defineExpose({ load })
               <span v-if="b.size !== null" class="text-xs text-muted-foreground">{{ formatBytes(b.size) }}</span>
             </span>
             <span class="truncate text-xs text-muted-foreground">
-              {{ b.status === 'success' ? '' : STATUS[b.status].label + ' · ' }}{{ b.trigger === 'manual' ? `вручную${b.user ? ', ' + b.user.name : ''}` : 'по расписанию' }}<template v-if="b.started_at"> · {{ duration(b) }}</template>
+              {{ b.status === 'success' ? '' : STATUS[b.status].label + ' · ' }}{{ backupTrigger(b) }}<template v-if="b.started_at"> · {{ duration(b) }}</template>
             </span>
           </span>
           <Icon name="chevron-right" class="size-4 shrink-0 text-muted-foreground transition-transform" :class="expanded === b.id && 'rotate-90'" />
@@ -117,8 +104,9 @@ defineExpose({ load })
               <Icon name="download" /><span class="min-w-0 truncate">{{ f.name }}</span><span class="ml-auto text-muted-foreground">{{ formatBytes(f.size) }}</span>
             </button>
           </div>
-          <div v-if="!isActive(b)" class="flex justify-end">
-            <button class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive" @click="remove(b)"><Icon name="trash" class="size-3.5" />Удалить бекап</button>
+          <div class="flex items-center justify-between gap-3">
+            <RouterLink :to="{ name: 'backup', params: { id: b.id } }" class="text-xs font-medium text-primary hover:underline">Подробнее</RouterLink>
+            <button v-if="!isActive(b)" class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive" @click="remove(b)"><Icon name="trash" class="size-3.5" />Удалить бекап</button>
           </div>
         </div>
       </li>

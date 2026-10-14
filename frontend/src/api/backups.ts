@@ -1,4 +1,5 @@
 import { ApiError, getToken } from './client'
+import type { ProjectRef } from './projects'
 
 export type BackupStatus = 'queued' | 'running' | 'success' | 'failed'
 
@@ -20,7 +21,56 @@ export interface Backup {
   created_at: string
 }
 
+/**
+ * Бекап для отдельной страницы — GET /backups/{id}.
+ * Поля сверх Backup необязательные: API отдаёт их по мере готовности, страница пока их не выводит.
+ */
+export interface BackupDetail extends Backup {
+  /** Сервер или база данных, а также проект — для ссылок и хлебных крошек */
+  source?: { type: 'server' | 'database'; id: number; name: string; project?: ProjectRef | null } | null
+  /** Куда сохранён: диск SystemKeeper, S3… */
+  storage?: { id: number; name: string; type: string } | null
+  /** Каталог бекапа внутри хранилища */
+  path?: string | null
+  /** Файлы с контрольными суммами */
+  files: { name: string; size: number; sha256?: string | null }[]
+  /** Что бекапилось — снимок настроек на момент запуска */
+  settings?: {
+    /** Сервер: каталоги, исключения и команда перед бекапом */
+    paths?: string[]
+    excludes?: string[]
+    pre_command?: string | null
+    /** База данных: базы, таблицы без данных и пропущенные, параметры дампа */
+    databases?: string[]
+    schema_only_tables?: string[]
+    exclude_tables?: string[]
+    options?: Record<string, unknown>
+  } | null
+  /** Источник на момент бекапа: адрес, версия СУБД или ОС */
+  source_info?: { host?: string | null; version?: string | null } | null
+  /** Хранение: место среди хранимых копий источника (1 — самый новый) и его правила хранения */
+  retention?: { position: number; keep_count: number; max_size: number | null } | null
+}
+
 export const isActive = (b: Backup) => b.status === 'queued' || b.status === 'running'
+
+export const BACKUP_STATUS: Record<BackupStatus, { label: string; dot: string }> = {
+  queued: { label: 'В очереди', dot: 'bg-muted-foreground' },
+  running: { label: 'Выполняется', dot: 'bg-amber-500 animate-pulse' },
+  success: { label: 'Готово', dot: 'bg-emerald-500' },
+  failed: { label: 'Ошибка', dot: 'bg-destructive' },
+}
+
+export const backupTrigger = (b: Backup) => (b.trigger === 'manual' ? `вручную${b.user ? ', ' + b.user.name : ''}` : 'по расписанию')
+
+/** Длительность: у идущего бекапа — от старта до текущего момента. */
+export function backupDuration(b: Backup): string {
+  if (!b.started_at) return ''
+  const s = Math.round(((b.finished_at ? new Date(b.finished_at) : new Date()).getTime() - new Date(b.started_at).getTime()) / 1000)
+  if (s < 60) return `${s} с`
+  if (s < 3600) return `${Math.floor(s / 60)} мин ${s % 60} с`
+  return `${Math.floor(s / 3600)} ч ${Math.floor((s % 3600) / 60)} мин`
+}
 
 /** Скачивание файла бекапа: нужен Bearer-токен, поэтому через fetch, а не обычной ссылкой. */
 export async function downloadBackupFile(b: Backup, name: string): Promise<void> {

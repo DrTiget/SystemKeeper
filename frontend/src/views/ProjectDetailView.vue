@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, ApiError } from '@/api/client'
 import type { DatabaseConnection } from '@/api/databases'
 import type { Project } from '@/api/projects'
-import type { Backup } from '@/api/backups'
+import { type Backup, BACKUP_STATUS as STATUS, backupTrigger } from '@/api/backups'
 import type { Server } from '@/api/servers'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
@@ -97,13 +97,7 @@ const empty = computed(() => !servers.value.length && !databases.value.length)
 onMounted(load)
 
 const card = 'rounded-xl border bg-card p-6 shadow-xs'
-const STATUS: Record<Backup['status'], { label: string; dot: string }> = {
-  queued: { label: 'В очереди', dot: 'bg-muted-foreground' },
-  running: { label: 'Выполняется', dot: 'bg-amber-500 animate-pulse' },
-  success: { label: 'Готово', dot: 'bg-emerald-500' },
-  failed: { label: 'Ошибка', dot: 'bg-destructive' },
-}
-const backupLink = (b: Backup) => ({ name: b.source_type === 'server' ? 'server' : 'database', params: { id: b.source_id } })
+const backupLink = (b: Backup) => ({ name: 'backup', params: { id: b.id } })
 </script>
 
 <template>
@@ -158,7 +152,7 @@ const backupLink = (b: Backup) => ({ name: b.source_type === 'server' ? 'server'
       <section :class="card" class="grid gap-4">
         <div class="grid gap-1">
           <h3 class="font-semibold">Последние бекапы</h3>
-          <p class="text-sm text-muted-foreground">Всех серверов и баз проекта. Запуск и файлы — на странице сервера или базы.</p>
+          <p class="text-sm text-muted-foreground">Всех серверов и баз проекта. Запуск — на странице сервера или базы.</p>
         </div>
         <div class="overflow-x-auto rounded-xl border bg-card">
           <table class="w-full text-sm">
@@ -181,7 +175,7 @@ const backupLink = (b: Backup) => ({ name: b.source_type === 'server' ? 'server'
                   <span class="inline-flex items-center gap-1.5" :class="b.status === 'failed' && 'text-destructive'" :title="b.error ?? ''"><span class="size-2 rounded-full" :class="STATUS[b.status].dot" />{{ STATUS[b.status].label }}</span>
                 </td>
                 <td class="px-4 py-3 whitespace-nowrap">{{ formatDate(b.started_at ?? b.created_at) }}</td>
-                <td class="px-4 py-3 text-muted-foreground">{{ b.trigger === 'manual' ? `вручную${b.user ? ', ' + b.user.name : ''}` : 'по расписанию' }}</td>
+                <td class="px-4 py-3 text-muted-foreground">{{ backupTrigger(b) }}</td>
                 <td class="px-4 py-3 text-right whitespace-nowrap">{{ b.size !== null ? formatBytes(b.size) : '—' }}</td>
                 <td class="px-2 text-muted-foreground"><Icon name="chevron-right" class="size-4" /></td>
               </tr>

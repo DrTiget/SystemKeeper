@@ -18,6 +18,7 @@ const router = createRouter({
         { path: 'servers/:id(\\d+)', name: 'server', component: () => import('@/views/ServerDetailView.vue'), meta: { title: 'Сервера' } },
         { path: 'databases', name: 'databases', component: () => import('@/views/DatabasesView.vue'), meta: { title: 'Базы данных' } },
         { path: 'databases/:id(\\d+)', name: 'database', component: () => import('@/views/DatabaseDetailView.vue'), meta: { title: 'Базы данных' } },
+        { path: 'backups/:id(\\d+)', name: 'backup', component: () => import('@/views/BackupDetailView.vue'), meta: { title: 'Бекап' } },
         { path: 'storages', name: 'storages', component: () => import('@/views/StoragesView.vue'), meta: { title: 'Диски и облака' } },
         { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue'), meta: { title: 'Пользователи', admin: true } },
         { path: 'profile', name: 'profile', component: () => import('@/views/ProfileView.vue'), meta: { title: 'Профиль' } },
