@@ -202,9 +202,14 @@ docker compose exec app php artisan user:create
 
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/storages` | Хранилища: `type` (`local` — диск SystemKeeper), `is_default`, `disk` (`total`, `free`, байт), `used` — занято бекапами, `backups_count` |
-| GET | `/storages/{id}` | То же и `sources` — серверы и базы данных, бекапящиеся сюда: `type` (`server`/`database`), `id`, `name`, `used`, `backups_count`, `keep_count`, `max_size` |
-| PATCH | `/storages/{id}` | Переименовать: `{name}` |
+| GET | `/storages` | Хранилища: `type` (`local` — диск SystemKeeper, `s3` — бакет S3), `is_default`, `disk` (`total`, `free`, байт; у S3 — `null`), `s3` (`endpoint`, `region`, `bucket`, `prefix`, `path_style`, `key`, `has_secret`), `used` — занято бекапами, `backups_count` |
+| POST | `/storages` | Подключить S3: `type: s3`, `name`, `endpoint` (пусто — Amazon), `region`, `bucket`, `prefix`, `path_style`, `key`, `secret` |
+| GET | `/storages/{id}` | То же и `sources` — серверы и базы данных, бекапящиеся сюда: `type` (`server`/`database`), `id`, `name`, `project` (`id`, `name`, `group`), `used`, `backups_count`, `keep_count`, `max_size` |
+| PATCH | `/storages/{id}` | Изменить; у диска — только `name`, у S3 `secret` можно не передавать |
+| DELETE | `/storages/{id}` | Отключить S3 (файлы в бакете остаются); `409` — диск SystemKeeper, в хранилище есть бекапы или его выбрали серверы/базы |
+| POST | `/storages/{id}/check` | Проверка: записать, прочитать и удалить файл; итог в `data.status` (`ok`/`failed`) и `data.error` |
+
+Настройки S3 хранятся зашифрованными (`encrypted:array`), секретный ключ в ответах не отдаётся. Бекап сначала пишется на локальный диск (поэтому проверка свободного места — всегда по нему), после успешного снятия файлы загружаются в бакет и локальная копия удаляется; ошибка загрузки — ошибка бекапа. Скачивание из S3 идёт потоком через SystemKeeper.
 
 Настройки хранения задаются у каждого источника — в `PUT /servers/{id}/backup-settings` и `PATCH /databases/{id}`, в ответе — объект `retention`:
 

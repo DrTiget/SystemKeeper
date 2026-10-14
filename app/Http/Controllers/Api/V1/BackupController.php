@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\BackupResource;
 use App\Jobs\RunBackup;
 use App\Models\Backup;
+use App\Models\BackupStorage;
 use App\Models\DatabaseConnection;
 use App\Models\Project;
 use App\Models\Server;
@@ -14,9 +15,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Throwable;
 
 /**
  * Запуски бекапов серверов и баз данных: история, ручной запуск, скачивание файлов.
@@ -88,15 +90,22 @@ class BackupController extends Controller
         return response()->noContent();
     }
 
-    /** Скачать файл бекапа (имя — из `files[].name`). */
+    /** Скачать файл бекапа (имя — из `files[].name`); из облачного хранилища — потоком через SystemKeeper. */
     public function download(Backup $backup, string $file): StreamedResponse
     {
         abort_unless($backup->path && in_array($file, array_column($backup->files ?? [], 'name'), true), 404, 'Файл не найден.');
 
-        $disk = Storage::disk('backups');
-        abort_unless($disk->exists($backup->path.'/'.$file), 404, 'Файл не найден.');
+        $fs = ($backup->storage ?? BackupStorage::default())->filesystem();
+        $path = $backup->path.'/'.$file;
+        try {
+            abort_unless($fs->exists($path), 404, 'Файл не найден.');
+        } catch (HttpException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            abort(502, 'Хранилище недоступно: '.$e->getMessage());
+        }
 
-        return $disk->download($backup->path.'/'.$file, $file);
+        return $fs->download($path, $file);
     }
 
     private function history(Request $request, Model $source): AnonymousResourceCollection

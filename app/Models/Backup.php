@@ -6,7 +6,9 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 /**
  * Запуск бекапа сервера или базы данных: статус, журнал и получившиеся файлы.
@@ -32,11 +34,7 @@ class Backup extends Model
 
     protected static function booted(): void
     {
-        static::deleting(function (Backup $backup) {
-            if ($backup->path) {
-                Storage::disk('backups')->deleteDirectory($backup->path);
-            }
-        });
+        static::deleting(fn (Backup $backup) => $backup->removeStoredFiles());
     }
 
     protected function casts(): array
@@ -63,10 +61,27 @@ class Backup extends Model
     /** Удаляет файлы, оставляя запись в истории (неудачный бекап, вытесненный по объёму). */
     public function deleteFiles(): void
     {
-        if ($this->path) {
-            Storage::disk('backups')->deleteDirectory($this->path);
-        }
+        $this->removeStoredFiles();
         $this->forceFill(['files' => [], 'size' => null])->save();
+    }
+
+    /**
+     * Удаляет каталог бекапа в его хранилище и локальную копию (во время выгрузки в облако она лежит на диске).
+     * Ошибку облака не пробрасываем — запись всё равно удаляется, а потерянные файлы попадут в лог.
+     */
+    private function removeStoredFiles(): void
+    {
+        if (! $this->path) {
+            return;
+        }
+        Storage::disk('backups')->deleteDirectory($this->path);
+        if ($this->storage && $this->storage->type !== BackupStorage::LOCAL) {
+            try {
+                $this->storage->filesystem()->deleteDirectory($this->path);
+            } catch (Throwable $e) {
+                Log::warning('Не удалось удалить файлы бекапа в облаке', ['backup' => $this->id, 'path' => $this->path, 'error' => $e->getMessage()]);
+            }
+        }
     }
 
     public function user(): BelongsTo

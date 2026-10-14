@@ -5,6 +5,7 @@ import { type BackupStorage, type Retention, type StorageSource, STORAGE_TYPE_LA
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
 import RetentionFields from '@/components/RetentionFields.vue'
+import S3StorageModal from '@/components/S3StorageModal.vue'
 import { btnClass, formatBytes } from '@/lib/ui'
 
 const storages = ref<BackupStorage[]>([])
@@ -57,6 +58,53 @@ async function save() {
   }
 }
 
+/** Источники по группам проектов → проектам; без группы и без проекта — в конце. */
+function grouped(sources: StorageSource[]) {
+  const groups = new Map<string, { name: string | null; projects: Map<string, { name: string | null; id: number | null; rows: StorageSource[] }> }>()
+  for (const src of sources) {
+    const gKey = src.project?.group ? `g${src.project.group.id}` : 'g-'
+    if (!groups.has(gKey)) groups.set(gKey, { name: src.project?.group?.name ?? null, projects: new Map() })
+    const projects = groups.get(gKey)!.projects
+    const pKey = src.project ? `p${src.project.id}` : 'p-'
+    if (!projects.has(pKey)) projects.set(pKey, { name: src.project?.name ?? null, id: src.project?.id ?? null, rows: [] })
+    projects.get(pKey)!.rows.push(src)
+  }
+  const byName = <T extends { name: string | null }>(a: T, b: T) => (a.name === null ? 1 : b.name === null ? -1 : a.name.localeCompare(b.name, 'ru'))
+  return [...groups.values()].sort(byName).map((g) => ({ ...g, projects: [...g.projects.values()].sort(byName) }))
+}
+
+// S3: добавление, изменение, проверка, удаление
+const s3Edit = ref<{ storage: BackupStorage | null } | null>(null)
+const checks = ref<Record<number, { status: 'checking' | 'ok' | 'failed'; error?: string | null }>>({})
+const deleting = ref<BackupStorage | null>(null)
+const deleteError = ref('')
+
+async function check(st: BackupStorage) {
+  checks.value[st.id] = { status: 'checking' }
+  try {
+    checks.value[st.id] = (await api<{ data: { status: 'ok' | 'failed'; error: string | null } }>(`/storages/${st.id}/check`, { method: 'POST' })).data
+  } catch (e) {
+    checks.value[st.id] = { status: 'failed', error: e instanceof ApiError ? e.message : 'Не удалось проверить' }
+  }
+}
+
+async function onS3Saved(st: BackupStorage) {
+  s3Edit.value = null
+  await load()
+  check(st)
+}
+
+async function destroy() {
+  deleteError.value = ''
+  try {
+    await api(`/storages/${deleting.value!.id}`, { method: 'DELETE' })
+    deleting.value = null
+    await load()
+  } catch (e) {
+    deleteError.value = e instanceof ApiError ? e.message : 'Не удалось удалить'
+  }
+}
+
 const sourceLink = (s: StorageSource) => ({ name: s.type === 'server' ? 'server' : 'database', params: { id: s.id } })
 
 onMounted(load)
@@ -66,9 +114,12 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
 
 <template>
   <div class="flex flex-col gap-6 p-4">
-    <header class="space-y-0.5">
-      <h2 class="text-xl font-semibold tracking-tight">Диски и облака</h2>
-      <p class="text-sm text-muted-foreground">Где лежат бекапы, сколько места занято и сколько копий хранится у каждого сервера и базы</p>
+    <header class="flex flex-wrap items-end justify-between gap-3">
+      <div class="space-y-0.5">
+        <h2 class="text-xl font-semibold tracking-tight">Диски и облака</h2>
+        <p class="text-sm text-muted-foreground">Где лежат бекапы, сколько места занято и сколько копий хранится у каждого сервера и базы</p>
+      </div>
+      <button :class="btnClass.primary" @click="s3Edit = { storage: null }"><Icon name="plus" />Подключить S3</button>
     </header>
 
     <p v-if="loadError" class="text-sm text-destructive">{{ loadError }}</p>
@@ -78,13 +129,30 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="space-y-0.5">
           <h3 class="flex items-center gap-2 font-semibold"><Icon name="archive" class="size-4" />{{ st.name }}</h3>
-          <p class="text-sm text-muted-foreground">{{ STORAGE_TYPE_LABELS[st.type] }}<template v-if="st.is_default"> · по умолчанию</template></p>
+          <p class="text-sm text-muted-foreground">
+            {{ STORAGE_TYPE_LABELS[st.type] }}<template v-if="st.is_default"> · по умолчанию</template>
+            <template v-if="st.s3">
+              · <span class="font-mono text-xs">{{ st.s3.bucket }}{{ st.s3.prefix ? '/' + st.s3.prefix : '' }}</span>
+              · {{ st.s3.endpoint ? st.s3.endpoint.replace(/^https?:\/\//, '') : 'Amazon S3' }}
+            </template>
+          </p>
         </div>
-        <div class="text-right text-sm">
-          <div class="font-medium">{{ formatBytes(st.used) }}</div>
-          <div class="text-muted-foreground">в {{ st.backups_count }} бекапах</div>
+        <div class="flex items-start gap-4">
+          <div class="text-right text-sm">
+            <div class="font-medium">{{ formatBytes(st.used) }}</div>
+            <div class="text-muted-foreground">в {{ st.backups_count }} бекапах</div>
+          </div>
+          <div v-if="st.type === 's3'" class="flex gap-2">
+            <button :class="btnClass.outline" :disabled="checks[st.id]?.status === 'checking'" @click="check(st)">
+              <Icon :name="checks[st.id]?.status === 'checking' ? 'loader' : 'plug'" :class="checks[st.id]?.status === 'checking' && 'animate-spin'" />Проверить
+            </button>
+            <button :class="btnClass.outline" class="size-9! p-0!" title="Изменить" @click="s3Edit = { storage: st }"><Icon name="pencil" class="size-4" /></button>
+            <button :class="btnClass.destructive" class="size-9! p-0!" title="Удалить" @click="(deleting = st), (deleteError = '')"><Icon name="trash" class="size-4" /></button>
+          </div>
         </div>
       </div>
+      <p v-if="checks[st.id]?.status === 'ok'" class="-mt-2 flex items-center gap-2 text-sm"><span class="size-2 rounded-full bg-emerald-500" />Подключение работает: файл записан, прочитан и удалён</p>
+      <p v-else-if="checks[st.id]?.status === 'failed'" class="-mt-2 flex items-center gap-2 text-sm text-destructive"><span class="size-2 rounded-full bg-destructive" />{{ checks[st.id]?.error }}</p>
 
       <div v-if="st.disk" class="grid gap-2.5">
         <div class="flex items-baseline justify-between gap-3 text-sm">
@@ -114,29 +182,53 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
               <th class="w-10" />
             </tr>
           </thead>
-          <tbody class="divide-y">
-            <tr v-for="s in st.sources" :key="`${s.type}${s.id}`">
-              <td class="px-4 py-2.5">
-                <RouterLink :to="sourceLink(s)" class="inline-flex items-center gap-2 font-medium hover:underline">
-                  <Icon :name="s.type === 'server' ? 'server' : 'database'" class="size-4 text-muted-foreground" />{{ s.name }}
-                </RouterLink>
-              </td>
-              <td class="px-4 py-2.5 whitespace-nowrap">{{ s.backups_count }} <span class="text-muted-foreground">из {{ s.keep_count }}</span></td>
-              <td class="px-4 py-2.5">
-                <div class="whitespace-nowrap">{{ formatBytes(s.used) }} <span class="text-muted-foreground">/ {{ s.max_size ? formatBytes(s.max_size) : 'без лимита' }}</span></div>
-                <div v-if="s.max_size" class="mt-1 h-1.5 w-40 overflow-hidden rounded-full bg-muted">
-                  <div class="h-full" :class="s.used > s.max_size * 0.9 ? 'bg-destructive' : 'bg-primary'" :style="{ width: pct(s.used, s.max_size) }" />
-                </div>
-              </td>
-              <td class="px-2"><button :class="btnClass.outline" class="size-8! p-0!" title="Настройки хранения" @click="edit(s, st)"><Icon name="pencil" class="size-4" /></button></td>
+          <tbody v-for="g in grouped(st.sources ?? [])" :key="g.name ?? '-'" class="divide-y border-b last:border-b-0">
+            <tr v-if="g.name" class="bg-muted/40">
+              <td colspan="4" class="px-4 py-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{{ g.name }}</td>
             </tr>
-            <tr v-if="!st.sources?.length">
-              <td colspan="4" class="px-4 py-8 text-center text-muted-foreground">Сюда пока ничего не бекапится</td>
+            <template v-for="p in g.projects" :key="p.id ?? '-'">
+              <tr>
+                <td colspan="4" class="px-4 pt-3 pb-1.5">
+                  <RouterLink v-if="p.id" :to="`/projects/${p.id}`" class="inline-flex items-center gap-2 font-medium hover:underline"><Icon name="folder" class="size-4 text-muted-foreground" />{{ p.name }}</RouterLink>
+                  <span v-else class="inline-flex items-center gap-2 text-muted-foreground"><Icon name="folder" class="size-4" />Без проекта</span>
+                </td>
+              </tr>
+              <tr v-for="s in p.rows" :key="`${s.type}${s.id}`" class="border-t-0!">
+                <td class="py-2 pr-4 pl-10">
+                  <RouterLink :to="sourceLink(s)" class="inline-flex items-center gap-2 hover:underline">
+                    <Icon :name="s.type === 'server' ? 'server' : 'database'" class="size-4 text-muted-foreground" />{{ s.name }}
+                  </RouterLink>
+                </td>
+                <td class="px-4 py-2 whitespace-nowrap">{{ s.backups_count }} <span class="text-muted-foreground">из {{ s.keep_count }}</span></td>
+                <td class="px-4 py-2">
+                  <div class="whitespace-nowrap">{{ formatBytes(s.used) }} <span class="text-muted-foreground">/ {{ s.max_size ? formatBytes(s.max_size) : 'без лимита' }}</span></div>
+                  <div v-if="s.max_size" class="mt-1 h-1.5 w-40 overflow-hidden rounded-full bg-muted">
+                    <div class="h-full" :class="s.used > s.max_size * 0.9 ? 'bg-destructive' : 'bg-primary'" :style="{ width: pct(s.used, s.max_size) }" />
+                  </div>
+                </td>
+                <td class="px-2"><button :class="btnClass.outline" class="size-8! p-0!" title="Сколько хранить" @click="edit(s, st)"><Icon name="pencil" class="size-4" /></button></td>
+              </tr>
+            </template>
+          </tbody>
+          <tbody v-if="!st.sources?.length">
+            <tr>
+              <td colspan="4" class="px-4 py-8 text-center text-muted-foreground">Сюда пока ничего не бекапится{{ st.type === 's3' ? ' — выберите это место в настройках бекапа сервера или базы' : '' }}</td>
             </tr>
           </tbody>
         </table>
       </div>
     </section>
+
+    <S3StorageModal v-if="s3Edit" :storage="s3Edit.storage" @close="s3Edit = null" @saved="onS3Saved" />
+
+    <Modal v-if="deleting" title="Удалить хранилище?" @close="deleting = null">
+      <p class="text-sm text-muted-foreground">«{{ deleting.name }}» будет отключено от SystemKeeper. Файлы в бакете не удаляются.</p>
+      <p v-if="deleteError" class="mt-3 text-sm text-destructive">{{ deleteError }}</p>
+      <div class="mt-6 flex justify-end gap-2">
+        <button :class="btnClass.outline" @click="deleting = null">Отмена</button>
+        <button :class="btnClass.destructive" @click="destroy">Удалить</button>
+      </div>
+    </Modal>
 
     <Modal v-if="editing" wide :title="`Сколько хранить: ${editing.name}`" @close="editing = null">
       <form class="grid gap-5" @submit.prevent="save">

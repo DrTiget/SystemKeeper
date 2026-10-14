@@ -2,28 +2,42 @@
 
 namespace App\Models;
 
+use App\Services\Backup\StorageFilesystems;
+use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Куда складываются бекапы. Пока есть один тип — `local`, диск самого SystemKeeper (диск `backups`).
+ * Куда складываются бекапы: `local` — диск самого SystemKeeper (диск `backups`), `s3` — бакет S3-совместимого
+ * хранилища. Настройки S3 (`endpoint`, `region`, `bucket`, `prefix`, `path_style`, `key`, `secret`) шифруются.
  */
 #[Fillable(['name', 'type', 'settings'])]
+#[Hidden(['settings'])]
 class BackupStorage extends Model
 {
     public const LOCAL = 'local';
 
+    public const S3 = 's3';
+
+    public const TYPES = [self::LOCAL, self::S3];
+
     protected function casts(): array
     {
-        return ['settings' => 'array'];
+        return ['settings' => 'encrypted:array'];
     }
 
     /** Хранилище для источников, у которых оно не выбрано, — локальное. */
     public static function default(): self
     {
         return self::query()->where('type', self::LOCAL)->orderBy('id')->firstOrFail();
+    }
+
+    public function filesystem(): Filesystem
+    {
+        return app(StorageFilesystems::class)->for($this);
     }
 
     public function backups(): HasMany
@@ -35,7 +49,7 @@ class BackupStorage extends Model
      * Серверы и базы данных, бекапы которых идут в это хранилище (без выбранного — в хранилище по умолчанию),
      * с занятым объёмом и настройками хранения.
      *
-     * @return list<array{type: string, id: int, name: string, used: int, backups_count: int, keep_count: int, max_size: int|null}>
+     * @return list<array{type: string, id: int, name: string, project: array<string, mixed>|null, used: int, backups_count: int, keep_count: int, max_size: int|null}>
      */
     public function sources(): array
     {
@@ -50,6 +64,11 @@ class BackupStorage extends Model
             'type' => $type,
             'id' => $m->id,
             'name' => $m->name,
+            'project' => $m->project ? [
+                'id' => $m->project->id,
+                'name' => $m->project->name,
+                'group' => $m->project->group ? ['id' => $m->project->group->id, 'name' => $m->project->group->name] : null,
+            ] : null,
             'used' => (int) ($usage[$type.':'.$m->id]->used ?? 0),
             'backups_count' => (int) ($usage[$type.':'.$m->id]->cnt ?? 0),
             'keep_count' => $keep,
@@ -57,13 +76,13 @@ class BackupStorage extends Model
         ];
 
         $rows = [];
-        foreach (Server::query()->with('backupSettings')->orderBy('name')->get() as $server) {
+        foreach (Server::query()->with(['backupSettings', 'project.group'])->orderBy('name')->get() as $server) {
             $s = $server->backupSettingsOrDefault();
             if ($mine($s->storage_id) || isset($usage['server:'.$server->id])) {
                 $rows[] = $row('server', $server, $s->keep_count, $s->max_size);
             }
         }
-        foreach (DatabaseConnection::query()->orderBy('name')->get() as $db) {
+        foreach (DatabaseConnection::query()->with('project.group')->orderBy('name')->get() as $db) {
             if ($mine($db->storage_id) || isset($usage['database:'.$db->id])) {
                 $rows[] = $row('database', $db, $db->keep_count, $db->max_size);
             }

@@ -59,7 +59,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('servers/{server}/backups', [BackupController::class, 'serverRun']);
     Route::get('databases/{database}/backups', [BackupController::class, 'databaseIndex']);
     Route::post('databases/{database}/backups', [BackupController::class, 'databaseRun']);
-    Route::apiResource('storages', BackupStorageController::class)->only(['index', 'show', 'update']);
+    Route::post('storages/{storage}/check', [BackupStorageController::class, 'check']);
+    Route::apiResource('storages', BackupStorageController::class);
 
     Route::get('backups/{backup}', [BackupController::class, 'show']);
     Route::delete('backups/{backup}', [BackupController::class, 'destroy']);

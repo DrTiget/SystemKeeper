@@ -9,6 +9,7 @@ export interface StorageSource {
   type: 'server' | 'database'
   id: number
   name: string
+  project: { id: number; name: string; group: { id: number; name: string } | null } | null
   used: number
   backups_count: number
   keep_count: number
@@ -18,7 +19,8 @@ export interface StorageSource {
 export interface BackupStorage {
   id: number
   name: string
-  type: 'local'
+  type: 'local' | 's3'
+  s3: { endpoint: string | null; region: string | null; bucket: string; prefix: string; path_style: boolean; key: string; has_secret: boolean } | null
   is_default: boolean
   disk: { total: number; free: number } | null
   used: number
@@ -26,4 +28,4 @@ export interface BackupStorage {
   sources?: StorageSource[]
 }
 
-export const STORAGE_TYPE_LABELS: Record<BackupStorage['type'], string> = { local: 'Диск SystemKeeper' }
+export const STORAGE_TYPE_LABELS: Record<BackupStorage['type'], string> = { local: 'Диск SystemKeeper', s3: 'S3' }
