@@ -21,6 +21,8 @@ class BackupResource extends JsonResource
             /** server | database */
             'source_type' => $this->source_type,
             'source_id' => $this->source_id,
+            /** Сервер или база данных — в списках по проекту */
+            'source' => $this->whenLoaded('source', fn () => $this->source ? ['type' => $this->source_type, 'id' => $this->source->id, 'name' => $this->source->name] : null),
             /** manual | schedule */
             'trigger' => $this->trigger,
             /** queued | running | success | failed */

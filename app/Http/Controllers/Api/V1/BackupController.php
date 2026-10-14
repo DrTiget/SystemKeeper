@@ -7,6 +7,7 @@ use App\Http\Resources\BackupResource;
 use App\Jobs\RunBackup;
 use App\Models\Backup;
 use App\Models\DatabaseConnection;
+use App\Models\Project;
 use App\Models\Server;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,24 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class BackupController extends Controller
 {
+    /**
+     * Бекапы всех серверов и баз данных проекта, новые сверху. В каждом — `source` (`type`, `id`, `name`).
+     */
+    public function projectIndex(Request $request, Project $project): AnonymousResourceCollection
+    {
+        $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:100']]);
+
+        $backups = Backup::query()
+            ->where(fn ($q) => $q
+                ->where(fn ($q) => $q->where('source_type', 'server')->whereIn('source_id', $project->servers()->select('id')))
+                ->orWhere(fn ($q) => $q->where('source_type', 'database')->whereIn('source_id', $project->databases()->select('id'))))
+            ->with(['user', 'source'])
+            ->latest('id')
+            ->paginate($request->integer('per_page', 20));
+
+        return BackupResource::collection($backups);
+    }
+
     /** История бекапов сервера, новые сверху. */
     public function serverIndex(Request $request, Server $server): AnonymousResourceCollection
     {

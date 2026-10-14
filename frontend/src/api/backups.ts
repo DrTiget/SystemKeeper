@@ -6,6 +6,8 @@ export interface Backup {
   id: number
   source_type: 'server' | 'database'
   source_id: number
+  /** в списках по проекту */
+  source?: { type: 'server' | 'database'; id: number; name: string } | null
   trigger: 'manual' | 'schedule'
   status: BackupStatus
   user: { id: number; name: string } | null

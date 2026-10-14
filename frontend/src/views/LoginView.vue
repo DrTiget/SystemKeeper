@@ -21,7 +21,7 @@ async function submit() {
   fieldErrors.value = {}
   try {
     await auth.login(email.value, password.value)
-    await router.push({ name: 'dashboard' })
+    await router.push({ name: 'projects' })
   } catch (e) {
     if (e instanceof ApiError && e.status === 422) {
       fieldErrors.value = e.errors

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, ApiError } from '@/api/client'
 import type { CheckResult, Server } from '@/api/servers'
@@ -12,6 +12,7 @@ import BackupHistory from '@/components/BackupHistory.vue'
 import CheckResultModal from '@/components/servers/CheckResultModal.vue'
 import PublicKeyModal from '@/components/servers/PublicKeyModal.vue'
 import ServerFormModal from '@/components/servers/ServerFormModal.vue'
+import { useProjectsStore } from '@/stores/projects'
 import { btnClass, formatDate } from '@/lib/ui'
 
 const route = useRoute()
@@ -19,6 +20,8 @@ const router = useRouter()
 const id = Number(route.params.id)
 
 const server = ref<Server | null>(null)
+const projects = useProjectsStore()
+watch(server, (s) => s && projects.setFor(s.project, { label: 'Сервера', to: '/servers' }, s.name))
 // Есть ли сохранённые каталоги — без них бекап запускать нечего
 const hasPaths = ref(false)
 const loadError = ref('')
@@ -111,8 +114,8 @@ const dt = 'text-xs text-muted-foreground'
 
 <template>
   <div class="flex max-w-4xl flex-col gap-6 p-4">
-    <RouterLink to="/servers" class="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground">
-      <Icon name="arrow-left" class="size-4" />Все серверы
+    <RouterLink :to="server?.project ? `/projects/${server.project.id}` : '/servers'" class="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground">
+      <Icon name="arrow-left" class="size-4" />{{ server?.project ? server.project.name : 'Все серверы' }}
     </RouterLink>
 
     <p v-if="loadError" class="text-sm text-destructive">{{ loadError }}</p>

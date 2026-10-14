@@ -37,6 +37,7 @@ Route::middleware(['auth:sanctum', 'can:manage-users'])->group(function () {
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('projects', ProjectController::class);
+    Route::get('projects/{project}/backups', [BackupController::class, 'projectIndex']);
 
     Route::post('servers/{server}/check', [ServerController::class, 'check']);
     Route::post('servers/{server}/reset-fingerprint', [ServerController::class, 'resetFingerprint']);

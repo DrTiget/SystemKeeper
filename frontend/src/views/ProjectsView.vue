@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import type { Project } from '@/api/projects'
 import Icon from '@/components/Icon.vue'
 import ProjectFormModal from '@/components/ProjectFormModal.vue'
 import { btnClass, inputClass } from '@/lib/ui'
+import { useProjectsStore } from '@/stores/projects'
 
 const router = useRouter()
+const route = useRoute()
+const store = useProjectsStore()
 const projects = ref<Project[]>([])
 const search = ref('')
 const loading = ref(true)
@@ -32,8 +35,17 @@ watch(search, () => {
   timer = setTimeout(load, 300)
 })
 
-const createOpen = ref(false)
-const onCreated = (p: Project) => router.push({ name: 'project', params: { id: p.id } })
+// «+» в меню открывает создание: /projects?new=1
+const createOpen = ref(!!route.query.new)
+watch(() => route.query.new, (v) => v && (createOpen.value = true))
+function closeCreate() {
+  createOpen.value = false
+  if (route.query.new) router.replace({ query: {} })
+}
+async function onCreated(p: Project) {
+  await store.load()
+  router.push({ name: 'project', params: { id: p.id } })
+}
 
 onMounted(load)
 </script>
@@ -67,6 +79,6 @@ onMounted(load)
       {{ search ? 'Ничего не нашли' : 'Проектов пока нет — создайте первый и добавьте в него серверы и базы данных' }}
     </p>
 
-    <ProjectFormModal v-if="createOpen" :project="null" @close="createOpen = false" @saved="onCreated" />
+    <ProjectFormModal v-if="createOpen" :project="null" @close="closeCreate" @saved="onCreated" />
   </div>
 </template>

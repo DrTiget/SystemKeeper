@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, ApiError } from '@/api/client'
 import { type DatabaseConnection, ENGINE_LABELS } from '@/api/databases'
 import type { Project } from '@/api/projects'
+import type { Backup } from '@/api/backups'
 import type { Server } from '@/api/servers'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
@@ -12,7 +13,8 @@ import SelectMenu from '@/components/SelectMenu.vue'
 import DatabaseFormModal from '@/components/databases/DatabaseFormModal.vue'
 import ServerFormModal from '@/components/servers/ServerFormModal.vue'
 import { describeCron } from '@/lib/cron'
-import { btnClass } from '@/lib/ui'
+import { btnClass, formatBytes, formatDate } from '@/lib/ui'
+import { useProjectsStore } from '@/stores/projects'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,15 +23,20 @@ const id = Number(route.params.id)
 const project = ref<Project | null>(null)
 const servers = ref<Server[]>([])
 const databases = ref<DatabaseConnection[]>([])
+const backups = ref<Backup[]>([])
 const loadError = ref('')
+const store = useProjectsStore()
 
 async function load() {
   try {
-    const [p, s, d] = await Promise.all([
+    const [p, s, d, b] = await Promise.all([
       api<{ data: Project }>(`/projects/${id}`),
       api<{ data: Server[] }>(`/servers?project_id=${id}&per_page=100`),
       api<{ data: DatabaseConnection[] }>(`/databases?project_id=${id}&per_page=100`),
+      api<{ data: Backup[] }>(`/projects/${id}/backups?per_page=15`),
     ])
+    backups.value = b.data
+    store.crumbs = [{ label: 'Проекты', to: '/projects' }, { label: p.data.name }]
     project.value = p.data
     servers.value = s.data
     databases.value = d.data
@@ -69,12 +76,18 @@ async function detach(kind: 'server' | 'database', itemId: number) {
 }
 
 const editOpen = ref(false)
+async function onEdited(p: Project) {
+  editOpen.value = false
+  await store.load()
+  await load()
+}
 const createServerOpen = ref(false)
 const createDbOpen = ref(false)
 const deleteOpen = ref(false)
 
 async function destroy() {
   await api(`/projects/${id}`, { method: 'DELETE' })
+  await store.load()
   router.push({ name: 'projects' })
 }
 
@@ -84,6 +97,13 @@ onMounted(load)
 
 const card = 'rounded-xl border bg-card p-6 shadow-xs'
 const row = 'flex items-center gap-3 px-4 py-3 hover:bg-accent/40'
+const STATUS: Record<Backup['status'], { label: string; dot: string }> = {
+  queued: { label: 'В очереди', dot: 'bg-muted-foreground' },
+  running: { label: 'Выполняется', dot: 'bg-amber-500 animate-pulse' },
+  success: { label: 'Готово', dot: 'bg-emerald-500' },
+  failed: { label: 'Ошибка', dot: 'bg-destructive' },
+}
+const backupLink = (b: Backup) => ({ name: b.source_type === 'server' ? 'server' : 'database', params: { id: b.source_id } })
 const dot = (status: string | null) => (status === 'ok' ? 'bg-emerald-500' : status === 'failed' ? 'bg-destructive' : 'bg-muted-foreground/40')
 </script>
 
@@ -145,9 +165,28 @@ const dot = (status: string | null) => (status === 'ok' ? 'bg-emerald-500' : sta
         </ul>
         <p v-else class="text-sm text-muted-foreground">Баз данных в проекте нет.</p>
       </section>
+
+      <section :class="card" class="grid gap-4">
+        <div class="grid gap-1">
+          <h3 class="font-semibold">Последние бекапы</h3>
+          <p class="text-sm text-muted-foreground">Всех серверов и баз проекта. Запуск и файлы — на странице сервера или базы.</p>
+        </div>
+        <ul v-if="backups.length" class="divide-y rounded-lg border text-sm">
+          <li v-for="b in backups" :key="b.id">
+            <RouterLink :to="backupLink(b)" :class="row" class="flex-wrap">
+              <span class="inline-flex w-28 items-center gap-1.5" :class="b.status === 'failed' && 'text-destructive'"><span class="size-2 rounded-full" :class="STATUS[b.status].dot" />{{ STATUS[b.status].label }}</span>
+              <span class="inline-flex items-center gap-1.5 font-medium"><Icon :name="b.source_type === 'server' ? 'server' : 'database'" class="size-4 text-muted-foreground" />{{ b.source?.name }}</span>
+              <span class="text-muted-foreground">{{ formatDate(b.started_at ?? b.created_at) }}</span>
+              <span class="text-muted-foreground">{{ b.trigger === 'manual' ? 'вручную' : 'по расписанию' }}</span>
+              <span v-if="b.size !== null" class="ml-auto text-muted-foreground">{{ formatBytes(b.size) }}</span>
+            </RouterLink>
+          </li>
+        </ul>
+        <p v-else class="text-sm text-muted-foreground">Бекапов ещё не было.</p>
+      </section>
     </template>
 
-    <ProjectFormModal v-if="editOpen && project" :project="project" @close="editOpen = false" @saved="(p) => ((project = p), (editOpen = false))" />
+    <ProjectFormModal v-if="editOpen && project" :project="project" @close="editOpen = false" @saved="onEdited" />
     <ServerFormModal v-if="createServerOpen" :server="null" :project-id="id" @close="createServerOpen = false" @saved="(s) => router.push({ name: 'server', params: { id: s.id } })" />
     <DatabaseFormModal
       v-if="createDbOpen"

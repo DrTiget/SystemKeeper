@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useProjectsStore } from '@/stores/projects'
 
 const auth = useAuthStore()
+const projects = useProjectsStore()
 const route = useRoute()
 const router = useRouter()
 const open = ref(false)
@@ -16,18 +18,17 @@ interface NavItem {
   admin?: boolean
 }
 
-// Меню по группам; группа без доступных пунктов показывается только заголовком
+// Меню: сначала проекты, затем все ресурсы, хранение и администрирование
 const navGroups: { title: string; admin?: boolean; items: NavItem[] }[] = [
-  { title: 'Администрирование', admin: true, items: [{ to: '/users', label: 'Пользователи', icon: 'users', admin: true }] },
   {
-    title: 'Бекапы',
+    title: 'Все ресурсы',
     items: [
-      { to: '/projects', label: 'Проекты', icon: 'folder' },
       { to: '/servers', label: 'Сервера', icon: 'server' },
       { to: '/databases', label: 'Базы данных', icon: 'database' },
     ],
   },
   { title: 'Хранение бекапов', items: [{ to: '/storages', label: 'Хранилища', icon: 'archive' }] },
+  { title: 'Администрирование', admin: true, items: [{ to: '/users', label: 'Пользователи', icon: 'users', admin: true }] },
 ]
 
 const visibleGroups = computed(() =>
@@ -40,7 +41,16 @@ const initials = computed(() =>
   (auth.user?.name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join(''),
 )
 
-onMounted(() => auth.fetchUser())
+onMounted(() => {
+  auth.fetchUser()
+  projects.load()
+})
+
+// Крошки задаёт страница; при уходе с неё сбрасываем
+watch(() => route.fullPath, () => (projects.crumbs = []))
+
+const link = 'flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+const activeLink = 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
 
 async function logout() {
   await auth.logout()
@@ -64,6 +74,18 @@ async function logout() {
         </RouterLink>
       </div>
       <nav class="flex flex-1 flex-col gap-4 overflow-auto p-2">
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center justify-between px-2 text-xs font-medium text-sidebar-foreground/60">
+            <RouterLink to="/projects" class="hover:text-sidebar-accent-foreground" @click="open = false">Проекты</RouterLink>
+            <RouterLink to="/projects?new=1" class="rounded p-0.5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" title="Новый проект" @click="open = false"><Icon name="plus" class="size-3.5" /></RouterLink>
+          </div>
+          <RouterLink v-for="p in projects.list" :key="p.id" :to="`/projects/${p.id}`" :class="link" :active-class="activeLink" @click="open = false">
+            <Icon name="folder" /><span class="truncate">{{ p.name }}</span>
+          </RouterLink>
+          <RouterLink v-if="projects.loaded && !projects.list.length" to="/projects?new=1" :class="link" class="text-sidebar-foreground/60" @click="open = false">
+            <Icon name="plus" />Создать проект
+          </RouterLink>
+        </div>
         <div v-for="g in visibleGroups" :key="g.title" class="flex flex-col gap-1">
           <div class="px-2 text-xs font-medium text-sidebar-foreground/60">{{ g.title }}</div>
           <RouterLink
@@ -105,11 +127,20 @@ async function logout() {
         <button class="inline-flex size-7 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground md:hidden" title="Меню" @click="open = true">
           <Icon name="panel" />
         </button>
-        <nav class="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <span>SystemKeeper</span><span>/</span><span class="text-foreground">{{ route.meta.title }}</span>
+        <nav class="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground">
+          <span>SystemKeeper</span>
+          <template v-if="projects.crumbs.length">
+            <template v-for="(c, i) in projects.crumbs" :key="i">
+              <span>/</span>
+              <RouterLink v-if="c.to" :to="c.to" class="truncate hover:text-foreground">{{ c.label }}</RouterLink>
+              <span v-else class="truncate text-foreground">{{ c.label }}</span>
+            </template>
+          </template>
+          <template v-else><span>/</span><span class="text-foreground">{{ route.meta.title }}</span></template>
         </nav>
       </header>
-      <RouterView />
+      <!-- key: переход между проектами в меню пересоздаёт страницу -->
+      <RouterView :key="route.path" />
     </div>
   </div>
 </template>

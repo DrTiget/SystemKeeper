@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, ApiError } from '@/api/client'
 import { type DatabaseConnection, type DbSchema, ENGINE_LABELS } from '@/api/databases'
@@ -9,6 +9,7 @@ import Modal from '@/components/Modal.vue'
 import DatabaseBackupForm from '@/components/databases/DatabaseBackupForm.vue'
 import DatabaseFormModal from '@/components/databases/DatabaseFormModal.vue'
 import ProvisionUserModal from '@/components/databases/ProvisionUserModal.vue'
+import { useProjectsStore } from '@/stores/projects'
 import { btnClass, formatDate } from '@/lib/ui'
 
 interface CheckResult {
@@ -24,6 +25,8 @@ const router = useRouter()
 const id = Number(route.params.id)
 
 const connection = ref<DatabaseConnection | null>(null)
+const projects = useProjectsStore()
+watch(connection, (c) => c && projects.setFor(c.project, { label: 'Базы данных', to: '/databases' }, c.name))
 const loadError = ref('')
 // Форма бекапа пересоздаётся после изменения подключения — чтобы заново получить список баз
 const formKey = ref(0)
@@ -95,8 +98,8 @@ const dt = 'text-xs text-muted-foreground'
 
 <template>
   <div class="flex max-w-4xl flex-col gap-6 p-4">
-    <RouterLink to="/databases" class="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground">
-      <Icon name="arrow-left" class="size-4" />Все базы данных
+    <RouterLink :to="connection?.project ? `/projects/${connection.project.id}` : '/databases'" class="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground">
+      <Icon name="arrow-left" class="size-4" />{{ connection?.project ? connection.project.name : 'Все базы данных' }}
     </RouterLink>
 
     <p v-if="loadError" class="text-sm text-destructive">{{ loadError }}</p>

@@ -11,7 +11,7 @@ const router = createRouter({
       component: () => import('@/layouts/AppLayout.vue'),
       meta: { auth: true },
       children: [
-        { path: '', name: 'dashboard', component: () => import('@/views/StubView.vue'), meta: { title: 'Дашборд' } },
+        { path: '', redirect: '/projects' },
         { path: 'projects', name: 'projects', component: () => import('@/views/ProjectsView.vue'), meta: { title: 'Проекты' } },
         { path: 'projects/:id(\\d+)', name: 'project', component: () => import('@/views/ProjectDetailView.vue'), meta: { title: 'Проекты' } },
         { path: 'servers', name: 'servers', component: () => import('@/views/ServersView.vue'), meta: { title: 'Сервера' } },
@@ -30,11 +30,11 @@ const router = createRouter({
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   if (to.meta.auth && !auth.token) return { name: 'login' }
-  if (to.meta.guest && auth.token) return { name: 'dashboard' }
+  if (to.meta.guest && auth.token) return { name: 'projects' }
   // Разделы администратора: API всё равно ответит 403, а здесь просто не пускаем на страницу
   if (to.matched.some((r) => r.meta.admin)) {
     if (!auth.user) await auth.fetchUser()
-    if (!auth.user?.is_admin) return { name: 'dashboard' }
+    if (!auth.user?.is_admin) return { name: 'projects' }
   }
 })
 

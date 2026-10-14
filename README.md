@@ -90,7 +90,7 @@ docker compose exec app php artisan user:create
 | PATCH | `/projects/{id}` | Изменить |
 | DELETE | `/projects/{id}` | Удалить; серверы и базы остаются без проекта |
 
-Состав проекта — `GET /servers?project_id={id}` и `GET /databases?project_id={id}` (`project_id=none` — без проекта).
+Состав проекта — `GET /servers?project_id={id}` и `GET /databases?project_id={id}` (`project_id=none` — без проекта). Бекапы всех серверов и баз проекта — `GET /projects/{id}/backups` (в каждом — `source`: `type`, `id`, `name`).
 
 ## API: серверы
 

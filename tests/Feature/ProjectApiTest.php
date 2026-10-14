@@ -75,4 +75,21 @@ class ProjectApiTest extends TestCase
 
         $this->patchJson("/api/v1/servers/{$server->id}", ['project_id' => null])->assertOk()->assertJsonPath('data.project', null);
     }
+
+    public function test_project_backups_include_servers_and_databases(): void
+    {
+        $project = Project::factory()->create();
+        $server = Server::factory()->create(['project_id' => $project->id]);
+        $db = DatabaseConnection::factory()->create(['project_id' => $project->id]);
+        $other = Server::factory()->create();
+        foreach ([$server, $db, $other] as $source) {
+            $source->backups()->create(['trigger' => 'manual', 'status' => 'success']);
+        }
+
+        $this->getJson("/api/v1/projects/{$project->id}/backups")
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.source', ['type' => 'database', 'id' => $db->id, 'name' => $db->name])
+            ->assertJsonPath('data.1.source.id', $server->id);
+    }
 }
