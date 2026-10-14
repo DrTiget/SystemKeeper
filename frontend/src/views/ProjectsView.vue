@@ -29,7 +29,7 @@ const sections = computed(() => {
   const match = (p: Project) => !q || p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q)
   return store.grouped
     .map((g) => ({ ...g, projects: g.projects.filter(match) }))
-    .filter((g) => (g.group ? !q || g.projects.length : g.projects.length))
+    .filter((g) => (g.group ? !q || g.projects.length : g.projects.length || (store.dragging !== null && store.groups.length)))
 })
 
 // Создание проекта: «+» в меню открывает /projects?new=1
@@ -87,7 +87,15 @@ onMounted(load)
     <input v-model="search" type="search" placeholder="Поиск по названию или описанию" :class="inputClass" class="max-w-sm" />
     <p v-if="loadError" class="text-sm text-destructive">{{ loadError }}</p>
 
-    <section v-for="g in sections" :key="g.group?.id ?? 'none'" class="grid gap-3">
+    <p v-if="store.groups.length" class="-mt-3 text-sm text-muted-foreground">Перетащите проект в другую группу, чтобы перенести его.</p>
+
+    <section
+      v-for="g in sections"
+      :key="g.group?.id ?? 'none'"
+      class="-m-2 grid gap-3 rounded-xl p-2 transition-colors"
+      :class="store.isDropTarget(g.group) && 'bg-accent/50 ring-2 ring-primary/60'"
+      v-bind="store.groups.length ? store.dropZone(g.group) : {}"
+    >
       <div v-if="g.group || store.groups.length" class="flex flex-wrap items-center gap-2">
         <h3 class="font-semibold">{{ g.group?.name ?? 'Без группы' }}</h3>
         <span class="text-sm text-muted-foreground">{{ g.projects.length }}</span>
@@ -98,7 +106,14 @@ onMounted(load)
         </template>
       </div>
       <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <RouterLink v-for="p in g.projects" :key="p.id" :to="{ name: 'project', params: { id: p.id } }" class="grid gap-3 rounded-xl border bg-card p-5 shadow-xs hover:border-primary/50">
+        <RouterLink
+          v-for="p in g.projects"
+          :key="p.id"
+          :to="{ name: 'project', params: { id: p.id } }"
+          class="grid gap-3 rounded-xl border bg-card p-5 shadow-xs hover:border-primary/50"
+          :class="store.dragging === p.id && 'opacity-50'"
+          v-bind="store.groups.length ? store.draggable(p.id) : {}"
+        >
           <div class="space-y-0.5">
             <h4 class="font-semibold">{{ p.name }}</h4>
             <p class="truncate text-sm text-muted-foreground">{{ p.description || ' ' }}</p>
@@ -108,7 +123,7 @@ onMounted(load)
             <span class="inline-flex items-center gap-1.5"><Icon name="database" class="size-4" />{{ p.databases_count }}</span>
           </div>
         </RouterLink>
-        <p v-if="g.group && !g.projects.length" class="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">В группе пока нет проектов</p>
+        <p v-if="!g.projects.length" class="rounded-xl border border-dashed p-5 text-sm text-muted-foreground">{{ g.group ? 'В группе пока нет проектов — перетащите сюда' : 'Перетащите сюда, чтобы убрать из группы' }}</p>
       </div>
     </section>
     <p v-if="store.loaded && !store.list.length && !store.groups.length" class="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">

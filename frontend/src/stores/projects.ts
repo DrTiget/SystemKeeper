@@ -48,5 +48,59 @@ export const useProjectsStore = defineStore('projects', () => {
     crumbs.value = project ? [{ label: project.name, to: `/projects/${project.id}` }, { label: name }] : [section, { label: name }]
   }
 
-  return { list, groups, grouped, loaded, crumbs, load, setFor, isCollapsed, toggle }
+  // Перенос проекта в группу перетаскиванием (меню и страница проектов)
+  const dragging = ref<number | null>(null)
+  const dropTarget = ref<string | null>(null)
+
+  async function moveProject(projectId: number, group: ProjectGroup | null) {
+    const project = list.value.find((p) => p.id === projectId)
+    const groupId = group?.id ?? null
+    if (!project || project.group_id === groupId) return
+    project.group_id = groupId // сразу в интерфейсе; при ошибке — перечитаем
+    try {
+      await api(`/projects/${projectId}`, { method: 'PATCH', body: { group_id: groupId } })
+    } finally {
+      await load()
+    }
+  }
+
+  /** Обработчики для элемента-группы, принимающего проекты. */
+  function dropZone(group: ProjectGroup | null): Record<string, unknown> {
+    const key = groupKey(group)
+    return {
+      onDragover: (e: DragEvent) => {
+        if (dragging.value === null) return
+        e.preventDefault()
+        dropTarget.value = key
+      },
+      onDragleave: () => {
+        if (dropTarget.value === key) dropTarget.value = null
+      },
+      onDrop: (e: DragEvent) => {
+        e.preventDefault()
+        const id = dragging.value
+        dragging.value = dropTarget.value = null
+        if (id !== null) moveProject(id, group)
+      },
+    }
+  }
+
+  /** Обработчики для перетаскиваемого проекта. */
+  function draggable(projectId: number): Record<string, unknown> {
+    return {
+      draggable: 'true',
+      onDragstart: (e: DragEvent) => {
+        dragging.value = projectId
+        e.dataTransfer?.setData('text/plain', String(projectId))
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+      },
+      onDragend: () => {
+        dragging.value = dropTarget.value = null
+      },
+    }
+  }
+
+  const isDropTarget = (g: ProjectGroup | null) => dropTarget.value === groupKey(g)
+
+  return { dragging, dropZone, draggable, isDropTarget, moveProject, list, groups, grouped, loaded, crumbs, load, setFor, isCollapsed, toggle }
 })

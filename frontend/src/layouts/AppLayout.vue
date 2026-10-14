@@ -74,10 +74,13 @@ async function logout() {
           </div>
           <template v-for="g in projects.grouped" :key="g.group?.id ?? 'none'">
             <!-- без группы: заголовок только если группы вообще есть -->
+            <!-- группа принимает перетаскиваемые проекты; «Без группы» видна и пустой, пока идёт перетаскивание -->
             <button
               v-if="g.group || projects.groups.length"
-              v-show="g.group || g.projects.length"
+              v-show="g.group || g.projects.length || projects.dragging !== null"
               class="mt-1 flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              :class="projects.isDropTarget(g.group) && 'bg-sidebar-accent text-sidebar-accent-foreground ring-1 ring-primary'"
+              v-bind="projects.dropZone(g.group)"
               @click="projects.toggle(g.group)"
             >
               <Icon name="chevron-right" class="size-3.5 transition-transform" :class="!projects.isCollapsed(g.group) && 'rotate-90'" />
@@ -91,6 +94,7 @@ async function logout() {
                 :to="`/projects/${p.id}`"
                 :class="[link, (g.group || projects.groups.length) && 'pl-6']"
                 :active-class="activeLink"
+                v-bind="projects.draggable(p.id)"
                 @click="open = false"
               >
                 <Icon name="folder" /><span class="truncate">{{ p.name }}</span>
