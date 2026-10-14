@@ -33,6 +33,14 @@ class BackupResource extends JsonResource
             /** @var list<array{name: string, size: int}> */
             'files' => $this->files ?? [],
             'size' => $this->size,
+            /** Копии по хранилищам: `status` — success | failed */
+            'copies' => $this->copies->map(fn ($c) => [
+                'storage_id' => $c->storage_id,
+                'name' => $c->storage?->name,
+                'type' => $c->storage?->type,
+                'status' => $c->status,
+                'error' => $c->error,
+            ])->values(),
             /** @var list<array{at: string, message: string}> */
             'log' => $this->log ?? [],
             'error' => $this->error,

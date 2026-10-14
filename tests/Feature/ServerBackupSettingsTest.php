@@ -43,7 +43,7 @@ class ServerBackupSettingsTest extends TestCase
                 'pre_command' => null,
                 'pre_command_timeout' => 300,
                 'pre_command_continue_on_error' => false,
-                'retention' => ['storage_id' => null, 'keep_count' => 7, 'max_size' => null],
+                'retention' => ['storage_ids' => [], 'keep_count' => 7, 'max_size' => null],
                 'updated_at' => null,
             ]]);
         $this->assertDatabaseCount('server_backup_settings', 0);

@@ -27,7 +27,9 @@ class UpdateBackupSettingsRequest extends FormRequest
             'pre_command' => ['sometimes', 'nullable', 'string', 'max:5000'],
             'pre_command_timeout' => ['sometimes', 'integer', 'between:10,86400'],
             'pre_command_continue_on_error' => ['sometimes', 'boolean'],
-            'storage_id' => ['sometimes', 'nullable', 'integer', Rule::exists('backup_storages', 'id')],
+            // Куда сохранять, можно несколько; пусто — в хранилище по умолчанию
+            'storage_ids' => ['sometimes', 'array', 'max:20'],
+            'storage_ids.*' => ['integer', 'distinct', Rule::exists('backup_storages', 'id')],
             // Сколько последних успешных бекапов хранить
             'keep_count' => ['sometimes', 'integer', 'between:1,1000'],
             // Предельный объём всех бекапов, байт (не меньше 1 МБ); null — без ограничения
@@ -80,7 +82,8 @@ class UpdateBackupSettingsRequest extends FormRequest
             'paths.*' => 'каталог',
             'excludes' => 'исключения',
             'excludes.*' => 'исключение',
-            'storage_id' => 'куда сохранять',
+            'storage_ids' => 'куда сохранять',
+            'storage_ids.*' => 'место хранения',
             'keep_count' => 'сколько бекапов хранить',
             'max_size' => 'лимит объёма',
             'schedule' => 'расписание',

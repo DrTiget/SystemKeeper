@@ -73,7 +73,9 @@ class DatabaseConnectionRequest extends FormRequest
             'options.no_owner' => ['sometimes', 'boolean'],
             'options.compress' => ['sometimes', 'boolean'],
 
-            'storage_id' => ['sometimes', 'nullable', 'integer', Rule::exists('backup_storages', 'id')],
+            // Куда сохранять, можно несколько; пусто — в хранилище по умолчанию
+            'storage_ids' => ['sometimes', 'array', 'max:20'],
+            'storage_ids.*' => ['integer', 'distinct', Rule::exists('backup_storages', 'id')],
             // Сколько последних успешных бекапов хранить
             'keep_count' => ['sometimes', 'integer', 'between:1,1000'],
             // Предельный объём всех бекапов, байт (не меньше 1 МБ); null — без ограничения
@@ -154,7 +156,8 @@ class DatabaseConnectionRequest extends FormRequest
             'schedule' => 'расписание',
             'databases' => 'базы',
             'databases.*' => 'база',
-            'storage_id' => 'куда сохранять',
+            'storage_ids' => 'куда сохранять',
+            'storage_ids.*' => 'место хранения',
             'keep_count' => 'сколько бекапов хранить',
             'max_size' => 'лимит объёма',
             'exclude_tables.*' => 'таблица',

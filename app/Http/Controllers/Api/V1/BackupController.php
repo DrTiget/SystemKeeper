@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\BackupResource;
 use App\Jobs\RunBackup;
 use App\Models\Backup;
-use App\Models\BackupStorage;
+use App\Models\BackupCopy;
 use App\Models\DatabaseConnection;
 use App\Models\Project;
 use App\Models\Server;
@@ -36,7 +36,7 @@ class BackupController extends Controller
             ->where(fn ($q) => $q
                 ->where(fn ($q) => $q->where('source_type', 'server')->whereIn('source_id', $project->servers()->select('id')))
                 ->orWhere(fn ($q) => $q->where('source_type', 'database')->whereIn('source_id', $project->databases()->select('id'))))
-            ->with(['user', 'source'])
+            ->with(['user', 'source', 'copies.storage'])
             ->latest('id')
             ->paginate($request->integer('per_page', 20));
 
@@ -78,7 +78,7 @@ class BackupController extends Controller
 
     public function show(Backup $backup): BackupResource
     {
-        return new BackupResource($backup->load('user'));
+        return new BackupResource($backup->load(['user', 'copies.storage']));
     }
 
     /** Удаляет запись и файлы бекапа. 409 — бекап ещё выполняется. */
@@ -90,12 +90,19 @@ class BackupController extends Controller
         return response()->noContent();
     }
 
-    /** Скачать файл бекапа (имя — из `files[].name`); из облачного хранилища — потоком через SystemKeeper. */
-    public function download(Backup $backup, string $file): StreamedResponse
+    /**
+     * Скачать файл бекапа (имя — из `files[].name`). Берётся удачная копия — с диска SystemKeeper, если она там есть,
+     * иначе из облака потоком через SystemKeeper; `storage_id` — из конкретного хранилища.
+     */
+    public function download(Request $request, Backup $backup, string $file): StreamedResponse
     {
         abort_unless($backup->path && in_array($file, array_column($backup->files ?? [], 'name'), true), 404, 'Файл не найден.');
 
-        $fs = ($backup->storage ?? BackupStorage::default())->filesystem();
+        $storage = $request->filled('storage_id')
+            ? $backup->copies->where('status', BackupCopy::SUCCESS)->firstWhere('storage_id', $request->integer('storage_id'))?->storage
+            : $backup->readableStorage();
+        abort_if($storage === null, 404, 'Копии бекапа нет.');
+        $fs = $storage->filesystem();
         $path = $backup->path.'/'.$file;
         try {
             abort_unless($fs->exists($path), 404, 'Файл не найден.');
@@ -113,7 +120,7 @@ class BackupController extends Controller
         $request->validate(['per_page' => ['nullable', 'integer', 'min:1', 'max:100']]);
 
         return BackupResource::collection(
-            Backup::query()->whereMorphedTo('source', $source)->with('user')->latest('id')->paginate($request->integer('per_page', 20)),
+            Backup::query()->whereMorphedTo('source', $source)->with(['user', 'copies.storage'])->latest('id')->paginate($request->integer('per_page', 20)),
         );
     }
 
@@ -126,6 +133,6 @@ class BackupController extends Controller
         $backup->source()->associate($source)->save();
         RunBackup::dispatch($backup);
 
-        return (new BackupResource($backup->load('user')))->response()->setStatusCode(202);
+        return (new BackupResource($backup->load(['user', 'copies.storage'])))->response()->setStatusCode(202);
     }
 }

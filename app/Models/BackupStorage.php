@@ -7,6 +7,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Storage;
 
@@ -40,9 +41,15 @@ class BackupStorage extends Model
         return app(StorageFilesystems::class)->for($this);
     }
 
-    public function backups(): HasMany
+    /** Бекапы, у которых есть удачная копия в этом хранилище */
+    public function backups(): BelongsToMany
     {
-        return $this->hasMany(Backup::class, 'storage_id');
+        return $this->belongsToMany(Backup::class, 'backup_copies', 'storage_id')->wherePivot('status', BackupCopy::SUCCESS);
+    }
+
+    public function copies(): HasMany
+    {
+        return $this->hasMany(BackupCopy::class, 'storage_id');
     }
 
     /**
@@ -54,13 +61,13 @@ class BackupStorage extends Model
     public function sources(): array
     {
         $isDefault = $this->is(self::default());
-        $mine = fn (?int $storageId) => $storageId === $this->id || ($storageId === null && $isDefault);
+        $mine = fn (?array $ids) => in_array($this->id, $ids ?? [], true) || (! $ids && $isDefault);
 
-        $usage = Backup::query()->where('storage_id', $this->id)->where('status', Backup::SUCCESS)
+        $usage = Backup::query()->whereHas('copies', fn ($q) => $q->where('storage_id', $this->id)->where('status', BackupCopy::SUCCESS))->where('status', Backup::SUCCESS)
             ->selectRaw('source_type, source_id, SUM(size) as used, COUNT(*) as cnt')->groupBy('source_type', 'source_id')
             ->get()->keyBy(fn ($r) => $r->source_type.':'.$r->source_id);
 
-        $row = fn (string $type, Model $m, int $keep, ?int $max) => [
+        $row = fn (string $type, Model $m, int $keep, ?int $max, ?array $ids) => [
             'type' => $type,
             'id' => $m->id,
             'name' => $m->name,
@@ -73,18 +80,19 @@ class BackupStorage extends Model
             'backups_count' => (int) ($usage[$type.':'.$m->id]->cnt ?? 0),
             'keep_count' => $keep,
             'max_size' => $max,
+            'storage_ids' => $ids ?? [],
         ];
 
         $rows = [];
         foreach (Server::query()->with(['backupSettings', 'project.group'])->orderBy('name')->get() as $server) {
             $s = $server->backupSettingsOrDefault();
-            if ($mine($s->storage_id) || isset($usage['server:'.$server->id])) {
-                $rows[] = $row('server', $server, $s->keep_count, $s->max_size);
+            if ($mine($s->storage_ids) || isset($usage['server:'.$server->id])) {
+                $rows[] = $row('server', $server, $s->keep_count, $s->max_size, $s->storage_ids);
             }
         }
         foreach (DatabaseConnection::query()->with('project.group')->orderBy('name')->get() as $db) {
-            if ($mine($db->storage_id) || isset($usage['database:'.$db->id])) {
-                $rows[] = $row('database', $db, $db->keep_count, $db->max_size);
+            if ($mine($db->storage_ids) || isset($usage['database:'.$db->id])) {
+                $rows[] = $row('database', $db, $db->keep_count, $db->max_size, $db->storage_ids);
             }
         }
 

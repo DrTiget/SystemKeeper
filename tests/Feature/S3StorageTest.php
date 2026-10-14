@@ -86,17 +86,17 @@ class S3StorageTest extends TestCase
     {
         $id = $this->createS3();
         $server = Server::factory()->create();
-        $server->backupSettings()->create(['enabled' => false, 'paths' => ['/var/www'], 'excludes' => [], 'schedule' => '0 3 * * *', 'pre_command_timeout' => 60, 'storage_id' => $id]);
+        $server->backupSettings()->create(['enabled' => false, 'paths' => ['/var/www'], 'excludes' => [], 'schedule' => '0 3 * * *', 'pre_command_timeout' => 60, 'storage_ids' => [$id]]);
 
         $bid = $this->postJson("/api/v1/servers/{$server->id}/backups")->assertStatus(202)->json('data.id');
         $backup = Backup::find($bid);
 
         $this->assertSame(Backup::SUCCESS, $backup->status);
-        $this->assertSame($id, $backup->storage_id);
+        $this->assertSame([$id], $backup->copies->pluck('storage_id')->all());
         $this->bucket->assertExists($backup->path.'/files.tar.gz');
         $this->assertSame('TARDATA', $this->bucket->get($backup->path.'/files.tar.gz'));
         Storage::disk('backups')->assertMissing($backup->path);
-        $this->assertContains('Загружено', array_column($backup->log, 'message'));
+        $this->assertContains('Загружено в «Яндекс»', array_column($backup->log, 'message'));
 
         $this->getJson("/api/v1/backups/{$bid}/files/files.tar.gz")->assertOk()->assertDownload('files.tar.gz');
 
@@ -125,5 +125,49 @@ class S3StorageTest extends TestCase
 
         $this->getJson('/api/v1/storages/'.BackupStorage::default()->id)
             ->assertJsonPath('data.sources.0.project', ['id' => $project->id, 'name' => 'Магазин', 'group' => ['id' => $group->id, 'name' => 'Клиенты']]);
+    }
+
+    public function test_backup_to_disk_and_bucket_with_partial_failure(): void
+    {
+        $s3 = $this->createS3();
+        $local = BackupStorage::default()->id;
+        $server = Server::factory()->create();
+        $server->backupSettings()->create(['enabled' => false, 'paths' => ['/var/www'], 'excludes' => [], 'schedule' => '0 3 * * *', 'pre_command_timeout' => 60, 'storage_ids' => [$local, $s3]]);
+
+        $bid = $this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id');
+        $backup = Backup::find($bid);
+        $this->assertSame(Backup::SUCCESS, $backup->status);
+        Storage::disk('backups')->assertExists($backup->path.'/files.tar.gz');
+        $this->bucket->assertExists($backup->path.'/files.tar.gz');
+        $this->getJson("/api/v1/backups/{$bid}")
+            ->assertJsonCount(2, 'data.copies')
+            ->assertJsonPath('data.copies.0', ['storage_id' => $local, 'name' => 'SystemKeeper', 'type' => 'local', 'status' => 'success', 'error' => null]);
+        $this->getJson("/api/v1/storages/{$s3}")->assertJsonPath('data.used', 7)->assertJsonPath('data.sources.0.storage_ids', [$local, $s3]);
+        $this->getJson("/api/v1/backups/{$bid}/files/files.tar.gz?storage_id={$s3}")->assertOk();
+
+        // облако недоступно — бекап всё равно удачный (есть копия на диске), ошибка — в копии
+        $this->app->instance(StorageFilesystems::class, new class extends StorageFilesystems
+        {
+            public function for(BackupStorage $storage): Filesystem
+            {
+                if ($storage->type === BackupStorage::S3) {
+                    throw new \RuntimeException('connection refused');
+                }
+
+                return parent::for($storage);
+            }
+        });
+        $bid = $this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id');
+        $this->getJson("/api/v1/backups/{$bid}")
+            ->assertJsonPath('data.status', 'success')
+            ->assertJsonPath('data.copies.1.status', 'failed')
+            ->assertJsonPath('data.copies.1.error', 'Не удалось загрузить в «Яндекс»: connection refused');
+
+        // выбрано только облако — и оно недоступно: бекап неудачный, локальная копия убрана
+        $server->backupSettings->update(['storage_ids' => [$s3]]);
+        $bid = $this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id');
+        $failed = Backup::find($bid);
+        $this->assertSame(Backup::FAILED, $failed->status);
+        Storage::disk('backups')->assertMissing($failed->path);
     }
 }

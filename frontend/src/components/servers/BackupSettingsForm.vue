@@ -33,7 +33,7 @@ const form = reactive({
   pre_command: '',
   pre_command_timeout: 300,
   pre_command_continue_on_error: false,
-  retention: { storage_id: null, keep_count: 7, max_size: null } as Retention,
+  retention: { storage_ids: [], keep_count: 7, max_size: null } as Retention,
 })
 const newExclude = ref('')
 const newPath = ref('')

@@ -54,9 +54,9 @@ class BackupStorageController extends Controller
     public function destroy(BackupStorage $storage): Response
     {
         abort_if($storage->type === BackupStorage::LOCAL, 409, 'Диск SystemKeeper удалить нельзя.');
-        abort_if($storage->backups()->exists(), 409, 'В хранилище есть бекапы — сначала удалите их или дождитесь, пока их вытеснят новые.');
-        $used = ServerBackupSettings::query()->where('storage_id', $storage->id)->exists()
-            || DatabaseConnection::query()->where('storage_id', $storage->id)->exists();
+        abort_if($storage->copies()->exists(), 409, 'В хранилище есть бекапы — сначала удалите их или дождитесь, пока их вытеснят новые.');
+        $used = ServerBackupSettings::query()->whereJsonContains('storage_ids', $storage->id)->exists()
+            || DatabaseConnection::query()->whereJsonContains('storage_ids', $storage->id)->exists();
         abort_if($used, 409, 'Хранилище выбрано у серверов или баз данных — сначала переключите их на другое.');
 
         $storage->delete();

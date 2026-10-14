@@ -17,7 +17,7 @@ class BackupStorageResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        $backups = $this->backups()->where('status', Backup::SUCCESS);
+        $backups = $this->backups()->where('backups.status', Backup::SUCCESS);
 
         return [
             'id' => $this->id,
@@ -38,7 +38,7 @@ class BackupStorageResource extends JsonResource
             /** Диск хранилища, байт; null — неизвестно */
             'disk' => $this->disk(),
             /** Занято бекапами, байт */
-            'used' => (int) $backups->clone()->sum('size'),
+            'used' => (int) $backups->clone()->sum('backups.size'),
             'backups_count' => $backups->clone()->count(),
             /**
              * Что бекапится в это хранилище: занятый объём и настройки хранения каждого источника.

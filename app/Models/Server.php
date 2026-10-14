@@ -50,7 +50,7 @@ class Server extends Model
     {
         $s = $this->backupSettingsOrDefault();
 
-        return new Retention($s->storage_id, $s->keep_count, $s->max_size);
+        return new Retention($s->storage_ids ?? [], $s->keep_count, $s->max_size);
     }
 
     public function project(): BelongsTo

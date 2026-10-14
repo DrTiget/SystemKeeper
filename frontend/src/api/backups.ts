@@ -28,8 +28,8 @@ export interface Backup {
 export interface BackupDetail extends Backup {
   /** Сервер или база данных, а также проект — для ссылок и хлебных крошек */
   source?: { type: 'server' | 'database'; id: number; name: string; project?: ProjectRef | null } | null
-  /** Куда сохранён: диск SystemKeeper, S3… */
-  storage?: { id: number; name: string; type: string } | null
+  /** Копии по местам хранения: диск SystemKeeper, S3… */
+  copies: BackupCopy[]
   /** Каталог бекапа внутри хранилища */
   path?: string | null
   /** Файлы с контрольными суммами */
@@ -50,6 +50,14 @@ export interface BackupDetail extends Backup {
   source_info?: { host?: string | null; version?: string | null } | null
   /** Хранение: место среди хранимых копий источника (1 — самый новый) и его правила хранения */
   retention?: { position: number; keep_count: number; max_size: number | null } | null
+}
+
+export interface BackupCopy {
+  storage_id: number
+  name: string | null
+  type: 'local' | 's3' | null
+  status: 'success' | 'failed'
+  error: string | null
 }
 
 export const isActive = (b: Backup) => b.status === 'queued' || b.status === 'running'

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Exceptions\Ssh\SshConnectionException;
 use App\Models\Backup;
+use App\Models\BackupCopy;
 use App\Models\BackupStorage;
 use App\Models\DatabaseConnection;
 use App\Models\Server;
@@ -15,6 +16,7 @@ use App\Services\Database\DatabaseException;
 use App\Support\Bytes;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
@@ -47,24 +49,23 @@ class RunBackup implements ShouldQueue
             return;
         }
 
-        $storage = $source->retention()->storage();
-        $backup->forceFill(['status' => Backup::RUNNING, 'started_at' => now(), 'storage_id' => $storage->id, 'path' => self::pathFor($backup)])->save();
+        $storages = $source->retention()->storages();
+        $backup->forceFill(['status' => Backup::RUNNING, 'started_at' => now(), 'path' => self::pathFor($backup)])->save();
 
         try {
             // Файлы сначала пишутся на локальный диск (в облако — уже готовыми), поэтому место нужно и там
-            $free = BackupStorage::default()->disk()['free'] ?? null;
+            $local = BackupStorage::default();
+            $free = $local->disk()['free'] ?? null;
             $min = (int) config('backup.min_free_space');
             if ($free !== null && $free < $min) {
-                throw new BackupException('В «'.$storage->name.'» свободно '.Bytes::format($free).' — меньше минимума '.Bytes::format($min).'.');
+                throw new BackupException('В «'.$local->name.'» свободно '.Bytes::format($free).' — меньше минимума '.Bytes::format($min).'.');
             }
 
             match (true) {
                 $source instanceof Server => $servers->run($source, $backup),
                 $source instanceof DatabaseConnection => $databases->run($source, $backup),
             };
-            if ($storage->type !== BackupStorage::LOCAL) {
-                $this->upload($storage);
-            }
+            $this->distribute($storages);
             $backup->forceFill(['status' => Backup::SUCCESS, 'finished_at' => now()])->save();
         } catch (BackupException|DatabaseException|SshConnectionException $e) {
             $this->markFailed($e->getMessage());
@@ -79,24 +80,49 @@ class RunBackup implements ShouldQueue
         }
     }
 
-    /** Выгружает готовые файлы с локального диска в облачное хранилище и удаляет локальную копию. */
-    private function upload(BackupStorage $storage): void
+    /**
+     * Раскладывает готовые файлы по выбранным хранилищам: на диске SystemKeeper они уже лежат, в облака — загружаются.
+     * Неудача в части мест — предупреждение в журнале; если не удалось никуда — ошибка бекапа.
+     *
+     * @param  Collection<int, BackupStorage>  $storages
+     */
+    private function distribute(Collection $storages): void
     {
         $backup = $this->backup;
         $local = Storage::disk('backups');
-        $backup->appendLog("Загружаем в «{$storage->name}»");
-        try {
-            $fs = $storage->filesystem();
-            foreach ($backup->files ?? [] as $file) {
-                $stream = $local->readStream($backup->path.'/'.$file['name']);
-                $fs->writeStream($backup->path.'/'.$file['name'], $stream);
-                is_resource($stream) && fclose($stream);
+        $errors = [];
+
+        foreach ($storages as $storage) {
+            if ($storage->type === BackupStorage::LOCAL) {
+                $backup->copies()->create(['storage_id' => $storage->id, 'status' => BackupCopy::SUCCESS]);
+
+                continue;
             }
-        } catch (Throwable $e) {
-            throw new BackupException("Не удалось загрузить в «{$storage->name}»: ".$e->getMessage(), previous: $e);
+            $backup->appendLog("Загружаем в «{$storage->name}»");
+            try {
+                $fs = $storage->filesystem();
+                foreach ($backup->files ?? [] as $file) {
+                    $stream = $local->readStream($backup->path.'/'.$file['name']);
+                    $fs->writeStream($backup->path.'/'.$file['name'], $stream);
+                    is_resource($stream) && fclose($stream);
+                }
+                $backup->copies()->create(['storage_id' => $storage->id, 'status' => BackupCopy::SUCCESS]);
+                $backup->appendLog("Загружено в «{$storage->name}»");
+            } catch (Throwable $e) {
+                $error = "Не удалось загрузить в «{$storage->name}»: ".mb_substr($e->getMessage(), 0, 1000);
+                $backup->copies()->create(['storage_id' => $storage->id, 'status' => BackupCopy::FAILED, 'error' => $error]);
+                $backup->appendLog($error);
+                $errors[] = $error;
+            }
         }
-        $local->deleteDirectory($backup->path);
-        $backup->appendLog('Загружено');
+
+        // Локальная копия нужна, только если диск SystemKeeper среди выбранных
+        if (! $storages->contains(fn (BackupStorage $s) => $s->type === BackupStorage::LOCAL)) {
+            $local->deleteDirectory($backup->path);
+        }
+        if (count($errors) === $storages->count()) {
+            throw new BackupException(implode("\n", $errors));
+        }
     }
 
     /** Задача упала вне handle() — например, по таймауту. */

@@ -20,7 +20,7 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'project_id', 'name', 'description', 'engine', 'via', 'server_id', 'docker_container', 'host', 'port', 'username', 'password',
     'maintenance_database', 'backup_enabled', 'schedule', 'databases', 'exclude_tables', 'schema_only_tables', 'options',
-    'last_checked_at', 'last_check_status', 'last_check_error', 'server_version', 'storage_id', 'keep_count', 'max_size',
+    'last_checked_at', 'last_check_status', 'last_check_error', 'server_version', 'storage_ids', 'keep_count', 'max_size',
 ])]
 #[Hidden(['password'])]
 class DatabaseConnection extends Model
@@ -89,20 +89,16 @@ class DatabaseConnection extends Model
             'schema_only_tables' => 'array',
             'options' => 'array',
             'last_checked_at' => 'datetime',
+            'storage_ids' => 'array',
             'keep_count' => 'integer',
             'max_size' => 'integer',
         ];
     }
 
-    public function storage(): BelongsTo
-    {
-        return $this->belongsTo(BackupStorage::class);
-    }
-
     /** Настройки хранения бекапов: хранилище, сколько копий держать и предельный объём. */
     public function retention(): Retention
     {
-        return new Retention($this->storage_id, $this->keep_count, $this->max_size);
+        return new Retention($this->storage_ids ?? [], $this->keep_count, $this->max_size);
     }
 
     public function server(): BelongsTo

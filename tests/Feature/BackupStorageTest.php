@@ -56,12 +56,12 @@ class BackupStorageTest extends TestCase
     public function test_retention_settings_are_saved_and_validated(): void
     {
         $storage = BackupStorage::default();
-        $this->putJson("/api/v1/servers/{$this->server->id}/backup-settings", ['keep_count' => 3, 'max_size' => 10 * 1024 ** 2, 'storage_id' => $storage->id])
+        $this->putJson("/api/v1/servers/{$this->server->id}/backup-settings", ['keep_count' => 3, 'max_size' => 10 * 1024 ** 2, 'storage_ids' => [$storage->id]])
             ->assertOk()
-            ->assertJsonPath('data.retention', ['storage_id' => $storage->id, 'keep_count' => 3, 'max_size' => 10 * 1024 ** 2]);
+            ->assertJsonPath('data.retention', ['storage_ids' => [$storage->id], 'keep_count' => 3, 'max_size' => 10 * 1024 ** 2]);
 
-        $this->putJson("/api/v1/servers/{$this->server->id}/backup-settings", ['keep_count' => 0, 'max_size' => 100, 'storage_id' => 999])
-            ->assertStatus(422)->assertJsonValidationErrors(['keep_count', 'max_size', 'storage_id']);
+        $this->putJson("/api/v1/servers/{$this->server->id}/backup-settings", ['keep_count' => 0, 'max_size' => 100, 'storage_ids' => [999]])
+            ->assertStatus(422)->assertJsonValidationErrors(['keep_count', 'max_size', 'storage_ids.0']);
 
         $db = DatabaseConnection::factory()->create();
         $this->patchJson("/api/v1/databases/{$db->id}", ['keep_count' => 2, 'max_size' => null])
@@ -79,7 +79,7 @@ class BackupStorageTest extends TestCase
         Storage::disk('backups')->assertMissing($first->path);
         $this->assertSame(2, $this->server->backups()->count());
         $this->assertStringContainsString('хранится 2 последних', collect($third->fresh()->log)->last()['message']);
-        $this->assertSame(BackupStorage::default()->id, $third->fresh()->storage_id);
+        $this->assertSame([BackupStorage::default()->id], $third->fresh()->copies->pluck('storage_id')->all());
     }
 
     public function test_size_limit_evicts_oldest_but_never_the_newest(): void

@@ -3,7 +3,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { api } from '@/api/client'
 import { type BackupStorage, type Retention, STORAGE_TYPE_LABELS } from '@/api/storages'
 import Icon from '@/components/Icon.vue'
-import SelectMenu from '@/components/SelectMenu.vue'
 import SegmentedControl from '@/components/form/SegmentedControl.vue'
 import { formatBytes, inputClass } from '@/lib/ui'
 
@@ -44,26 +43,41 @@ onMounted(async () => {
     // список не загрузился — останется хранилище по умолчанию
   }
 })
-const storageOptions = computed(() =>
-  storages.value.map((s) => ({
-    value: s.id,
-    label: s.name,
-    hint: `${STORAGE_TYPE_LABELS[s.type]}${s.disk ? ` · свободно ${formatBytes(s.disk.free)}` : ''}`,
-  })),
+// Куда сохранять — можно несколько мест; пустой список на сервере значит «место по умолчанию»
+const selected = computed(() =>
+  model.value.storage_ids.length ? model.value.storage_ids : storages.value.filter((s) => s.is_default).map((s) => s.id),
 )
-const storageId = computed({
-  get: () => model.value.storage_id ?? storages.value.find((s) => s.is_default)?.id ?? null,
-  set: (v) => (model.value = { ...model.value, storage_id: v }),
-})
+function toggleStorage(id: number) {
+  const ids = selected.value.includes(id) ? selected.value.filter((x) => x !== id) : [...selected.value, id]
+  if (!ids.length) return // хотя бы одно место
+  model.value = { ...model.value, storage_ids: storages.value.filter((s) => ids.includes(s.id)).map((s) => s.id) }
+}
+const storageHint = (s: BackupStorage) =>
+  s.disk ? `${STORAGE_TYPE_LABELS[s.type]} · свободно ${formatBytes(s.disk.free)}` : s.s3 ? `S3 · ${s.s3.bucket}${s.s3.prefix ? '/' + s.s3.prefix : ''}` : STORAGE_TYPE_LABELS[s.type]
 
 const unitOptions = (Object.keys(UNITS) as Unit[]).map((u) => ({ value: u, label: u }))
 </script>
 
 <template>
   <div class="grid gap-4">
-    <div v-if="storages.length > 1" class="grid max-w-sm gap-2">
+    <div v-if="storages.length > 1" class="grid gap-2">
       <span class="text-sm font-medium">Куда сохранять</span>
-      <SelectMenu v-model="storageId as number" :options="storageOptions" />
+      <div class="grid gap-2 sm:grid-cols-2">
+        <label
+          v-for="s in storages"
+          :key="s.id"
+          class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 has-checked:border-primary has-checked:bg-accent/50"
+          :class="selected.length === 1 && selected.includes(s.id) && 'cursor-default'"
+        >
+          <input type="checkbox" class="mt-0.5 size-4 accent-primary" :checked="selected.includes(s.id)" :disabled="selected.length === 1 && selected.includes(s.id)" @change="toggleStorage(s.id)" />
+          <span class="grid min-w-0 gap-0.5">
+            <span class="flex items-center gap-1.5 text-sm font-medium"><Icon :name="s.type === 'local' ? 'hard-drive' : 'archive'" class="size-4 text-muted-foreground" />{{ s.name }}</span>
+            <span class="truncate text-xs text-muted-foreground">{{ storageHint(s) }}</span>
+          </span>
+        </label>
+      </div>
+      <p class="text-xs text-muted-foreground">Можно выбрать несколько — копия бекапа сохранится в каждое. Бекап удачный, если сохранился хотя бы в одно место.</p>
+      <p v-for="m in [...(errors?.storage_ids ?? []), ...Object.entries(errors ?? {}).filter(([k]) => k.startsWith('storage_ids.')).flatMap(([, v]) => v)]" :key="m" class="text-sm text-destructive">{{ m }}</p>
     </div>
     <p v-else-if="storages.length" class="flex items-center gap-2 text-sm text-muted-foreground">
       <Icon name="hard-drive" class="size-4" />

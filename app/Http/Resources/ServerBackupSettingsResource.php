@@ -27,7 +27,8 @@ class ServerBackupSettingsResource extends JsonResource
             'pre_command_timeout' => $this->pre_command_timeout,
             'pre_command_continue_on_error' => $this->pre_command_continue_on_error,
             'retention' => [
-                'storage_id' => $this->storage_id,
+                /** Куда сохранять; пусто — в хранилище по умолчанию */
+                'storage_ids' => $this->storage_ids ?? [],
                 'keep_count' => $this->keep_count,
                 /** Лимит объёма, байт; null — без ограничения */
                 'max_size' => $this->max_size,

@@ -26,7 +26,7 @@ const form = reactive({
   databases: [] as string[],
   schedule: '',
   options: {} as DatabaseConnection['backup']['options'],
-  retention: { storage_id: null, keep_count: 7, max_size: null } as Retention,
+  retention: { storage_ids: [], keep_count: 7, max_size: null } as Retention,
 })
 /** Режим таблиц «база.таблица»: schema — только структура, skip — пропустить. Нет записи — целиком. */
 const tableMode = reactive<Record<string, Exclude<TableMode, 'data'>>>({})

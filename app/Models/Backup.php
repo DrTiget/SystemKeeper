@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -14,7 +15,7 @@ use Throwable;
  * Запуск бекапа сервера или базы данных: статус, журнал и получившиеся файлы.
  * Файлы лежат на диске `backups` в каталоге `path`.
  */
-#[Fillable(['trigger', 'status', 'user_id', 'storage_id', 'started_at', 'finished_at', 'path', 'files', 'size', 'log', 'error'])]
+#[Fillable(['trigger', 'status', 'user_id', 'started_at', 'finished_at', 'path', 'files', 'size', 'log', 'error'])]
 class Backup extends Model
 {
     public const TRIGGER_MANUAL = 'manual';
@@ -53,9 +54,17 @@ class Backup extends Model
         return $this->morphTo();
     }
 
-    public function storage(): BelongsTo
+    /** Копии бекапа по хранилищам */
+    public function copies(): HasMany
     {
-        return $this->belongsTo(BackupStorage::class);
+        return $this->hasMany(BackupCopy::class);
+    }
+
+    /** Хранилище, откуда отдавать файлы: удачная копия, диск SystemKeeper — в первую очередь. */
+    public function readableStorage(): ?BackupStorage
+    {
+        return $this->copies->where('status', BackupCopy::SUCCESS)->map->storage->filter()
+            ->sortBy(fn (BackupStorage $s) => $s->type === BackupStorage::LOCAL ? 0 : 1)->first();
     }
 
     /** Удаляет файлы, оставляя запись в истории (неудачный бекап, вытесненный по объёму). */
@@ -66,7 +75,7 @@ class Backup extends Model
     }
 
     /**
-     * Удаляет каталог бекапа в его хранилище и локальную копию (во время выгрузки в облако она лежит на диске).
+     * Удаляет каталог бекапа во всех хранилищах копий и на локальном диске (там файлы лежат, пока выгружаются в облака).
      * Ошибку облака не пробрасываем — запись всё равно удаляется, а потерянные файлы попадут в лог.
      */
     private function removeStoredFiles(): void
@@ -75,13 +84,16 @@ class Backup extends Model
             return;
         }
         Storage::disk('backups')->deleteDirectory($this->path);
-        if ($this->storage && $this->storage->type !== BackupStorage::LOCAL) {
-            try {
-                $this->storage->filesystem()->deleteDirectory($this->path);
-            } catch (Throwable $e) {
-                Log::warning('Не удалось удалить файлы бекапа в облаке', ['backup' => $this->id, 'path' => $this->path, 'error' => $e->getMessage()]);
+        foreach ($this->copies()->with('storage')->get() as $copy) {
+            if ($copy->storage && $copy->storage->type !== BackupStorage::LOCAL) {
+                try {
+                    $copy->storage->filesystem()->deleteDirectory($this->path);
+                } catch (Throwable $e) {
+                    Log::warning('Не удалось удалить файлы бекапа в облаке', ['backup' => $this->id, 'storage' => $copy->storage_id, 'path' => $this->path, 'error' => $e->getMessage()]);
+                }
             }
         }
+        $this->copies()->delete();
     }
 
     public function user(): BelongsTo

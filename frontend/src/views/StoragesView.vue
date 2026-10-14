@@ -28,14 +28,14 @@ const pct = (part: number, total: number) => `${Math.min(100, Math.max(0, (part 
 
 // Настройки хранения источника
 const editing = ref<StorageSource | null>(null)
-const retention = ref<Retention>({ storage_id: null, keep_count: 7, max_size: null })
+const retention = ref<Retention>({ storage_ids: [], keep_count: 7, max_size: null })
 const saving = ref(false)
 const errors = ref<Record<string, string[]>>({})
 const saveError = ref('')
 
 function edit(s: StorageSource, storage: BackupStorage) {
   editing.value = s
-  retention.value = { storage_id: storage.id, keep_count: s.keep_count, max_size: s.max_size }
+  retention.value = { storage_ids: s.storage_ids.length ? [...s.storage_ids] : [storage.id], keep_count: s.keep_count, max_size: s.max_size }
   errors.value = {}
   saveError.value = ''
 }

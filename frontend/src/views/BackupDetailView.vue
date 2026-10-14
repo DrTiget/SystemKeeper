@@ -166,6 +166,16 @@ const dt = 'text-xs text-muted-foreground'
               <dt :class="dt">Длительность</dt>
               <dd>{{ backupDuration(backup) }}</dd>
             </div>
+            <div v-if="backup.copies.length" class="grid gap-1">
+              <dt :class="dt">Где лежит</dt>
+              <dd v-for="c in backup.copies" :key="c.storage_id" class="flex items-start gap-1.5" :title="c.error ?? ''">
+                <span class="mt-1.5 size-2 shrink-0 rounded-full" :class="c.status === 'success' ? 'bg-emerald-500' : 'bg-destructive'" />
+                <span class="min-w-0">
+                  {{ c.name ?? 'удалённое место' }}
+                  <span v-if="c.status === 'failed'" class="block text-xs break-words text-destructive">{{ c.error }}</span>
+                </span>
+              </dd>
+            </div>
             <div class="grid gap-0.5">
               <dt :class="dt">Размер</dt>
               <dd>{{ backup.size !== null ? formatBytes(backup.size) : '—' }}<span v-if="backup.files.length" class="text-muted-foreground"> · файлов: {{ backup.files.length }}</span></dd>

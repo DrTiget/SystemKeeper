@@ -1,5 +1,6 @@
 export interface Retention {
-  storage_id: number | null
+  /** куда сохранять; пусто — в место по умолчанию */
+  storage_ids: number[]
   keep_count: number
   /** байт; null — без ограничения */
   max_size: number | null
@@ -14,6 +15,7 @@ export interface StorageSource {
   backups_count: number
   keep_count: number
   max_size: number | null
+  storage_ids: number[]
 }
 
 export interface BackupStorage {
