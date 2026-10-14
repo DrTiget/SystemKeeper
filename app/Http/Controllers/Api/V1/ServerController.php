@@ -21,16 +21,20 @@ use Throwable;
 class ServerController extends Controller
 {
     /**
-     * Список серверов по названию; `search` — по названию, хосту и описанию.
+     * Список серверов по названию; `search` — по названию, хосту и описанию; `project_id` — серверы проекта (`none` — без проекта).
      */
     public function index(Request $request): AnonymousResourceCollection
     {
         $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
+            // id проекта; `none` — серверы без проекта
+            'project_id' => ['nullable', 'string', 'regex:/^(\d+|none)$/'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         $servers = Server::query()
+            ->with('project')
+            ->when($request->input('project_id'), fn ($q, $p) => $p === 'none' ? $q->whereNull('project_id') : $q->where('project_id', (int) $p))
             ->when($request->string('search')->trim()->value(), fn ($q, $s) => $q->where(
                 fn ($q) => $q->where('name', 'like', "%{$s}%")->orWhere('host', 'like', "%{$s}%")->orWhere('description', 'like', "%{$s}%"),
             ))

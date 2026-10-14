@@ -3,18 +3,20 @@ import { computed, reactive, ref, watch } from 'vue'
 import { api, ApiError } from '@/api/client'
 import type { AuthType, Server } from '@/api/servers'
 import Modal from '@/components/Modal.vue'
+import ProjectSelect from '@/components/ProjectSelect.vue'
 import { btnClass, inputClass } from '@/lib/ui'
 
 /** keep — оставить сохранённый ключ, generate — сгенерировать пару в сервисе, paste — вставить свой. */
 type KeySource = 'keep' | 'generate' | 'paste'
 
-const props = defineProps<{ server: Server | null }>()
+const props = defineProps<{ server: Server | null; projectId?: number }>()
 const emit = defineEmits<{ close: []; saved: [server: Server, generatedKey: boolean]; showKey: [server: Server] }>()
 
 const editing = props.server
 const form = reactive({
   name: editing?.name ?? '',
   description: editing?.description ?? '',
+  project_id: editing ? (editing.project?.id ?? null) : (props.projectId ?? null),
   host: editing?.host ?? '',
   port: editing?.port ?? 22,
   username: editing?.username ?? 'root',
@@ -43,6 +45,7 @@ async function save() {
   const body: Record<string, unknown> = {
     name: form.name,
     description: form.description || null,
+    project_id: form.project_id,
     host: form.host.trim(),
     port: form.port,
     username: form.username,
@@ -86,6 +89,11 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
         <label for="s-description" :class="label">Описание</label>
         <input id="s-description" v-model="form.description" placeholder="Необязательно" :class="inputClass" :aria-invalid="!!errors.description" />
         <p v-for="m in errors.description" :key="m" class="text-sm text-destructive">{{ m }}</p>
+      </div>
+      <div class="grid gap-2">
+        <label for="s-project" :class="label">Проект</label>
+        <ProjectSelect id="s-project" v-model="form.project_id" :invalid="!!errors.project_id" />
+        <p v-for="m in errors.project_id" :key="m" class="text-sm text-destructive">{{ m }}</p>
       </div>
       <div class="grid grid-cols-[1fr_6rem] gap-4">
         <div class="grid gap-2">

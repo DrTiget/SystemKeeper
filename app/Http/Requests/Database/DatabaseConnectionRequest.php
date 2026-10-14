@@ -41,6 +41,7 @@ class DatabaseConnectionRequest extends FormRequest
         $table = ['required', 'string', 'max:255', 'distinct', 'regex:/^[^.\s]+\.[^\s]+$/'];
 
         return [
+            'project_id' => ['sometimes', 'nullable', 'integer', Rule::exists('projects', 'id')],
             'name' => [$required, 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
             'engine' => [$required, Rule::in(DatabaseConnection::ENGINES)],
@@ -138,6 +139,7 @@ class DatabaseConnectionRequest extends FormRequest
     public function attributes(): array
     {
         return [
+            'project_id' => 'проект',
             'name' => 'название',
             'engine' => 'СУБД',
             'via' => 'способ подключения',

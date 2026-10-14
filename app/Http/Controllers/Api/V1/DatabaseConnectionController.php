@@ -23,18 +23,21 @@ use Throwable;
 class DatabaseConnectionController extends Controller
 {
     /**
-     * Список по названию; `search` — по названию, хосту и описанию; `server_id` — подключения через этот сервер.
+     * Список по названию; `search` — по названию, хосту и описанию; `server_id` — подключения через этот сервер; `project_id` — базы проекта (`none` — без проекта).
      */
     public function index(Request $request): AnonymousResourceCollection
     {
         $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
             'server_id' => ['nullable', 'integer'],
+            // id проекта; `none` — базы без проекта
+            'project_id' => ['nullable', 'string', 'regex:/^(\d+|none)$/'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         $items = DatabaseConnection::query()
-            ->with('server')
+            ->with(['server', 'project'])
+            ->when($request->input('project_id'), fn ($q, $p) => $p === 'none' ? $q->whereNull('project_id') : $q->where('project_id', (int) $p))
             ->when($request->integer('server_id'), fn ($q, $id) => $q->where('server_id', $id))
             ->when($request->string('search')->trim()->value(), fn ($q, $s) => $q->where(
                 fn ($q) => $q->where('name', 'like', "%{$s}%")->orWhere('host', 'like', "%{$s}%")->orWhere('description', 'like', "%{$s}%"),

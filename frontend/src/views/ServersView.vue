@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import type { Server } from '@/api/servers'
 import Icon from '@/components/Icon.vue'
+import ProjectSelect from '@/components/ProjectSelect.vue'
 import ServerFormModal from '@/components/servers/ServerFormModal.vue'
 import { describeCron } from '@/lib/cron'
 import { btnClass, formatDate, inputClass } from '@/lib/ui'
@@ -19,6 +20,7 @@ const servers = ref<Server[]>([])
 const meta = ref<Page['meta'] | null>(null)
 const page = ref(1)
 const search = ref('')
+const projectFilter = ref<number | null>(null)
 const loading = ref(false)
 const loadError = ref('')
 
@@ -28,6 +30,7 @@ async function load() {
   try {
     const qs = new URLSearchParams({ page: String(page.value) })
     if (search.value.trim()) qs.set('search', search.value.trim())
+    if (projectFilter.value) qs.set('project_id', String(projectFilter.value))
     const res = await api<Page>(`/servers?${qs}`)
     servers.value = res.data
     meta.value = res.meta
@@ -37,6 +40,11 @@ async function load() {
     loading.value = false
   }
 }
+
+watch(projectFilter, () => {
+  page.value = 1
+  load()
+})
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 watch(search, () => {
@@ -79,7 +87,10 @@ const pluralDirs = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'путь' :
       <button :class="btnClass.primary" @click="createOpen = true"><Icon name="plus" />Добавить</button>
     </header>
 
-    <input v-model="search" type="search" placeholder="Поиск по названию, хосту или описанию" :class="inputClass" class="max-w-sm" />
+    <div class="flex flex-wrap gap-2">
+      <input v-model="search" type="search" placeholder="Поиск по названию, хосту или описанию" :class="inputClass" class="max-w-sm flex-1" />
+      <div class="w-56"><ProjectSelect v-model="projectFilter" none-label="Все проекты" /></div>
+    </div>
 
     <p v-if="loadError" class="text-sm text-destructive">{{ loadError }}</p>
 
@@ -98,6 +109,7 @@ const pluralDirs = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'путь' :
           <tr v-for="s in servers" :key="s.id" class="cursor-pointer hover:bg-accent/40" @click="openServer(s)">
             <td class="px-4 py-3">
               <RouterLink :to="{ name: 'server', params: { id: s.id } }" class="font-medium hover:underline" @click.stop>{{ s.name }}</RouterLink>
+              <RouterLink v-if="s.project" :to="{ name: 'project', params: { id: s.project.id } }" class="ml-2 rounded-md border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground" @click.stop>{{ s.project.name }}</RouterLink>
               <div v-if="s.description" class="max-w-xs truncate text-xs text-muted-foreground">{{ s.description }}</div>
             </td>
             <td class="px-4 py-3 whitespace-nowrap">

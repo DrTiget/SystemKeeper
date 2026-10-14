@@ -78,6 +78,20 @@ docker compose exec app php artisan user:create
 
 Снять права администратора с себя нельзя (`422`), удалить себя — тоже (`409`), поэтому в системе всегда остаётся хотя бы один администратор. Через `PATCH /profile` права администратора не меняются.
 
+## API: проекты
+
+Проект — группа серверов и баз данных. Сервер или база входит в один проект (или ни в один): поле `project_id` в `POST/PATCH /servers` и `/databases`, в ответе — `project` (`id`, `name`) или `null`.
+
+| Метод | Путь | Описание |
+|---|---|---|
+| GET | `/projects` | Проекты по названию с `servers_count` и `databases_count`; `search` |
+| POST | `/projects` | Создать: `name`, `description` |
+| GET | `/projects/{id}` | Проект |
+| PATCH | `/projects/{id}` | Изменить |
+| DELETE | `/projects/{id}` | Удалить; серверы и базы остаются без проекта |
+
+Состав проекта — `GET /servers?project_id={id}` и `GET /databases?project_id={id}` (`project_id=none` — без проекта).
+
 ## API: серверы
 
 Сервер — хост с SSH-подключением по ключу или по паролю. Доступно всем пользователям.

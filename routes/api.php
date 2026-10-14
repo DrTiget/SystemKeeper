@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\BackupStorageController;
 use App\Http\Controllers\Api\V1\BackupTemplateController;
 use App\Http\Controllers\Api\V1\DatabaseConnectionController;
 use App\Http\Controllers\Api\V1\ProfileController;
+use App\Http\Controllers\Api\V1\ProjectController;
 use App\Http\Controllers\Api\V1\ServerBackupSettingsController;
 use App\Http\Controllers\Api\V1\ServerController;
 use App\Http\Controllers\Api\V1\ServerFilesController;
@@ -35,6 +36,8 @@ Route::middleware(['auth:sanctum', 'can:manage-users'])->group(function () {
 });
 
 Route::middleware('auth:sanctum')->group(function () {
+    Route::apiResource('projects', ProjectController::class);
+
     Route::post('servers/{server}/check', [ServerController::class, 'check']);
     Route::post('servers/{server}/reset-fingerprint', [ServerController::class, 'resetFingerprint']);
     Route::get('servers/{server}/files', [ServerFilesController::class, 'index'])->middleware('throttle:120,1');

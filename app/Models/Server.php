@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
  * Сервер с SSH-подключением: по ключу (private_key + необязательная passphrase) или по паролю.
  */
 #[Fillable([
-    'name', 'description', 'host', 'port', 'username', 'auth_type', 'private_key', 'passphrase', 'public_key', 'password',
+    'project_id', 'name', 'description', 'host', 'port', 'username', 'auth_type', 'private_key', 'passphrase', 'public_key', 'password',
     'host_fingerprint', 'last_checked_at', 'last_check_status', 'last_check_error',
 ])]
 #[Hidden(['private_key', 'passphrase', 'password'])]
@@ -50,6 +51,11 @@ class Server extends Model
         $s = $this->backupSettingsOrDefault();
 
         return new Retention($s->storage_id, $s->keep_count, $s->max_size);
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     public function backups(): MorphMany

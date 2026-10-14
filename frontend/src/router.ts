@@ -12,6 +12,8 @@ const router = createRouter({
       meta: { auth: true },
       children: [
         { path: '', name: 'dashboard', component: () => import('@/views/StubView.vue'), meta: { title: 'Дашборд' } },
+        { path: 'projects', name: 'projects', component: () => import('@/views/ProjectsView.vue'), meta: { title: 'Проекты' } },
+        { path: 'projects/:id(\\d+)', name: 'project', component: () => import('@/views/ProjectDetailView.vue'), meta: { title: 'Проекты' } },
         { path: 'servers', name: 'servers', component: () => import('@/views/ServersView.vue'), meta: { title: 'Сервера' } },
         { path: 'servers/:id(\\d+)', name: 'server', component: () => import('@/views/ServerDetailView.vue'), meta: { title: 'Сервера' } },
         { path: 'databases', name: 'databases', component: () => import('@/views/DatabasesView.vue'), meta: { title: 'Базы данных' } },

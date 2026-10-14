@@ -1,3 +1,4 @@
+import type { ProjectRef } from './projects'
 import type { Retention } from './storages'
 export type Engine = 'mysql' | 'postgres'
 export type Via = 'ssh' | 'direct'
@@ -19,6 +20,7 @@ export interface PostgresOptions {
 export interface DatabaseConnection {
   id: number
   name: string
+  project: ProjectRef | null
   description: string | null
   engine: Engine
   via: Via

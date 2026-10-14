@@ -43,6 +43,7 @@ class ServerRequest extends FormRequest
         $needsCredential = $this->creating() || $this->authType() !== $this->target()?->auth_type;
 
         return [
+            'project_id' => ['sometimes', 'nullable', 'integer', Rule::exists('projects', 'id')],
             'name' => [$required, 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:2000'],
             'host' => [$required, 'string', 'max:255', 'regex:/^[A-Za-z0-9.\-:\[\]]+$/'],
@@ -117,6 +118,7 @@ class ServerRequest extends FormRequest
     public function attributes(): array
     {
         return [
+            'project_id' => 'проект',
             'name' => 'название',
             'description' => 'описание',
             'host' => 'хост',

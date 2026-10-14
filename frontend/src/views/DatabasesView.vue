@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import { type DatabaseConnection, ENGINE_LABELS } from '@/api/databases'
 import Icon from '@/components/Icon.vue'
+import ProjectSelect from '@/components/ProjectSelect.vue'
 import DatabaseFormModal from '@/components/databases/DatabaseFormModal.vue'
 import { describeCron } from '@/lib/cron'
 import { btnClass, formatDate, inputClass } from '@/lib/ui'
@@ -19,6 +20,7 @@ const items = ref<DatabaseConnection[]>([])
 const meta = ref<Page['meta'] | null>(null)
 const page = ref(1)
 const search = ref('')
+const projectFilter = ref<number | null>(null)
 const loading = ref(false)
 const loadError = ref('')
 
@@ -28,6 +30,7 @@ async function load() {
   try {
     const qs = new URLSearchParams({ page: String(page.value) })
     if (search.value.trim()) qs.set('search', search.value.trim())
+    if (projectFilter.value) qs.set('project_id', String(projectFilter.value))
     const res = await api<Page>(`/databases?${qs}`)
     items.value = res.data
     meta.value = res.meta
@@ -37,6 +40,11 @@ async function load() {
     loading.value = false
   }
 }
+
+watch(projectFilter, () => {
+  page.value = 1
+  load()
+})
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 watch(search, () => {
@@ -75,7 +83,10 @@ onMounted(load)
       <button :class="btnClass.primary" @click="createOpen = true"><Icon name="plus" />Добавить</button>
     </header>
 
-    <input v-model="search" type="search" placeholder="Поиск по названию, хосту или описанию" :class="inputClass" class="max-w-sm" />
+    <div class="flex flex-wrap gap-2">
+      <input v-model="search" type="search" placeholder="Поиск по названию, хосту или описанию" :class="inputClass" class="max-w-sm flex-1" />
+      <div class="w-56"><ProjectSelect v-model="projectFilter" none-label="Все проекты" /></div>
+    </div>
 
     <p v-if="loadError" class="text-sm text-destructive">{{ loadError }}</p>
 
@@ -94,6 +105,7 @@ onMounted(load)
           <tr v-for="c in items" :key="c.id" class="cursor-pointer hover:bg-accent/40" @click="router.push({ name: 'database', params: { id: c.id } })">
             <td class="px-4 py-3">
               <RouterLink :to="{ name: 'database', params: { id: c.id } }" class="font-medium hover:underline" @click.stop>{{ c.name }}</RouterLink>
+              <RouterLink v-if="c.project" :to="{ name: 'project', params: { id: c.project.id } }" class="ml-2 rounded-md border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground" @click.stop>{{ c.project.name }}</RouterLink>
               <div class="text-xs text-muted-foreground">{{ ENGINE_LABELS[c.engine] }}<template v-if="c.last_check.server_version"> · {{ c.last_check.server_version.split(' ').slice(0, 2).join(' ') }}</template></div>
             </td>
             <td class="px-4 py-3 whitespace-nowrap">

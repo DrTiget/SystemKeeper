@@ -22,6 +22,7 @@ const navGroups: { title: string; admin?: boolean; items: NavItem[] }[] = [
   {
     title: 'Бекапы',
     items: [
+      { to: '/projects', label: 'Проекты', icon: 'folder' },
       { to: '/servers', label: 'Сервера', icon: 'server' },
       { to: '/databases', label: 'Базы данных', icon: 'database' },
     ],

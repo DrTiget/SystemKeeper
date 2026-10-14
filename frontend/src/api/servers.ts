@@ -1,9 +1,11 @@
+import type { ProjectRef } from './projects'
 import type { Retention } from './storages'
 export type AuthType = 'key' | 'password'
 
 export interface Server {
   id: number
   name: string
+  project: ProjectRef | null
   description: string | null
   host: string
   port: number

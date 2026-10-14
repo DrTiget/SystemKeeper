@@ -4,10 +4,11 @@ import { api, ApiError } from '@/api/client'
 import type { DatabaseConnection, Engine, Via } from '@/api/databases'
 import type { Server } from '@/api/servers'
 import Modal from '@/components/Modal.vue'
+import ProjectSelect from '@/components/ProjectSelect.vue'
 import SelectMenu from '@/components/SelectMenu.vue'
 import { btnClass, inputClass } from '@/lib/ui'
 
-const props = defineProps<{ connection: DatabaseConnection | null; serverId?: number }>()
+const props = defineProps<{ connection: DatabaseConnection | null; serverId?: number; projectId?: number }>()
 const emit = defineEmits<{ close: []; saved: [connection: DatabaseConnection, provision: boolean] }>()
 
 const editing = props.connection
@@ -16,6 +17,7 @@ const DEFAULT_PORTS: Record<Engine, number> = { mysql: 3306, postgres: 5432 }
 const form = reactive({
   name: editing?.name ?? '',
   description: editing?.description ?? '',
+  project_id: editing ? (editing.project?.id ?? null) : (props.projectId ?? null),
   engine: (editing?.engine ?? 'mysql') as Engine,
   via: (editing?.via ?? (props.serverId ? 'ssh' : 'ssh')) as Via,
   server_id: editing?.server?.id ?? props.serverId ?? (null as number | null),
@@ -62,6 +64,7 @@ async function save() {
   const body: Record<string, unknown> = {
     name: form.name,
     description: form.description || null,
+    project_id: form.project_id,
     engine: form.engine,
     via: form.via,
     host: form.host.trim(),
@@ -107,6 +110,11 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
       <div class="grid gap-2">
         <label for="d-description" :class="label">Описание</label>
         <input id="d-description" v-model="form.description" placeholder="Необязательно" :class="inputClass" />
+      </div>
+      <div class="grid gap-2">
+        <label for="d-project" :class="label">Проект</label>
+        <ProjectSelect id="d-project" v-model="form.project_id" :invalid="!!errors.project_id" />
+        <p v-for="m in errors.project_id" :key="m" class="text-sm text-destructive">{{ m }}</p>
       </div>
 
       <div class="grid gap-2">

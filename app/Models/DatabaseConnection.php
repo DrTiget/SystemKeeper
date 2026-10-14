@@ -18,7 +18,7 @@ use Illuminate\Support\Carbon;
  * какие базы и таблицы дампить, как часто, с какой блокировкой.
  */
 #[Fillable([
-    'name', 'description', 'engine', 'via', 'server_id', 'docker_container', 'host', 'port', 'username', 'password',
+    'project_id', 'name', 'description', 'engine', 'via', 'server_id', 'docker_container', 'host', 'port', 'username', 'password',
     'maintenance_database', 'backup_enabled', 'schedule', 'databases', 'exclude_tables', 'schema_only_tables', 'options',
     'last_checked_at', 'last_check_status', 'last_check_error', 'server_version', 'storage_id', 'keep_count', 'max_size',
 ])]
@@ -61,6 +61,11 @@ class DatabaseConnection extends Model
         'options' => '{}',
         'keep_count' => 7,
     ];
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
 
     public function backups(): MorphMany
     {

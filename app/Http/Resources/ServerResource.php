@@ -21,6 +21,7 @@ class ServerResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'project' => $this->project ? ['id' => $this->project->id, 'name' => $this->project->name] : null,
             'description' => $this->description,
             'host' => $this->host,
             'port' => $this->port,
