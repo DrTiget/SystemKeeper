@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { api } from '@/api/client'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -16,11 +17,21 @@ interface NavItem {
   label: string
   icon: string
   admin?: boolean
+  /** Ещё какие пути подсвечивают пункт (страницы внутри раздела) */
+  match?: string[]
+  badge?: 'alerts'
 }
 
 // Меню: сначала проекты (серверы и базы — внутри них), затем хранение и администрирование
 const navGroups: { title: string; admin?: boolean; items: NavItem[] }[] = [
-  { title: 'Мониторинг', items: [{ to: '/monitors', label: 'Аптайм', icon: 'activity' }] },
+  {
+    title: 'Мониторинг',
+    items: [
+      { to: '/monitors', label: 'Аптайм', icon: 'activity' },
+      { to: '/metrics', label: 'Серверы', icon: 'cpu', match: ['/servers/'] },
+      { to: '/alerts', label: 'Алерты', icon: 'bell', badge: 'alerts' },
+    ],
+  },
   { title: 'Бекапы', items: [{ to: '/storages', label: 'Диски и облака', icon: 'archive' }] },
   { title: 'Администрирование', admin: true, items: [{ to: '/users', label: 'Пользователи', icon: 'users', admin: true }] },
 ]
@@ -35,10 +46,25 @@ const initials = computed(() =>
   (auth.user?.name ?? '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join(''),
 )
 
+// Активные алерты — счётчик в меню; модуль может быть ещё недоступен, тогда счётчика просто нет
+const alerts = ref<{ firing: number; critical: number } | null>(null)
+let alertsTimer: ReturnType<typeof setInterval> | undefined
+const loadAlerts = () =>
+  api<{ data: { firing: number; critical: number } }>('/alerts/summary')
+    .then((r) => (alerts.value = r.data))
+    .catch(() => (alerts.value = null))
+
 onMounted(() => {
   auth.fetchUser()
   projects.load()
+  loadAlerts()
+  alertsTimer = setInterval(loadAlerts, 60_000)
 })
+onBeforeUnmount(() => clearInterval(alertsTimer))
+
+/** Пункт подсвечен и на вложенных страницах: /monitors/5, /alerts/rules… (но /servers/5/metrics — это «Серверы») */
+const isActive = (i: NavItem) =>
+  route.path === i.to || route.path.startsWith(i.to + '/') || (i.match ?? []).some((m) => route.path.startsWith(m) && route.path.endsWith('/metrics'))
 
 // Крошки задаёт страница; при уходе с неё сбрасываем
 watch(() => route.fullPath, () => (projects.crumbs = []))
@@ -113,10 +139,17 @@ async function logout() {
             :key="i.to"
             :to="i.to"
             class="flex h-8 items-center gap-2 rounded-md px-2 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            active-class="bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+            :class="isActive(i) && activeLink"
+            active-class=""
             @click="open = false"
           >
             <Icon :name="i.icon" />{{ i.label }}
+            <span
+              v-if="i.badge === 'alerts' && alerts?.firing"
+              class="ml-auto min-w-5 rounded-full px-1.5 text-center text-xs leading-5 font-medium text-white"
+              :class="alerts.critical ? 'bg-destructive' : 'bg-amber-600'"
+              :title="`Активных алертов: ${alerts.firing}`"
+            >{{ alerts.firing }}</span>
           </RouterLink>
         </div>
       </nav>

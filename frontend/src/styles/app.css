@@ -49,6 +49,9 @@
     --color-ink-800: #0c1116;
 
     --color-success: var(--success);
+    --color-series-1: var(--series-1);
+    --color-series-2: var(--series-2);
+    --color-series-3: var(--series-3);
     --color-warning: var(--warning);
     --color-info: var(--info);
     --color-link: var(--link);
@@ -140,6 +143,10 @@
     --chart-3: #3b82f6;
     --chart-4: #f5a524;
     --chart-5: #ef4459;
+    /* Серии графиков с несколькими линиями: проверены на различимость (в т.ч. при дальтонизме) на фоне карточки */
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --series-3: #1baf7a;
     --radius: 0.75rem;
     /* Боковая панель — тёмная «кабина» в обеих темах */
     --sidebar-background: #1f2a33;
@@ -186,6 +193,9 @@
     --chart-3: #3b82f6;
     --chart-4: #f5a524;
     --chart-5: #ef4459;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
     --sidebar-background: #151d24;
     --sidebar: #151d24;
     --sidebar-foreground: #c5ced4;

@@ -7,6 +7,8 @@ import type { Project } from '@/api/projects'
 import { type Backup, BACKUP_STATUS as STATUS, backupTrigger } from '@/api/backups'
 import type { Server } from '@/api/servers'
 import type { Monitor } from '@/api/monitors'
+import type { Alert } from '@/api/alerts'
+import AlertList from '@/components/alerts/AlertList.vue'
 import MonitorsTable from '@/components/monitors/MonitorsTable.vue'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
@@ -28,19 +30,22 @@ const servers = ref<Server[]>([])
 const databases = ref<DatabaseConnection[]>([])
 const backups = ref<Backup[]>([])
 const monitors = ref<Monitor[]>([])
+const alerts = ref<Alert[]>([])
 const loadError = ref('')
 const store = useProjectsStore()
 
 async function load() {
   try {
-    const [p, s, d, b, m] = await Promise.all([
+    const [p, s, d, b, m, a] = await Promise.all([
       api<{ data: Project }>(`/projects/${id}`),
       api<{ data: Server[] }>(`/servers?project_id=${id}&per_page=100`),
       api<{ data: DatabaseConnection[] }>(`/databases?project_id=${id}&per_page=100`),
       api<{ data: Backup[] }>(`/projects/${id}/backups?per_page=15`),
       // мониторинг — отдельный модуль: если он недоступен, остальная страница проекта всё равно работает
       api<{ data: Monitor[] }>(`/monitors?project_id=${id}&per_page=100`).catch(() => ({ data: [] as Monitor[] })),
+      api<{ data: Alert[] }>(`/alerts?status=firing&project_id=${id}&per_page=10`).catch(() => ({ data: [] as Alert[] })),
     ])
+    alerts.value = a.data
     monitors.value = m.data
     backups.value = b.data
     store.crumbs = [{ label: 'Проекты', to: '/projects' }, { label: p.data.name }]
@@ -124,6 +129,14 @@ const backupLink = (b: Backup) => ({ name: 'backup', params: { id: b.id } })
           <button :class="btnClass.destructive" @click="deleteOpen = true"><Icon name="trash" />Удалить</button>
         </div>
       </header>
+
+      <section v-if="alerts.length" class="grid gap-3">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="flex items-center gap-2 font-semibold text-destructive"><Icon name="alert-triangle" class="size-4" />Активные алерты {{ alerts.length }}</h3>
+          <RouterLink :to="{ name: 'alerts' }" class="text-sm font-medium text-primary hover:underline">Все алерты</RouterLink>
+        </div>
+        <AlertList :items="alerts" :show-project="false" compact />
+      </section>
 
       <section :class="card" class="grid gap-4">
         <div class="flex flex-wrap items-center justify-between gap-3">

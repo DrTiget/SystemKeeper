@@ -9,6 +9,7 @@ import { type DatabaseConnection, ENGINE_LABELS } from '@/api/databases'
 import DatabaseFormModal from '@/components/databases/DatabaseFormModal.vue'
 import BackupSettingsForm from '@/components/servers/BackupSettingsForm.vue'
 import BackupHistory from '@/components/BackupHistory.vue'
+import ServerMetricsCard from '@/components/metrics/ServerMetricsCard.vue'
 import CheckResultModal from '@/components/servers/CheckResultModal.vue'
 import PublicKeyModal from '@/components/servers/PublicKeyModal.vue'
 import ServerFormModal from '@/components/servers/ServerFormModal.vue'
@@ -143,6 +144,8 @@ const dt = 'text-xs text-muted-foreground'
           <section :class="card" class="p-4!">
             <BackupHistory :source="`servers/${server.id}`" :disabled-reason="hasPaths ? undefined : 'Сначала выберите и сохраните, что копировать'" />
           </section>
+
+          <ServerMetricsCard :server-id="server.id" />
 
           <section :class="card" class="grid gap-4 p-4!">
             <div class="flex items-center justify-between gap-2">
