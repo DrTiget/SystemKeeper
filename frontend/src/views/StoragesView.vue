@@ -89,17 +89,17 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
       <div v-if="st.disk" class="grid gap-2.5">
         <div class="flex items-baseline justify-between gap-3 text-sm">
           <span class="font-medium">Диск занят на {{ Math.round(((st.disk.total - st.disk.free) / st.disk.total) * 100) }}%</span>
-          <span :class="st.disk.free / st.disk.total < 0.1 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'">свободно {{ formatBytes(st.disk.free) }}</span>
+          <span :class="st.disk.free / st.disk.total < 0.1 ? 'text-destructive' : 'text-muted-foreground'">свободно {{ formatBytes(st.disk.free) }}</span>
         </div>
         <!-- бекапы — всегда видимой полоской, даже если их доля меньше пикселя -->
-        <div class="flex h-4 gap-0.5 overflow-hidden rounded-md bg-emerald-500/15 ring-1 ring-emerald-500/30 ring-inset">
+        <div class="flex h-2.5 gap-px overflow-hidden rounded-full bg-foreground/10">
           <div v-if="st.used" class="min-w-1.5 bg-primary" :style="{ width: pct(st.used, st.disk.total) }" :title="`Бекапы: ${formatBytes(st.used)}`" />
-          <div class="bg-amber-500/80" :style="{ width: pct(st.disk.total - st.disk.free - st.used, st.disk.total) }" title="Занято другими файлами" />
+          <div class="bg-foreground/35" :style="{ width: pct(st.disk.total - st.disk.free - st.used, st.disk.total) }" title="Занято другими файлами" />
         </div>
         <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm">
           <span class="inline-flex items-center gap-1.5"><span class="size-3 rounded-sm bg-primary" />Бекапы — {{ formatBytes(st.used) }}</span>
-          <span class="inline-flex items-center gap-1.5"><span class="size-3 rounded-sm bg-amber-500/80" />Другие файлы — {{ formatBytes(Math.max(0, st.disk.total - st.disk.free - st.used)) }}</span>
-          <span class="inline-flex items-center gap-1.5"><span class="size-3 rounded-sm bg-emerald-500/15 ring-1 ring-emerald-500/30 ring-inset" />Свободно — {{ formatBytes(st.disk.free) }}</span>
+          <span class="inline-flex items-center gap-1.5"><span class="size-3 rounded-sm bg-foreground/35" />Другие файлы — {{ formatBytes(Math.max(0, st.disk.total - st.disk.free - st.used)) }}</span>
+          <span class="inline-flex items-center gap-1.5"><span class="size-3 rounded-sm bg-foreground/10" />Свободно — {{ formatBytes(st.disk.free) }}</span>
           <span class="text-muted-foreground">всего {{ formatBytes(st.disk.total) }}</span>
         </div>
       </div>
