@@ -82,37 +82,43 @@ defineExpose({ load })
 
 <template>
   <div class="grid gap-3">
-    <div class="flex flex-wrap items-center gap-3">
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="font-semibold">Бекапы</h3>
       <button :class="btnClass.primary" :disabled="starting || running || !!disabledReason" :title="disabledReason" @click="start">
-        <Icon :name="starting || running ? 'loader' : 'play'" :class="(starting || running) && 'animate-spin'" />{{ running ? 'Бекап выполняется…' : 'Запустить бекап' }}
+        <Icon :name="starting || running ? 'loader' : 'play'" :class="(starting || running) && 'animate-spin'" />{{ running ? 'Выполняется…' : 'Запустить сейчас' }}
       </button>
-      <span v-if="disabledReason" class="text-sm text-muted-foreground">{{ disabledReason }}</span>
     </div>
+    <p v-if="disabledReason" class="text-sm text-muted-foreground">{{ disabledReason }}</p>
     <p v-if="error" class="text-sm whitespace-pre-wrap text-destructive">{{ error }}</p>
 
-    <p v-if="loaded && !items.length" class="text-sm text-muted-foreground">Бекапов ещё не было.</p>
+    <p v-if="loaded && !items.length" class="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">Бекапов ещё не было</p>
     <ul v-else-if="items.length" class="divide-y rounded-lg border text-sm">
       <li v-for="b in items" :key="b.id">
-        <button type="button" class="flex w-full flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2.5 text-left hover:bg-accent/40" @click="expanded = expanded === b.id ? null : b.id">
-          <span class="inline-flex w-28 items-center gap-1.5" :class="b.status === 'failed' && 'text-destructive'"><span class="size-2 rounded-full" :class="STATUS[b.status].dot" />{{ STATUS[b.status].label }}</span>
-          <span>{{ formatDate(b.started_at ?? b.created_at) }}</span>
-          <span class="text-muted-foreground">{{ b.trigger === 'manual' ? `вручную${b.user ? ', ' + b.user.name : ''}` : 'по расписанию' }}</span>
-          <span v-if="b.started_at" class="text-muted-foreground">{{ duration(b) }}</span>
-          <span v-if="b.size !== null" class="ml-auto text-muted-foreground">{{ formatBytes(b.size) }}</span>
-          <Icon name="chevron-right" class="size-4 text-muted-foreground transition-transform" :class="[b.size === null && 'ml-auto', expanded === b.id && 'rotate-90']" />
+        <button type="button" class="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-accent/40" @click="expanded = expanded === b.id ? null : b.id">
+          <span class="size-2 shrink-0 rounded-full" :class="STATUS[b.status].dot" :title="STATUS[b.status].label" />
+          <span class="grid min-w-0 flex-1 gap-0.5">
+            <span class="flex items-baseline justify-between gap-2">
+              <span :class="b.status === 'failed' && 'text-destructive'">{{ formatDate(b.started_at ?? b.created_at) }}</span>
+              <span v-if="b.size !== null" class="text-xs text-muted-foreground">{{ formatBytes(b.size) }}</span>
+            </span>
+            <span class="truncate text-xs text-muted-foreground">
+              {{ b.status === 'success' ? '' : STATUS[b.status].label + ' · ' }}{{ b.trigger === 'manual' ? `вручную${b.user ? ', ' + b.user.name : ''}` : 'по расписанию' }}<template v-if="b.started_at"> · {{ duration(b) }}</template>
+            </span>
+          </span>
+          <Icon name="chevron-right" class="size-4 shrink-0 text-muted-foreground transition-transform" :class="expanded === b.id && 'rotate-90'" />
         </button>
         <div v-if="expanded === b.id" class="grid gap-3 border-t bg-muted/30 px-3 py-3">
           <p v-if="b.error" class="whitespace-pre-wrap text-destructive">{{ b.error }}</p>
-          <ul v-if="b.log.length" class="grid gap-0.5 font-mono text-xs text-muted-foreground">
-            <li v-for="(l, i) in b.log" :key="i" class="whitespace-pre-wrap"><span class="opacity-60">{{ new Date(l.at).toLocaleTimeString('ru-RU') }}</span> {{ l.message }}</li>
+          <ul v-if="b.log.length" class="grid max-h-60 gap-0.5 overflow-y-auto font-mono text-xs text-muted-foreground">
+            <li v-for="(l, i) in b.log" :key="i" class="whitespace-pre-wrap break-all"><span class="opacity-60">{{ new Date(l.at).toLocaleTimeString('ru-RU') }}</span> {{ l.message }}</li>
           </ul>
-          <div v-if="b.files.length" class="flex flex-wrap gap-2">
-            <button v-for="f in b.files" :key="f.name" :class="btnClass.outline" @click="download(b, f.name)">
-              <Icon name="download" />{{ f.name }} <span class="text-muted-foreground">{{ formatBytes(f.size) }}</span>
+          <div v-if="b.files.length" class="grid gap-1.5">
+            <button v-for="f in b.files" :key="f.name" :class="btnClass.outline" class="justify-start" @click="download(b, f.name)">
+              <Icon name="download" /><span class="min-w-0 truncate">{{ f.name }}</span><span class="ml-auto text-muted-foreground">{{ formatBytes(f.size) }}</span>
             </button>
           </div>
           <div v-if="!isActive(b)" class="flex justify-end">
-            <button :class="btnClass.destructive" @click="remove(b)"><Icon name="trash" />Удалить бекап</button>
+            <button class="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive" @click="remove(b)"><Icon name="trash" class="size-3.5" />Удалить бекап</button>
           </div>
         </div>
       </li>

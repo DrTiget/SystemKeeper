@@ -97,7 +97,7 @@ const dt = 'text-xs text-muted-foreground'
 </script>
 
 <template>
-  <div class="flex flex-col gap-6 p-4">
+  <div class="flex max-w-7xl flex-col gap-6 p-4">
     <RouterLink :to="connection?.project ? `/projects/${connection.project.id}` : '/projects'" class="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground">
       <Icon name="arrow-left" class="size-4" />{{ connection?.project ? connection.project.name : 'Все проекты' }}
     </RouterLink>
@@ -108,81 +108,72 @@ const dt = 'text-xs text-muted-foreground'
     <template v-if="connection">
       <header class="flex flex-wrap items-start justify-between gap-3">
         <div class="space-y-1">
-          <h2 class="text-xl font-semibold tracking-tight">{{ connection.name }}</h2>
+          <h2 class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Icon name="database" class="size-5 text-muted-foreground" />{{ connection.name }}</h2>
           <p class="text-sm text-muted-foreground">{{ connection.description || ENGINE_LABELS[connection.engine] }}</p>
         </div>
-        <button :class="btnClass.destructive" @click="(deleteOpen = true), (deleteError = '')"><Icon name="trash" />Удалить</button>
+        <button :class="btnClass.destructive" @click="(deleteOpen = true), (deleteError = '')"><Icon name="trash" />Удалить базу</button>
       </header>
 
-      <section :class="card" class="grid gap-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <h3 class="font-semibold">Подключение</h3>
-          <div class="flex flex-wrap gap-2">
-            <button v-if="connection.via === 'ssh'" :class="btnClass.outline" title="Создать в СУБД пользователя только для чтения" @click="provisionOpen = true"><Icon name="users" />Пользователь для бекапов</button>
-            <button :class="btnClass.outline" @click="editOpen = true"><Icon name="pencil" />Изменить</button>
-            <button :class="btnClass.primary" :disabled="checking" @click="check"><Icon :name="checking ? 'loader' : 'plug'" :class="checking && 'animate-spin'" />Проверить</button>
+      <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <section :class="card" class="grid gap-6">
+          <div class="grid gap-1">
+            <h3 class="font-semibold">Настройки бекапа</h3>
+            <p class="text-sm text-muted-foreground">Какие базы дампить, когда и сколько хранить.</p>
           </div>
-        </div>
-        <dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
-          <div class="grid gap-0.5">
-            <dt :class="dt">СУБД</dt>
-            <dd>{{ ENGINE_LABELS[connection.engine] }}</dd>
-          </div>
-          <div class="grid gap-0.5">
-            <dt :class="dt">Адрес</dt>
-            <dd class="font-mono text-xs">{{ connection.username }}@{{ connection.host }}:{{ connection.port }}</dd>
-          </div>
-          <div class="grid gap-0.5">
-            <dt :class="dt">Как подключаемся</dt>
-            <dd>
-              <template v-if="connection.via === 'ssh' && connection.server">
-                через <RouterLink :to="{ name: 'server', params: { id: connection.server.id } }" class="underline">{{ connection.server.name }}</RouterLink>
-                <template v-if="connection.docker_container">, контейнер <span class="font-mono text-xs">{{ connection.docker_container }}</span></template>
-              </template>
-              <template v-else>напрямую</template>
-            </dd>
-          </div>
-          <div class="grid gap-0.5">
-            <dt :class="dt">Состояние</dt>
-            <dd>
-              <span v-if="checking" class="inline-flex items-center gap-1.5 text-muted-foreground"><Icon name="loader" class="size-4 animate-spin" />Проверка…</span>
-              <span v-else-if="connection.last_check.status === 'ok'" class="inline-flex items-center gap-1.5"><span class="size-2 rounded-full bg-emerald-500" />Работает</span>
-              <span v-else-if="connection.last_check.status === 'failed'" class="inline-flex items-center gap-1.5 text-destructive"><span class="size-2 rounded-full bg-destructive" />Ошибка</span>
-              <span v-else class="text-muted-foreground">Не проверялась</span>
-              <span v-if="connection.last_check.checked_at && !checking" class="ml-1 text-xs text-muted-foreground">{{ formatDate(connection.last_check.checked_at) }}</span>
-            </dd>
-          </div>
-          <div v-if="connection.last_check.server_version" class="grid gap-0.5 sm:col-span-2">
-            <dt :class="dt">Версия</dt>
-            <dd class="truncate">{{ connection.last_check.server_version }}</dd>
-          </div>
-          <div v-if="connection.last_check.status === 'failed' && !checking" class="grid gap-0.5 sm:col-span-3">
-            <dt :class="dt">Ошибка</dt>
-            <dd class="whitespace-pre-wrap text-destructive">{{ connection.last_check.error }}</dd>
-          </div>
-        </dl>
-        <p v-if="checkResult?.status === 'ok' && checkResult.databases" class="text-sm text-muted-foreground">
-          Подключение работает, баз: {{ checkResult.databases.length }}.
-        </p>
-      </section>
+          <!-- пока пользователь для бекапов создаётся, к СУБД подключаться ещё нечем -->
+          <p v-if="provisionOpen && !connection.has_password" class="text-sm text-muted-foreground">Настройки станут доступны после создания пользователя.</p>
+          <DatabaseBackupForm v-else :key="formKey" :connection="connection" @saved="connection = $event" />
+        </section>
 
-      <section :class="card" class="grid gap-4">
-        <div class="grid gap-1">
-          <h3 class="font-semibold">Бекап</h3>
-          <p class="text-sm text-muted-foreground">Какие базы и таблицы дампить, как часто и с какой блокировкой.</p>
-        </div>
-        <!-- пока пользователь для бекапов создаётся, к СУБД подключаться ещё нечем -->
-        <p v-if="provisionOpen && !connection.has_password" class="text-sm text-muted-foreground">Настройки станут доступны после создания пользователя.</p>
-        <DatabaseBackupForm v-else :key="formKey" :connection="connection" @saved="connection = $event" />
-      </section>
+        <aside class="grid gap-6">
+          <section :class="card" class="p-4!">
+            <BackupHistory :source="`databases/${connection.id}`" />
+          </section>
 
-      <section :class="card" class="grid gap-4">
-        <div class="grid gap-1">
-          <h3 class="font-semibold">Бекапы</h3>
-          <p class="text-sm text-muted-foreground">Запуск вручную и последние дампы — по файлу на базу. Дампы сохраняются на диск SystemKeeper.</p>
-        </div>
-        <BackupHistory :source="`databases/${connection.id}`" />
-      </section>
+          <section :class="card" class="grid gap-4 p-4!">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="font-semibold">Подключение</h3>
+              <button :class="btnClass.outline" class="h-8! px-3!" @click="editOpen = true"><Icon name="pencil" />Изменить</button>
+            </div>
+            <dl class="grid gap-3 text-sm">
+              <div class="grid gap-0.5">
+                <dt :class="dt">Состояние</dt>
+                <dd class="flex flex-wrap items-center gap-x-2">
+                  <span v-if="checking" class="inline-flex items-center gap-1.5 text-muted-foreground"><Icon name="loader" class="size-4 animate-spin" />Проверка…</span>
+                  <span v-else-if="connection.last_check.status === 'ok'" class="inline-flex items-center gap-1.5"><span class="size-2 rounded-full bg-emerald-500" />Работает</span>
+                  <span v-else-if="connection.last_check.status === 'failed'" class="inline-flex items-center gap-1.5 text-destructive"><span class="size-2 rounded-full bg-destructive" />Ошибка</span>
+                  <span v-else class="text-muted-foreground">Не проверялась</span>
+                  <span v-if="connection.last_check.checked_at && !checking" class="text-xs text-muted-foreground">{{ formatDate(connection.last_check.checked_at) }}</span>
+                </dd>
+                <dd v-if="connection.last_check.status === 'failed' && !checking" class="text-xs break-words whitespace-pre-wrap text-destructive">{{ connection.last_check.error }}</dd>
+                <dd v-else-if="checkResult?.status === 'ok' && checkResult.databases" class="text-xs text-muted-foreground">Баз на сервере: {{ checkResult.databases.length }}</dd>
+              </div>
+              <div class="grid gap-0.5">
+                <dt :class="dt">СУБД</dt>
+                <dd>{{ ENGINE_LABELS[connection.engine] }}<span v-if="connection.last_check.server_version" class="text-muted-foreground"> · {{ connection.last_check.server_version }}</span></dd>
+              </div>
+              <div class="grid gap-0.5">
+                <dt :class="dt">Адрес</dt>
+                <dd class="font-mono text-xs break-all">{{ connection.username }}@{{ connection.host }}:{{ connection.port }}</dd>
+              </div>
+              <div class="grid gap-0.5">
+                <dt :class="dt">Как подключаемся</dt>
+                <dd>
+                  <template v-if="connection.via === 'ssh' && connection.server">
+                    через сервер <RouterLink :to="{ name: 'server', params: { id: connection.server.id } }" class="underline underline-offset-2">{{ connection.server.name }}</RouterLink>
+                    <template v-if="connection.docker_container">, контейнер <span class="font-mono text-xs">{{ connection.docker_container }}</span></template>
+                  </template>
+                  <template v-else>напрямую</template>
+                </dd>
+              </div>
+            </dl>
+            <div class="grid gap-2">
+              <button :class="btnClass.outline" class="h-8! px-3!" :disabled="checking" @click="check"><Icon :name="checking ? 'loader' : 'plug'" :class="checking && 'animate-spin'" />Проверить подключение</button>
+              <button v-if="connection.via === 'ssh'" :class="btnClass.outline" class="h-8! px-3!" title="Создать в СУБД пользователя только для чтения" @click="provisionOpen = true"><Icon name="users" />Создать пользователя для бекапов</button>
+            </div>
+          </section>
+        </aside>
+      </div>
     </template>
 
     <DatabaseFormModal v-if="editOpen && connection" :connection="connection" @close="editOpen = false" @saved="onSaved" />

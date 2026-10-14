@@ -113,7 +113,7 @@ const dt = 'text-xs text-muted-foreground'
 </script>
 
 <template>
-  <div class="flex flex-col gap-6 p-4">
+  <div class="flex max-w-7xl flex-col gap-6 p-4">
     <RouterLink :to="server?.project ? `/projects/${server.project.id}` : '/projects'" class="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground">
       <Icon name="arrow-left" class="size-4" />{{ server?.project ? server.project.name : 'Все проекты' }}
     </RouterLink>
@@ -124,87 +124,83 @@ const dt = 'text-xs text-muted-foreground'
     <template v-else>
       <header class="flex flex-wrap items-start justify-between gap-3">
         <div class="space-y-1">
-          <h2 class="text-xl font-semibold tracking-tight">{{ server.name }}</h2>
+          <h2 class="flex items-center gap-2 text-xl font-semibold tracking-tight"><Icon name="server" class="size-5 text-muted-foreground" />{{ server.name }}</h2>
           <p v-if="server.description" class="text-sm text-muted-foreground">{{ server.description }}</p>
         </div>
-        <button :class="btnClass.destructive" @click="(deleteOpen = true), (deleteError = '')"><Icon name="trash" />Удалить</button>
+        <button :class="btnClass.destructive" @click="(deleteOpen = true), (deleteError = '')"><Icon name="trash" />Удалить сервер</button>
       </header>
 
-      <section :class="card" class="grid gap-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <h3 class="font-semibold">Подключение SSH</h3>
-          <div class="flex flex-wrap gap-2">
-            <button v-if="server.public_key" :class="btnClass.outline" @click="keyOpen = true"><Icon name="key" />Открытый ключ</button>
-            <button :class="btnClass.outline" @click="editOpen = true"><Icon name="pencil" />Изменить</button>
-            <button :class="btnClass.primary" :disabled="checking" @click="check"><Icon :name="checking ? 'loader' : 'plug'" :class="checking && 'animate-spin'" />Проверить</button>
-          </div>
-        </div>
-        <dl class="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
-          <div class="grid gap-0.5">
-            <dt :class="dt">Адрес</dt>
-            <dd class="font-mono text-xs">{{ server.username }}@{{ server.host }}:{{ server.port }}</dd>
-          </div>
-          <div class="grid gap-0.5">
-            <dt :class="dt">Авторизация</dt>
-            <dd>{{ server.auth_type === 'key' ? (server.has_passphrase ? 'Ключ с парольной фразой' : 'Ключ') : 'Пароль' }}</dd>
-          </div>
-          <div class="grid gap-0.5">
-            <dt :class="dt">Состояние</dt>
-            <dd>
-              <span v-if="server.last_check.status === 'ok'" class="inline-flex items-center gap-1.5"><span class="size-2 rounded-full bg-emerald-500" />Работает</span>
-              <span v-else-if="server.last_check.status === 'failed'" class="inline-flex items-center gap-1.5 text-destructive"><span class="size-2 rounded-full bg-destructive" />Ошибка</span>
-              <span v-else class="text-muted-foreground">Не проверялся</span>
-              <span v-if="server.last_check.checked_at" class="ml-1 text-xs text-muted-foreground">{{ formatDate(server.last_check.checked_at) }}</span>
-            </dd>
-          </div>
-          <div v-if="server.last_check.status === 'failed'" class="grid gap-0.5 sm:col-span-3">
-            <dt :class="dt">Ошибка</dt>
-            <dd class="text-destructive">{{ server.last_check.error }}</dd>
-          </div>
-          <div v-if="server.host_fingerprint" class="grid gap-0.5 sm:col-span-3">
-            <dt :class="dt">Отпечаток хоста</dt>
-            <dd class="font-mono text-xs break-all">{{ server.host_fingerprint }}</dd>
-          </div>
-        </dl>
-      </section>
-
-      <section :class="card" class="grid gap-4">
-        <div class="grid gap-1">
-          <h3 class="font-semibold">Бекап файлов</h3>
-          <p class="text-sm text-muted-foreground">Какие каталоги копировать, как часто и что выполнить перед этим.</p>
-        </div>
-        <BackupSettingsForm :server-id="server.id" @saved="hasPaths = $event.paths.length > 0" />
-      </section>
-
-      <section :class="card" class="grid gap-4">
-        <div class="grid gap-1">
-          <h3 class="font-semibold">Бекапы</h3>
-          <p class="text-sm text-muted-foreground">Запуск вручную и последние бекапы файлов. Архивы сохраняются на диск SystemKeeper.</p>
-        </div>
-        <BackupHistory :source="`servers/${server.id}`" :disabled-reason="hasPaths ? undefined : 'Сначала выберите и сохраните каталоги'" />
-      </section>
-
-      <section :class="card" class="grid gap-4">
-        <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <section :class="card" class="grid gap-6">
           <div class="grid gap-1">
-            <h3 class="font-semibold">Базы данных</h3>
-            <p class="text-sm text-muted-foreground">СУБД, которые дампятся через этот сервер.</p>
+            <h3 class="font-semibold">Настройки бекапа файлов</h3>
+            <p class="text-sm text-muted-foreground">Что копировать, когда и сколько хранить.</p>
           </div>
-          <button :class="btnClass.outline" @click="dbCreateOpen = true"><Icon name="plus" />Добавить базу</button>
-        </div>
-        <ul v-if="databases.length" class="divide-y rounded-md border text-sm">
-          <li v-for="d in databases" :key="d.id">
-            <RouterLink :to="{ name: 'database', params: { id: d.id } }" class="flex items-center gap-3 px-3 py-2 hover:bg-accent/40">
-              <Icon name="database" class="size-4 text-primary" />
-              <span class="font-medium">{{ d.name }}</span>
-              <span class="text-xs text-muted-foreground">{{ ENGINE_LABELS[d.engine] }}<template v-if="d.docker_container"> · {{ d.docker_container }}</template></span>
-              <span class="ml-auto text-xs" :class="d.backup.enabled ? '' : 'text-muted-foreground'">{{ d.backup.enabled ? 'бекап включён' : 'бекап не настроен' }}</span>
-              <Icon name="chevron-right" class="size-4 text-muted-foreground" />
-            </RouterLink>
-          </li>
-        </ul>
-        <p v-else class="text-sm text-muted-foreground">Пока нет.</p>
-      </section>
+          <BackupSettingsForm :server-id="server.id" @saved="hasPaths = $event.paths.length > 0" />
+        </section>
+
+        <aside class="grid gap-6">
+          <section :class="card" class="p-4!">
+            <BackupHistory :source="`servers/${server.id}`" :disabled-reason="hasPaths ? undefined : 'Сначала выберите и сохраните, что копировать'" />
+          </section>
+
+          <section :class="card" class="grid gap-4 p-4!">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="font-semibold">Подключение SSH</h3>
+              <button :class="btnClass.outline" class="h-8! px-3!" @click="editOpen = true"><Icon name="pencil" />Изменить</button>
+            </div>
+            <dl class="grid gap-3 text-sm">
+              <div class="grid gap-0.5">
+                <dt :class="dt">Состояние</dt>
+                <dd class="flex flex-wrap items-center gap-x-2">
+                  <span v-if="checking" class="inline-flex items-center gap-1.5 text-muted-foreground"><Icon name="loader" class="size-4 animate-spin" />Проверка…</span>
+                  <span v-else-if="server.last_check.status === 'ok'" class="inline-flex items-center gap-1.5"><span class="size-2 rounded-full bg-emerald-500" />Работает</span>
+                  <span v-else-if="server.last_check.status === 'failed'" class="inline-flex items-center gap-1.5 text-destructive"><span class="size-2 rounded-full bg-destructive" />Ошибка</span>
+                  <span v-else class="text-muted-foreground">Не проверялся</span>
+                  <span v-if="server.last_check.checked_at && !checking" class="text-xs text-muted-foreground">{{ formatDate(server.last_check.checked_at) }}</span>
+                </dd>
+                <dd v-if="server.last_check.status === 'failed' && !checking" class="text-xs break-words text-destructive">{{ server.last_check.error }}</dd>
+              </div>
+              <div class="grid gap-0.5">
+                <dt :class="dt">Адрес</dt>
+                <dd class="font-mono text-xs break-all">{{ server.username }}@{{ server.host }}:{{ server.port }}</dd>
+              </div>
+              <div class="grid gap-0.5">
+                <dt :class="dt">Вход</dt>
+                <dd>{{ server.auth_type === 'key' ? (server.has_passphrase ? 'Ключ с парольной фразой' : 'По ключу') : 'По паролю' }}</dd>
+              </div>
+              <div v-if="server.host_fingerprint" class="grid gap-0.5">
+                <dt :class="dt">Отпечаток хоста</dt>
+                <dd class="font-mono text-xs break-all text-muted-foreground">{{ server.host_fingerprint }}</dd>
+              </div>
+            </dl>
+            <div class="flex flex-wrap gap-2">
+              <button :class="btnClass.outline" class="h-8! flex-1 px-3!" :disabled="checking" @click="check"><Icon :name="checking ? 'loader' : 'plug'" :class="checking && 'animate-spin'" />Проверить</button>
+              <button v-if="server.public_key" :class="btnClass.outline" class="h-8! flex-1 px-3!" @click="keyOpen = true"><Icon name="key" />Открытый ключ</button>
+            </div>
+          </section>
+
+          <section :class="card" class="grid gap-3 p-4!">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="font-semibold">Базы данных</h3>
+              <button :class="btnClass.outline" class="h-8! px-3!" @click="dbCreateOpen = true"><Icon name="plus" />Добавить</button>
+            </div>
+            <ul v-if="databases.length" class="divide-y rounded-lg border text-sm">
+              <li v-for="d in databases" :key="d.id">
+                <RouterLink :to="{ name: 'database', params: { id: d.id } }" class="flex items-center gap-3 px-3 py-2 hover:bg-accent/40">
+                  <Icon name="database" class="size-4 shrink-0 text-primary" />
+                  <span class="grid min-w-0 flex-1">
+                    <span class="truncate font-medium">{{ d.name }}</span>
+                    <span class="truncate text-xs text-muted-foreground">{{ ENGINE_LABELS[d.engine] }}<template v-if="d.docker_container"> · {{ d.docker_container }}</template> · {{ d.backup.enabled ? 'по расписанию' : 'вручную' }}</span>
+                  </span>
+                  <Icon name="chevron-right" class="size-4 shrink-0 text-muted-foreground" />
+                </RouterLink>
+              </li>
+            </ul>
+            <p v-else class="text-sm text-muted-foreground">СУБД на этом сервере, которые нужно дампить, — MySQL или PostgreSQL.</p>
+          </section>
+        </aside>
+      </div>
     </template>
 
     <ServerFormModal v-if="editOpen && server" :server="server" @close="editOpen = false" @saved="onSaved" @show-key="keyOpen = true" />

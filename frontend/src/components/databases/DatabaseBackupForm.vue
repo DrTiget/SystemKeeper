@@ -2,11 +2,15 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { api, ApiError } from '@/api/client'
 import type { DatabaseConnection, DbSchema, DbTable } from '@/api/databases'
+import type { Retention } from '@/api/storages'
 import Icon from '@/components/Icon.vue'
 import RetentionFields from '@/components/RetentionFields.vue'
-import SchedulePicker from '@/components/SchedulePicker.vue'
-import type { Retention } from '@/api/storages'
-import { btnClass, formatBytes, formatDate, inputClass } from '@/lib/ui'
+import ScheduleFields from '@/components/ScheduleFields.vue'
+import SaveBar from '@/components/form/SaveBar.vue'
+import SegmentedControl from '@/components/form/SegmentedControl.vue'
+import SettingsSection from '@/components/form/SettingsSection.vue'
+import { btnClass, formatBytes } from '@/lib/ui'
+import { unshownErrors, useUnsavedGuard } from '@/lib/unsaved'
 
 const props = defineProps<{ connection: DatabaseConnection }>()
 const emit = defineEmits<{ saved: [connection: DatabaseConnection] }>()
@@ -14,18 +18,59 @@ const emit = defineEmits<{ saved: [connection: DatabaseConnection] }>()
 const c = props.connection
 const isMysql = c.engine === 'mysql'
 
-const retention = ref<Retention>({ ...c.retention })
+type TableMode = 'data' | 'schema' | 'skip'
+
 const form = reactive({
-  enabled: c.backup.enabled,
-  mode: (c.backup.databases.length ? 'selected' : 'all') as 'all' | 'selected',
-  databases: [...c.backup.databases],
-  schedule: c.backup.schedule,
-  options: { ...c.backup.options },
+  enabled: false,
+  mode: 'all' as 'all' | 'selected',
+  databases: [] as string[],
+  schedule: '',
+  options: {} as DatabaseConnection['backup']['options'],
+  retention: { storage_id: null, keep_count: 7, max_size: null } as Retention,
 })
-/** Режим каждой таблицы: data — целиком, schema — только структура, skip — пропустить. По умолчанию data. */
-const tableMode = reactive<Record<string, 'schema' | 'skip'>>({})
-for (const t of c.backup.exclude_tables) tableMode[t] = 'skip'
-for (const t of c.backup.schema_only_tables) tableMode[t] = 'schema'
+/** Режим таблиц «база.таблица»: schema — только структура, skip — пропустить. Нет записи — целиком. */
+const tableMode = reactive<Record<string, Exclude<TableMode, 'data'>>>({})
+
+// Сохранённые настройки — от них считаются несохранённые изменения и к ним возвращает «Отменить»
+const saved = ref(c)
+
+function fill(conn: DatabaseConnection) {
+  saved.value = conn
+  form.enabled = conn.backup.enabled
+  form.mode = conn.backup.databases.length ? 'selected' : 'all'
+  form.databases = [...conn.backup.databases]
+  form.schedule = conn.backup.schedule
+  form.options = { ...conn.backup.options }
+  form.retention = { ...conn.retention }
+  for (const k of Object.keys(tableMode)) delete tableMode[k]
+  for (const t of conn.backup.exclude_tables) tableMode[t] = 'skip'
+  for (const t of conn.backup.schema_only_tables) tableMode[t] = 'schema'
+  errors.value = {}
+  formError.value = ''
+}
+
+function payload() {
+  // Настройки таблиц сохраняем только для баз, которые попадают в бекап
+  const inDumped = (k: string) => form.mode === 'all' || form.databases.some((d) => k.startsWith(d + '.'))
+  const entries = Object.entries(tableMode).filter(([k]) => inDumped(k)).sort()
+  return {
+    backup_enabled: form.enabled,
+    schedule: form.schedule,
+    databases: form.mode === 'selected' ? form.databases : [],
+    exclude_tables: entries.filter(([, m]) => m === 'skip').map(([k]) => k),
+    schema_only_tables: entries.filter(([, m]) => m === 'schema').map(([k]) => k),
+    options: form.options,
+    ...form.retention,
+  }
+}
+
+const errors = ref<Record<string, string[]>>({})
+const formError = ref('')
+fill(c)
+const savedSnapshot = ref(JSON.stringify(payload()))
+const dirty = computed(() => JSON.stringify(payload()) !== savedSnapshot.value)
+const scheduleChanged = computed(() => form.enabled !== saved.value.backup.enabled || form.schedule !== saved.value.backup.schedule)
+useUnsavedGuard(dirty)
 
 // Базы на сервере СУБД
 const schemas = ref<DbSchema[] | null>(null)
@@ -79,121 +124,126 @@ async function toggleTables(db: string) {
 const key = (db: string, table: string) => `${db}.${table}`
 const tunedCount = (db: string) => Object.keys(tableMode).filter((k) => k.startsWith(db + '.')).length
 
-function setMode(db: string, table: string, mode: 'data' | 'schema' | 'skip') {
+function setMode(db: string, table: string, mode: TableMode) {
   if (mode === 'data') delete tableMode[key(db, table)]
   else tableMode[key(db, table)] = mode
 }
 
-function setAll(db: string, mode: 'data' | 'schema' | 'skip') {
+function setAll(db: string, mode: TableMode) {
   for (const t of tables[db]?.items ?? []) setMode(db, t.name, mode)
 }
+
+const tableModes: { value: TableMode; label: string }[] = [
+  { value: 'data', label: 'целиком' },
+  { value: 'schema', label: 'структура' },
+  { value: 'skip', label: 'пропустить' },
+]
+
+// Параметры дампа
+const lockModes = [
+  { value: 'single_transaction', title: 'Снимок транзакции, без блокировки', text: 'Рекомендуется для InnoDB: консистентный дамп, запись в базу не останавливается (--single-transaction). Таблицы MyISAM могут попасть в дамп неконсистентно.' },
+  { value: 'lock_tables', title: 'Блокировать таблицы на время дампа', text: 'Для MyISAM и смешанных баз: таблицы каждой базы блокируются на чтение (--lock-tables), запись ждёт окончания дампа этой базы.' },
+  { value: 'none', title: 'Без блокировок', text: 'Быстро и ничего не блокирует, но если в базу пишут во время дампа, данные таблиц могут не совпасть между собой (--skip-lock-tables).' },
+]
+const formatOptions = [
+  { value: 'custom', label: 'Custom (pg_restore)' },
+  { value: 'plain', label: 'SQL-файл' },
+]
+
+const optionsSummary = computed(() => {
+  const o = form.options
+  const parts = isMysql
+    ? [
+        lockModes.find((m) => m.value === o.lock_mode)?.title ?? '',
+        [o.routines && 'процедуры', o.triggers && 'триггеры', o.events && 'события'].filter(Boolean).join(', '),
+      ]
+    : [o.format === 'plain' ? 'SQL-файл' : 'формат custom', o.no_owner ? 'без владельцев' : '']
+  return [...parts, o.compress ? 'gzip' : 'без сжатия'].filter(Boolean).join(' · ')
+})
+const optionErrors = computed(() => Object.keys(errors.value).some((k) => k.startsWith('options')))
+
+/** Ошибки элементов списка приходят как `databases.0`… */
+const listErrors = (...fields: string[]) =>
+  Object.entries(errors.value)
+    .filter(([k]) => fields.some((f) => k === f || k.startsWith(`${f}.`)))
+    .flatMap(([, v]) => v)
 
 // Сохранение
 const saving = ref(false)
 const savedNotice = ref(false)
-const errors = ref<Record<string, string[]>>({})
-const formError = ref('')
+const noDatabases = computed(() => form.mode === 'selected' && !form.databases.length)
 
 async function save() {
   saving.value = true
   savedNotice.value = false
   errors.value = {}
   formError.value = ''
-  // Настройки таблиц сохраняем только для баз, которые попадают в бекап
-  const inDumped = (k: string) => form.mode === 'all' || form.databases.some((d) => k.startsWith(d + '.'))
-  const entries = Object.entries(tableMode).filter(([k]) => inDumped(k))
   try {
-    const res = await api<{ data: DatabaseConnection }>(`/databases/${c.id}`, {
-      method: 'PATCH',
-      body: {
-        backup_enabled: form.enabled,
-        schedule: form.schedule,
-        databases: form.mode === 'selected' ? form.databases : [],
-        exclude_tables: entries.filter(([, m]) => m === 'skip').map(([k]) => k),
-        schema_only_tables: entries.filter(([, m]) => m === 'schema').map(([k]) => k),
-        options: form.options,
-        ...retention.value,
-      },
-    })
+    const res = await api<{ data: DatabaseConnection }>(`/databases/${c.id}`, { method: 'PATCH', body: payload() })
+    fill(res.data)
+    savedSnapshot.value = JSON.stringify(payload())
     savedNotice.value = true
     emit('saved', res.data)
   } catch (e) {
-    if (e instanceof ApiError && e.status === 422) errors.value = e.errors
-    else formError.value = e instanceof ApiError ? e.message : 'Не удалось сохранить'
+    if (e instanceof ApiError && e.status === 422) {
+      errors.value = e.errors
+      formError.value = unshownErrors(e.errors, ['databases', 'exclude_tables', 'schema_only_tables', 'schedule', 'backup_enabled', 'keep_count', 'max_size', 'options'])
+    } else formError.value = e instanceof ApiError ? e.message : 'Не удалось сохранить'
   } finally {
     saving.value = false
   }
 }
 
-const allErrors = computed(() => Object.values(errors.value).flat())
-
 onMounted(loadSchemas)
 
-const label = 'text-sm leading-none font-medium'
-const hint = 'text-sm text-muted-foreground'
-const optionCard = 'flex cursor-pointer gap-3 rounded-lg border p-3 has-checked:border-primary has-checked:bg-accent/50'
-const mini = 'cursor-pointer rounded px-2 py-0.5 text-xs has-checked:bg-primary has-checked:text-primary-foreground'
-const lockModes = [
-  { value: 'single_transaction', title: 'Без блокировки — снимок транзакции', text: 'Рекомендуется для InnoDB: консистентный дамп, запись в базу не останавливается (--single-transaction). Таблицы MyISAM в таком режиме могут попасть в дамп неконсистентно.' },
-  { value: 'lock_tables', title: 'Блокировать таблицы на время дампа', text: 'Для MyISAM и смешанных баз: таблицы каждой базы блокируются на чтение (--lock-tables), запись ждёт окончания дампа этой базы.' },
-  { value: 'none', title: 'Без блокировок', text: 'Быстро и ничего не блокирует, но если в базу пишут во время дампа, данные таблиц могут не совпасть между собой (--skip-lock-tables).' },
+const modeOptions = [
+  { value: 'all' as const, label: 'Все, кроме служебных' },
+  { value: 'selected' as const, label: 'Только выбранные' },
 ]
+const optionCard = 'flex cursor-pointer gap-3 rounded-lg border p-3 has-checked:border-primary has-checked:bg-accent/50'
+const check = 'flex items-center gap-2 text-sm'
 </script>
 
 <template>
-  <form class="grid gap-6" @submit.prevent="save">
-    <label class="flex items-center gap-3 rounded-lg border p-3">
-      <input v-model="form.enabled" type="checkbox" class="size-4 accent-primary" />
-      <span class="grid gap-0.5">
-        <span class="text-sm font-medium">Бекап по расписанию</span>
-        <span class="text-xs text-muted-foreground">
-          <template v-if="connection.backup.enabled && connection.backup.next_run_at">Следующий запуск — {{ formatDate(connection.backup.next_run_at) }}</template>
-          <template v-else>Выключен — настройки сохранятся, но бекап не запускается</template>
-        </span>
-      </span>
-    </label>
-
-    <section class="grid gap-3">
-      <div class="grid gap-1">
-        <span :class="label">Какие базы дампить</span>
-        <div class="flex gap-2">
-          <label class="flex h-9 flex-1 cursor-pointer items-center justify-center rounded-md border px-2 text-sm has-checked:border-primary has-checked:bg-accent has-checked:text-accent-foreground">
-            <input v-model="form.mode" type="radio" value="all" class="sr-only" />Все, кроме служебных
-          </label>
-          <label class="flex h-9 flex-1 cursor-pointer items-center justify-center rounded-md border px-2 text-sm has-checked:border-primary has-checked:bg-accent has-checked:text-accent-foreground">
-            <input v-model="form.mode" type="radio" value="selected" class="sr-only" />Только выбранные
-          </label>
-        </div>
-        <p v-if="form.mode === 'all'" :class="hint">Новые базы попадут в бекап автоматически.</p>
+  <form class="grid" @submit.prevent="save">
+    <SettingsSection title="Что дампить" description="Каждая база — отдельный файл. Для больших таблиц логов и кешей можно оставить только структуру.">
+      <div class="grid gap-2">
+        <SegmentedControl v-model="form.mode" :options="modeOptions" />
+        <p class="text-xs text-muted-foreground">
+          {{ form.mode === 'all' ? 'Новые базы попадут в бекап автоматически.' : 'Отметьте базы, которые нужно дампить.' }}
+        </p>
       </div>
 
       <div v-if="schemasLoading" class="flex items-center gap-2 text-sm text-muted-foreground"><Icon name="loader" class="animate-spin" />Получаем список баз…</div>
-      <div v-else-if="schemasError" class="flex flex-wrap items-center gap-3 rounded-md border border-destructive/40 p-3 text-sm">
+      <div v-else-if="schemasError" class="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/40 p-3 text-sm">
         <span class="flex-1 text-destructive">{{ schemasError }}</span>
         <button type="button" :class="btnClass.outline" @click="loadSchemas">Повторить</button>
       </div>
-      <template v-else-if="schemas">
-        <ul class="divide-y rounded-md border text-sm">
+      <div v-else-if="schemas" class="grid gap-2">
+        <ul class="divide-y rounded-lg border text-sm">
           <li v-for="s in visibleSchemas" :key="s.name">
-            <div class="flex items-center gap-2 px-3 py-2">
-              <input
-                v-if="form.mode === 'selected'"
-                type="checkbox"
-                class="size-4 accent-primary"
-                :checked="form.databases.includes(s.name)"
-                @change="toggleDb(s.name)"
-              />
-              <Icon v-else :name="s.system ? 'x' : 'check'" class="size-4" :class="s.system ? 'text-muted-foreground' : 'text-primary'" />
-              <span class="font-mono text-xs" :class="!dumped.includes(s.name) && 'text-muted-foreground'">{{ s.name }}</span>
-              <span v-if="s.system" class="text-xs text-muted-foreground">служебная</span>
-              <span class="ml-auto text-xs text-muted-foreground">{{ s.size !== null ? formatBytes(s.size) : '' }}</span>
+            <div class="flex items-center gap-3 px-3 py-2">
+              <label class="flex min-w-0 flex-1 items-center gap-2" :class="form.mode === 'selected' && 'cursor-pointer'">
+                <input
+                  v-if="form.mode === 'selected'"
+                  type="checkbox"
+                  class="size-4 accent-primary"
+                  :checked="form.databases.includes(s.name)"
+                  @change="toggleDb(s.name)"
+                />
+                <Icon v-else :name="s.system ? 'x' : 'check'" class="size-4 shrink-0" :class="s.system ? 'text-muted-foreground' : 'text-primary'" />
+                <span class="truncate font-mono text-xs" :class="!dumped.includes(s.name) && 'text-muted-foreground'">{{ s.name }}</span>
+                <span v-if="s.system" class="text-xs text-muted-foreground">служебная</span>
+              </label>
+              <span class="text-xs whitespace-nowrap text-muted-foreground">{{ s.size !== null ? formatBytes(s.size) : '' }}</span>
               <button
                 v-if="dumped.includes(s.name)"
                 type="button"
-                class="inline-flex items-center gap-1 rounded px-2 py-1 text-xs hover:bg-accent"
+                class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs whitespace-nowrap hover:bg-accent"
+                :class="tunedCount(s.name) ? 'text-primary' : 'text-muted-foreground'"
                 @click="toggleTables(s.name)"
               >
-                Таблицы<template v-if="tunedCount(s.name)"> · настроено {{ tunedCount(s.name) }}</template>
+                {{ tunedCount(s.name) ? `Таблицы: изменено ${tunedCount(s.name)}` : 'Таблицы' }}
                 <Icon name="chevron-right" class="size-3.5 transition-transform" :class="tables[s.name]?.open && 'rotate-90'" />
               </button>
             </div>
@@ -203,11 +253,10 @@ const lockModes = [
               <template v-else-if="tables[s.name]!.items">
                 <p v-if="!tables[s.name]!.items!.length" class="text-xs text-muted-foreground">Таблиц нет</p>
                 <template v-else>
-                  <div class="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    Всем:
-                    <button type="button" class="rounded px-1.5 hover:bg-accent" @click="setAll(s.name, 'data')">целиком</button>
-                    <button type="button" class="rounded px-1.5 hover:bg-accent" @click="setAll(s.name, 'schema')">только структура</button>
-                    <button type="button" class="rounded px-1.5 hover:bg-accent" @click="setAll(s.name, 'skip')">пропустить</button>
+                  <div class="mb-2 flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
+                    Для всех таблиц:
+                    <button v-for="m in tableModes" :key="m.value" type="button" class="rounded px-1.5 py-0.5 text-foreground hover:bg-accent" @click="setAll(s.name, m.value)">{{ m.label }}</button>
+                    <span class="basis-full">«Структура» — таблица создастся при восстановлении, но пустой: удобно для логов, сессий, кешей.</span>
                   </div>
                   <ul class="grid max-h-72 gap-1 overflow-y-auto">
                     <li v-for="t in tables[s.name]!.items!" :key="t.name" class="flex items-center gap-2">
@@ -216,33 +265,54 @@ const lockModes = [
                         <template v-if="t.rows !== null">~{{ t.rows.toLocaleString('ru-RU') }} строк · </template>{{ t.size !== null ? formatBytes(t.size) : '' }}
                       </span>
                       <span class="flex rounded-md border bg-background p-0.5">
-                        <label :class="mini"><input type="radio" class="sr-only" :name="key(s.name, t.name)" :checked="!tableMode[key(s.name, t.name)]" @change="setMode(s.name, t.name, 'data')" />целиком</label>
-                        <label :class="mini"><input type="radio" class="sr-only" :name="key(s.name, t.name)" :checked="tableMode[key(s.name, t.name)] === 'schema'" @change="setMode(s.name, t.name, 'schema')" />структура</label>
-                        <label :class="mini"><input type="radio" class="sr-only" :name="key(s.name, t.name)" :checked="tableMode[key(s.name, t.name)] === 'skip'" @change="setMode(s.name, t.name, 'skip')" />пропустить</label>
+                        <button
+                          v-for="m in tableModes"
+                          :key="m.value"
+                          type="button"
+                          class="rounded px-2 py-0.5 text-xs"
+                          :class="(tableMode[key(s.name, t.name)] ?? 'data') === m.value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'"
+                          @click="setMode(s.name, t.name, m.value)"
+                        >
+                          {{ m.label }}
+                        </button>
                       </span>
                     </li>
                   </ul>
-                  <p class="mt-2 text-xs text-muted-foreground">«Структура» — таблица создаётся при восстановлении, но без данных: удобно для логов, сессий, кешей.</p>
                 </template>
               </template>
             </div>
           </li>
           <li v-if="!visibleSchemas.length" class="p-4 text-center text-muted-foreground">Баз нет</li>
         </ul>
-        <label v-if="systemCount" class="flex items-center gap-2 text-sm text-muted-foreground">
-          <input v-model="showSystem" type="checkbox" class="size-4 accent-primary" />Показать служебные базы ({{ systemCount }})
+        <label v-if="systemCount" class="flex items-center gap-2 text-xs text-muted-foreground">
+          <input v-model="showSystem" type="checkbox" class="size-3.5 accent-primary" />Показать служебные базы ({{ systemCount }})
         </label>
-      </template>
-      <p v-if="form.mode === 'selected' && !form.databases.length" :class="hint">Выберите хотя бы одну базу.</p>
-    </section>
+      </div>
+      <p v-for="m in listErrors('databases', 'exclude_tables', 'schema_only_tables')" :key="m" class="text-sm text-destructive">{{ m }}</p>
+    </SettingsSection>
 
-    <section class="grid gap-2">
-      <span :class="label">Как часто</span>
-      <SchedulePicker v-model="form.schedule" :timezone="connection.backup.timezone" :invalid="!!errors.schedule" />
-    </section>
+    <SettingsSection title="Расписание" description="Когда запускать бекап автоматически.">
+      <ScheduleFields
+        v-model:enabled="form.enabled"
+        v-model:schedule="form.schedule"
+        :timezone="saved.backup.timezone"
+        :next-run-at="saved.backup.next_run_at"
+        :changed="scheduleChanged"
+        :errors="listErrors('schedule', 'backup_enabled')"
+      />
+    </SettingsSection>
 
-    <section class="grid gap-3">
-      <span :class="label">Параметры дампа</span>
+    <SettingsSection title="Хранение" description="Где лежат дампы и когда удаляются старые.">
+      <RetentionFields v-model="form.retention" :errors="errors" />
+    </SettingsSection>
+
+    <SettingsSection
+      title="Параметры дампа"
+      :description="isMysql ? 'Блокировки во время дампа и что ещё включить, кроме таблиц.' : 'Формат файла и сжатие.'"
+      collapsible
+      :summary="optionsSummary"
+      :force-open="optionErrors"
+    >
       <template v-if="isMysql">
         <div class="grid gap-2">
           <label v-for="m in lockModes" :key="m.value" :class="optionCard">
@@ -253,43 +323,25 @@ const lockModes = [
             </span>
           </label>
         </div>
-        <div class="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-          <label class="flex items-center gap-2"><input v-model="form.options.routines" type="checkbox" class="size-4 accent-primary" />Процедуры и функции</label>
-          <label class="flex items-center gap-2"><input v-model="form.options.triggers" type="checkbox" class="size-4 accent-primary" />Триггеры</label>
-          <label class="flex items-center gap-2"><input v-model="form.options.events" type="checkbox" class="size-4 accent-primary" />События (events)</label>
+        <div class="flex flex-wrap gap-x-5 gap-y-2">
+          <label :class="check"><input v-model="form.options.routines" type="checkbox" class="size-4 accent-primary" />Процедуры и функции</label>
+          <label :class="check"><input v-model="form.options.triggers" type="checkbox" class="size-4 accent-primary" />Триггеры</label>
+          <label :class="check"><input v-model="form.options.events" type="checkbox" class="size-4 accent-primary" />События (events)</label>
         </div>
       </template>
       <template v-else>
-        <p class="rounded-lg border p-3 text-sm text-muted-foreground">
-          pg_dump всегда делает консистентный снимок и не блокирует запись; блокируются только изменения структуры таблиц (ALTER, DROP) на время дампа.
-        </p>
-        <div class="flex gap-2">
-          <label class="flex h-9 flex-1 cursor-pointer items-center justify-center rounded-md border px-2 text-sm has-checked:border-primary has-checked:bg-accent has-checked:text-accent-foreground">
-            <input v-model="form.options.format" type="radio" value="custom" class="sr-only" />Формат custom (pg_restore)
-          </label>
-          <label class="flex h-9 flex-1 cursor-pointer items-center justify-center rounded-md border px-2 text-sm has-checked:border-primary has-checked:bg-accent has-checked:text-accent-foreground">
-            <input v-model="form.options.format" type="radio" value="plain" class="sr-only" />SQL-файл
-          </label>
+        <p class="text-sm text-muted-foreground">pg_dump всегда делает консистентный снимок и не блокирует запись; на время дампа блокируются только изменения структуры (ALTER, DROP).</p>
+        <div class="grid gap-2">
+          <span class="text-sm font-medium">Формат</span>
+          <SegmentedControl v-model="form.options.format!" :options="formatOptions" />
+          <p class="text-xs text-muted-foreground">Custom — сжатый, восстанавливается выборочно через pg_restore. SQL — обычный текст для psql.</p>
         </div>
-        <p :class="hint">Custom — сжатый, восстанавливается выборочно через pg_restore. SQL — обычный текст, восстанавливается через psql.</p>
-        <label class="flex items-center gap-2 text-sm"><input v-model="form.options.no_owner" type="checkbox" class="size-4 accent-primary" />Без владельцев и прав (--no-owner --no-privileges) — для восстановления под другим пользователем</label>
+        <label :class="check"><input v-model="form.options.no_owner" type="checkbox" class="size-4 accent-primary" />Без владельцев и прав — чтобы восстановить под другим пользователем</label>
       </template>
-      <label class="flex items-center gap-2 text-sm"><input v-model="form.options.compress" type="checkbox" class="size-4 accent-primary" />Сжимать дамп (gzip)</label>
-    </section>
+      <label :class="check"><input v-model="form.options.compress" type="checkbox" class="size-4 accent-primary" />Сжимать дамп (gzip)</label>
+      <p v-for="m in listErrors('options')" :key="m" class="text-sm text-destructive">{{ m }}</p>
+    </SettingsSection>
 
-    <section class="grid gap-2">
-      <span class="text-sm leading-none font-medium">Сколько хранить</span>
-      <!-- ошибки полей показываются общим списком ниже -->
-      <RetentionFields v-model="retention" />
-    </section>
-
-    <div v-if="allErrors.length || formError" class="grid gap-1">
-      <p v-for="m in allErrors" :key="m" class="text-sm text-destructive">{{ m }}</p>
-      <p v-if="formError" class="text-sm text-destructive">{{ formError }}</p>
-    </div>
-    <div class="flex items-center gap-3">
-      <button type="submit" :disabled="saving || (form.mode === 'selected' && !form.databases.length)" :class="btnClass.primary">Сохранить настройки бекапа</button>
-      <span v-if="savedNotice" class="text-sm text-muted-foreground">Сохранено</span>
-    </div>
+    <SaveBar :dirty="dirty" :saving="saving" :saved="savedNotice" :error="formError" :disabled-reason="noDatabases ? 'Выберите хотя бы одну базу' : undefined" class="mt-6" @reset="fill(saved)" />
   </form>
 </template>

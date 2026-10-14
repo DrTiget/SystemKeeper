@@ -10,8 +10,9 @@ export const btnClass = {
   destructive: `${btnBase} border border-input bg-background text-destructive shadow-xs hover:bg-destructive/10 dark:bg-input/30`,
 }
 
-export function formatDate(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }) : '—'
+/** timeZone — показать время в этом поясе (например, в поясе расписания), а не в поясе браузера. */
+export function formatDate(iso: string | null, timeZone?: string): string {
+  return iso ? new Date(iso).toLocaleString('ru-RU', { dateStyle: 'medium', timeStyle: 'short', timeZone }) : '—'
 }
 
 export function formatBytes(n: number): string {

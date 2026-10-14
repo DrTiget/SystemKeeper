@@ -1,15 +1,22 @@
 <script setup lang="ts">
 import { reactive, watch } from 'vue'
 import SelectMenu from '@/components/SelectMenu.vue'
+import SegmentedControl from '@/components/form/SegmentedControl.vue'
 import { buildCron, parseCron, WEEKDAYS } from '@/lib/cron'
 import { inputClass } from '@/lib/ui'
 
 /** Выбор расписания: пресеты (час / день / неделя) или свой cron. v-model — cron-выражение. */
 const model = defineModel<string>({ required: true })
-defineProps<{ timezone?: string; invalid?: boolean }>()
+defineProps<{ invalid?: boolean }>()
 
 type Kind = 'hourly' | 'daily' | 'weekly' | 'custom'
 const s = reactive({ kind: 'daily' as Kind, time: '03:00', minute: 0, weekday: 1, cron: '0 3 * * *' })
+const kinds: { value: Kind; label: string }[] = [
+  { value: 'hourly', label: 'Каждый час' },
+  { value: 'daily', label: 'Каждый день' },
+  { value: 'weekly', label: 'Раз в неделю' },
+  { value: 'custom', label: 'Свой cron' },
+]
 const weekdayOptions = [1, 2, 3, 4, 5, 6, 0].map((d) => ({ value: d, label: WEEKDAYS[d]! }))
 
 function build(): string {
@@ -43,34 +50,24 @@ watch(s, () => {
   if (s.kind !== 'custom') s.cron = build()
   model.value = build()
 })
-
-const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center rounded-md border px-2 text-sm whitespace-nowrap has-checked:border-primary has-checked:bg-accent has-checked:text-accent-foreground'
 </script>
 
 <template>
-  <div class="grid gap-2">
-    <div class="flex flex-wrap gap-2">
-      <label :class="segment"><input v-model="s.kind" type="radio" value="hourly" class="sr-only" />Каждый час</label>
-      <label :class="segment"><input v-model="s.kind" type="radio" value="daily" class="sr-only" />Каждый день</label>
-      <label :class="segment"><input v-model="s.kind" type="radio" value="weekly" class="sr-only" />Раз в неделю</label>
-      <label :class="segment"><input v-model="s.kind" type="radio" value="custom" class="sr-only" />Cron</label>
+  <div class="grid gap-3">
+    <SegmentedControl v-model="s.kind" :options="kinds" />
+    <div v-if="s.kind === 'hourly'" class="flex flex-wrap items-center gap-2 text-sm">
+      в <input v-model.number="s.minute" type="number" min="0" max="59" required aria-label="Минута" :class="inputClass" class="w-20!" /> минут каждого часа
     </div>
-    <div v-if="s.kind === 'hourly'" class="flex items-center gap-2 text-sm">
-      В
-      <input v-model.number="s.minute" type="number" min="0" max="59" required :class="inputClass" class="w-20!" />
-      минут каждого часа
+    <div v-else-if="s.kind === 'daily'" class="flex flex-wrap items-center gap-2 text-sm">
+      в <input v-model="s.time" type="time" required aria-label="Время" :class="inputClass" class="w-32!" />
     </div>
-    <div v-else-if="s.kind === 'daily'" class="flex items-center gap-2 text-sm">
-      В <input v-model="s.time" type="time" required :class="inputClass" class="w-32!" />
-    </div>
-    <div v-else-if="s.kind === 'weekly'" class="flex items-center gap-2 text-sm">
+    <div v-else-if="s.kind === 'weekly'" class="flex flex-wrap items-center gap-2 text-sm">
       <SelectMenu v-model="s.weekday" :options="weekdayOptions" class="w-48" />
-      в <input v-model="s.time" type="time" required :class="inputClass" class="w-32!" />
+      в <input v-model="s.time" type="time" required aria-label="Время" :class="inputClass" class="w-32!" />
     </div>
     <div v-else class="grid gap-1">
-      <input v-model="s.cron" required placeholder="0 3 * * *" spellcheck="false" :class="inputClass" class="font-mono" :aria-invalid="invalid" />
+      <input v-model="s.cron" required placeholder="0 3 * * *" spellcheck="false" aria-label="Cron-выражение" :class="inputClass" class="max-w-xs font-mono" :aria-invalid="invalid" />
       <p class="text-sm text-muted-foreground">Минута, час, день месяца, месяц, день недели.</p>
     </div>
-    <p v-if="timezone" class="text-sm text-muted-foreground">Время — {{ timezone }}.</p>
   </div>
 </template>
