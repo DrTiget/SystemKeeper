@@ -72,9 +72,31 @@ async function logout() {
             <RouterLink to="/projects" class="hover:text-sidebar-accent-foreground" @click="open = false">Проекты</RouterLink>
             <RouterLink to="/projects?new=1" class="rounded p-0.5 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" title="Новый проект" @click="open = false"><Icon name="plus" class="size-3.5" /></RouterLink>
           </div>
-          <RouterLink v-for="p in projects.list" :key="p.id" :to="`/projects/${p.id}`" :class="link" :active-class="activeLink" @click="open = false">
-            <Icon name="folder" /><span class="truncate">{{ p.name }}</span>
-          </RouterLink>
+          <template v-for="g in projects.grouped" :key="g.group?.id ?? 'none'">
+            <!-- без группы: заголовок только если группы вообще есть -->
+            <button
+              v-if="g.group || projects.groups.length"
+              v-show="g.group || g.projects.length"
+              class="mt-1 flex h-7 items-center gap-1 rounded-md px-2 text-xs font-medium text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              @click="projects.toggle(g.group)"
+            >
+              <Icon name="chevron-right" class="size-3.5 transition-transform" :class="!projects.isCollapsed(g.group) && 'rotate-90'" />
+              <span class="truncate">{{ g.group?.name ?? 'Без группы' }}</span>
+              <span class="ml-auto text-sidebar-foreground/50">{{ g.projects.length }}</span>
+            </button>
+            <template v-if="!projects.isCollapsed(g.group) || !(g.group || projects.groups.length)">
+              <RouterLink
+                v-for="p in g.projects"
+                :key="p.id"
+                :to="`/projects/${p.id}`"
+                :class="[link, (g.group || projects.groups.length) && 'pl-6']"
+                :active-class="activeLink"
+                @click="open = false"
+              >
+                <Icon name="folder" /><span class="truncate">{{ p.name }}</span>
+              </RouterLink>
+            </template>
+          </template>
           <RouterLink v-if="projects.loaded && !projects.list.length" to="/projects?new=1" :class="link" class="text-sidebar-foreground/60" @click="open = false">
             <Icon name="plus" />Создать проект
           </RouterLink>

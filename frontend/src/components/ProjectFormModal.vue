@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { api, ApiError } from '@/api/client'
 import type { Project } from '@/api/projects'
 import Modal from '@/components/Modal.vue'
+import SelectMenu from '@/components/SelectMenu.vue'
+import { useProjectsStore } from '@/stores/projects'
 import { btnClass, inputClass } from '@/lib/ui'
 
-const props = defineProps<{ project: Project | null }>()
+const props = defineProps<{ project: Project | null; groupId?: number | null }>()
 const emit = defineEmits<{ close: []; saved: [project: Project] }>()
 
-const form = reactive({ name: props.project?.name ?? '', description: props.project?.description ?? '' })
+const store = useProjectsStore()
+const form = reactive({ name: props.project?.name ?? '', description: props.project?.description ?? '', group_id: props.project ? props.project.group_id : (props.groupId ?? null) })
+// SelectMenu не принимает null — «без группы» обозначаем 0
+const groupValue = computed({ get: () => form.group_id ?? 0, set: (v: number) => (form.group_id = v || null) })
 const errors = ref<Record<string, string[]>>({})
 const formError = ref('')
 const saving = ref(false)
@@ -17,7 +22,7 @@ async function save() {
   saving.value = true
   errors.value = {}
   formError.value = ''
-  const body = { name: form.name, description: form.description || null }
+  const body = { name: form.name, description: form.description || null, group_id: form.group_id }
   try {
     const res = props.project
       ? await api<{ data: Project }>(`/projects/${props.project.id}`, { method: 'PATCH', body })
@@ -45,6 +50,10 @@ const label = 'text-sm leading-none font-medium'
       <div class="grid gap-2">
         <label for="p-description" :class="label">Описание</label>
         <input id="p-description" v-model="form.description" placeholder="Необязательно" :class="inputClass" />
+      </div>
+      <div v-if="store.groups.length" class="grid gap-2">
+        <label for="p-group" :class="label">Группа</label>
+        <SelectMenu id="p-group" v-model="groupValue" :options="[{ value: 0, label: 'Без группы' }, ...store.groups.map((g) => ({ value: g.id, label: g.name }))]" />
       </div>
       <p v-if="formError" class="text-sm text-destructive">{{ formError }}</p>
       <div class="flex justify-end gap-2">

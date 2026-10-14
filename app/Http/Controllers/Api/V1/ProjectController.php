@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Validation\Rule;
 
 /**
  * Проекты — группы серверов и баз данных. Состав проекта задаётся полем `project_id` у сервера и базы;
@@ -16,16 +17,19 @@ use Illuminate\Http\Response;
  */
 class ProjectController extends Controller
 {
-    /** Проекты по названию с числом серверов и баз; `search` — по названию и описанию. */
+    /** Проекты по названию с числом серверов и баз; `search` — по названию и описанию; `group_id` — проекты группы (`none` — без группы). */
     public function index(Request $request): AnonymousResourceCollection
     {
         $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
+            // id группы; `none` — проекты без группы
+            'group_id' => ['nullable', 'string', 'regex:/^(\d+|none)$/'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
         return ProjectResource::collection(Project::query()
             ->withCount(['servers', 'databases'])
+            ->when($request->input('group_id'), fn ($q, $g) => $g === 'none' ? $q->whereNull('group_id') : $q->where('group_id', (int) $g))
             ->when($request->string('search')->trim()->value(), fn ($q, $s) => $q->where(
                 fn ($q) => $q->where('name', 'like', "%{$s}%")->orWhere('description', 'like', "%{$s}%"),
             ))
@@ -68,6 +72,7 @@ class ProjectController extends Controller
         return $request->validate([
             'name' => [$creating ? 'required' : 'sometimes', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string', 'max:2000'],
-        ], attributes: ['name' => 'название', 'description' => 'описание']);
+            'group_id' => ['sometimes', 'nullable', 'integer', Rule::exists('project_groups', 'id')],
+        ], attributes: ['name' => 'название', 'description' => 'описание', 'group_id' => 'группа']);
     }
 }

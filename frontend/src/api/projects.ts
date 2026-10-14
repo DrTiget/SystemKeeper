@@ -1,5 +1,6 @@
 export interface Project {
   id: number
+  group_id: number | null
   name: string
   description: string | null
   servers_count?: number
@@ -8,3 +9,9 @@ export interface Project {
 }
 
 export type ProjectRef = Pick<Project, 'id' | 'name'>
+
+export interface ProjectGroup {
+  id: number
+  name: string
+  projects_count?: number
+}

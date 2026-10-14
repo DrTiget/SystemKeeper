@@ -92,6 +92,17 @@ docker compose exec app php artisan user:create
 
 Состав проекта — `GET /servers?project_id={id}` и `GET /databases?project_id={id}` (`project_id=none` — без проекта). Бекапы всех серверов и баз проекта — `GET /projects/{id}/backups` (в каждом — `source`: `type`, `id`, `name`).
 
+### Группы проектов
+
+Проект входит в одну группу или ни в одну: поле `group_id` в `POST/PATCH /projects` (в ответе — `group_id`), фильтр `GET /projects?group_id={id}` (`none` — без группы).
+
+| Метод | Путь | Описание |
+|---|---|---|
+| GET | `/project-groups` | Все группы по названию с `projects_count` |
+| POST | `/project-groups` | Создать: `name` |
+| GET / PATCH | `/project-groups/{id}` | Группа / переименовать |
+| DELETE | `/project-groups/{id}` | Удалить; проекты остаются без группы |
+
 ## API: серверы
 
 Сервер — хост с SSH-подключением по ключу или по паролю. Доступно всем пользователям.

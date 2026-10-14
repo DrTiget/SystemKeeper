@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\DatabaseConnection;
 use App\Models\Project;
+use App\Models\ProjectGroup;
 use App\Models\Server;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -91,5 +92,24 @@ class ProjectApiTest extends TestCase
             ->assertJsonCount(2, 'data')
             ->assertJsonPath('data.0.source', ['type' => 'database', 'id' => $db->id, 'name' => $db->name])
             ->assertJsonPath('data.1.source.id', $server->id);
+    }
+
+    public function test_project_groups(): void
+    {
+        $gid = $this->postJson('/api/v1/project-groups', ['name' => 'Клиенты'])->assertCreated()->assertJsonPath('data.projects_count', 0)->json('data.id');
+        $project = Project::factory()->create();
+        Project::factory()->create();
+
+        $this->patchJson("/api/v1/projects/{$project->id}", ['group_id' => $gid])->assertOk()->assertJsonPath('data.group_id', $gid);
+        $this->patchJson("/api/v1/projects/{$project->id}", ['group_id' => 999])->assertStatus(422)->assertJsonValidationErrors('group_id');
+
+        $this->getJson('/api/v1/project-groups')->assertJsonPath('data.0.projects_count', 1);
+        $this->getJson("/api/v1/projects?group_id={$gid}")->assertJsonCount(1, 'data');
+        $this->getJson('/api/v1/projects?group_id=none')->assertJsonCount(1, 'data');
+        $this->patchJson("/api/v1/project-groups/{$gid}", ['name' => 'Свои'])->assertOk()->assertJsonPath('data.name', 'Свои');
+
+        $this->deleteJson("/api/v1/project-groups/{$gid}")->assertNoContent();
+        $this->assertNull($project->fresh()->group_id);
+        $this->assertSame(0, ProjectGroup::count());
     }
 }

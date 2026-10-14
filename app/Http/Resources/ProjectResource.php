@@ -19,6 +19,8 @@ class ProjectResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            /** Группа проектов; null — без группы */
+            'group_id' => $this->group_id,
             'description' => $this->description,
             'servers_count' => $this->whenCounted('servers'),
             'databases_count' => $this->whenCounted('databases'),
