@@ -17,7 +17,7 @@ async function load() {
     // источники — из карточки каждого хранилища
     storages.value = await Promise.all(list.map(async (s) => (await api<{ data: BackupStorage }>(`/storages/${s.id}`)).data))
   } catch {
-    loadError.value = 'Не удалось загрузить хранилища'
+    loadError.value = 'Не удалось загрузить список'
   } finally {
     loading.value = false
   }
@@ -67,7 +67,7 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
 <template>
   <div class="flex flex-col gap-6 p-4">
     <header class="space-y-0.5">
-      <h2 class="text-xl font-semibold tracking-tight">Хранилища</h2>
+      <h2 class="text-xl font-semibold tracking-tight">Диски и облака</h2>
       <p class="text-sm text-muted-foreground">Где лежат бекапы, сколько места занято и сколько копий хранится у каждого сервера и базы</p>
     </header>
 
@@ -138,7 +138,7 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
       </div>
     </section>
 
-    <Modal v-if="editing" wide :title="`Хранение: ${editing.name}`" @close="editing = null">
+    <Modal v-if="editing" wide :title="`Сколько хранить: ${editing.name}`" @close="editing = null">
       <form class="grid gap-5" @submit.prevent="save">
         <RetentionFields v-model="retention" :errors="errors" />
         <p v-if="saveError" class="text-sm text-destructive">{{ saveError }}</p>

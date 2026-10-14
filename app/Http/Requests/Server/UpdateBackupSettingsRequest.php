@@ -80,7 +80,7 @@ class UpdateBackupSettingsRequest extends FormRequest
             'paths.*' => 'каталог',
             'excludes' => 'исключения',
             'excludes.*' => 'исключение',
-            'storage_id' => 'хранилище',
+            'storage_id' => 'куда сохранять',
             'keep_count' => 'сколько бекапов хранить',
             'max_size' => 'лимит объёма',
             'schedule' => 'расписание',

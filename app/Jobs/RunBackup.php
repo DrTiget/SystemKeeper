@@ -52,7 +52,7 @@ class RunBackup implements ShouldQueue
             $free = $storage->disk()['free'] ?? null;
             $min = (int) config('backup.min_free_space');
             if ($free !== null && $free < $min) {
-                throw new BackupException('В хранилище «'.$storage->name.'» свободно '.Bytes::format($free).' — меньше минимума '.Bytes::format($min).'.');
+                throw new BackupException('В «'.$storage->name.'» свободно '.Bytes::format($free).' — меньше минимума '.Bytes::format($min).'.');
             }
 
             match (true) {

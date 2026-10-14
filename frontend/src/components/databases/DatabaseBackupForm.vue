@@ -278,7 +278,7 @@ const lockModes = [
     </section>
 
     <section class="grid gap-2">
-      <span class="text-sm leading-none font-medium">Хранение</span>
+      <span class="text-sm leading-none font-medium">Сколько хранить</span>
       <!-- ошибки полей показываются общим списком ниже -->
       <RetentionFields v-model="retention" />
     </section>

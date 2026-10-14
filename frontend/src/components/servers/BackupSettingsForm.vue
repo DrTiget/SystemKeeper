@@ -244,7 +244,7 @@ const chip = 'inline-flex items-center gap-1 rounded-md border bg-background py-
     </section>
 
     <section class="grid gap-2">
-      <span :class="label">Хранение</span>
+      <span :class="label">Сколько хранить</span>
       <RetentionFields v-model="retention" :errors="errors" />
     </section>
 

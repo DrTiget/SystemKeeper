@@ -154,7 +154,7 @@ class DatabaseConnectionRequest extends FormRequest
             'schedule' => 'расписание',
             'databases' => 'базы',
             'databases.*' => 'база',
-            'storage_id' => 'хранилище',
+            'storage_id' => 'куда сохранять',
             'keep_count' => 'сколько бекапов хранить',
             'max_size' => 'лимит объёма',
             'exclude_tables.*' => 'таблица',

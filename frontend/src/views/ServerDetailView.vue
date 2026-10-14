@@ -179,7 +179,7 @@ const dt = 'text-xs text-muted-foreground'
       <section :class="card" class="grid gap-4">
         <div class="grid gap-1">
           <h3 class="font-semibold">Бекапы</h3>
-          <p class="text-sm text-muted-foreground">Запуск вручную и последние бекапы файлов. Пока хранилищ нет, архивы лежат в SystemKeeper.</p>
+          <p class="text-sm text-muted-foreground">Запуск вручную и последние бекапы файлов. Архивы сохраняются на диск SystemKeeper.</p>
         </div>
         <BackupHistory :source="`servers/${server.id}`" :disabled-reason="hasPaths ? undefined : 'Сначала выберите и сохраните каталоги'" />
       </section>

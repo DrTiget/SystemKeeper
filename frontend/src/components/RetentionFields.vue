@@ -62,11 +62,11 @@ const unitBtn = 'h-9 px-3 text-sm first:rounded-l-md last:rounded-r-md border -m
 <template>
   <div class="grid gap-4">
     <div v-if="storages.length > 1" class="grid gap-2">
-      <span :class="label">Хранилище</span>
+      <span :class="label">Куда сохранять</span>
       <SelectMenu v-model="storageId as number" :options="storageOptions" />
     </div>
     <p v-else-if="storages.length" :class="hint">
-      Хранилище: <b class="text-foreground">{{ storages[0]!.name }}</b>
+      Сохраняются в <b class="text-foreground">{{ storages[0]!.name }}</b>
       <template v-if="storages[0]!.disk"> — свободно {{ formatBytes(storages[0]!.disk.free) }} из {{ formatBytes(storages[0]!.disk.total) }}</template>
     </p>
 
