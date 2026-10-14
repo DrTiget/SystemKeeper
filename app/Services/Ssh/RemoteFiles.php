@@ -56,8 +56,10 @@ class RemoteFiles
             .'if [ -d "$f" ]; then Y=d; elif [ -f "$f" ]; then Y=f; else Y=o; fi; if [ -L "$f" ]; then y=l; else y=$Y; fi; '
             .'s=0; [ "$y" = f ] && s=$(stat -c %s -- "$f" 2>/dev/null || echo 0); '
             ."printf '%s\\t%s\\t%s\\t%s\\0' \"\$y\" \"\$Y\" \"\$s\" \"\$f\"; n=\$((n+1)); [ \$n -ge {$max} ] && break; done";
+        // head -z нет в старых coreutils (CentOS 7) — там обрезаем по объёму, лишние записи отбросятся ниже
+        $head = "if head -z -n 1 </dev/null >/dev/null 2>&1; then head -z -n {$max}; else head -c 8388608; fi";
         $command = "LC_ALL=C; if [ ! -d {$dir} ]; then echo 'not a directory' >&2; exit 3; fi; cd {$dir} || exit 1; "
-            ."if find . -maxdepth 0 -printf '' 2>/dev/null; then find . -mindepth 1 -maxdepth 1 -printf '%y\\t%Y\\t%s\\t%P\\0' | head -z -n {$max}; "
+            ."if find . -maxdepth 0 -printf '' 2>/dev/null; then find . -mindepth 1 -maxdepth 1 -printf '%y\\t%Y\\t%s\\t%P\\0' | {$head}; "
             ."else {$fallback}; fi";
 
         $result = $this->ssh->exec($server, $command, (int) config('backup.browse_timeout'));
@@ -72,8 +74,15 @@ class RemoteFiles
                 : "Не удалось прочитать {$path}: ".($stderr ?: 'код '.($result['exit_code'] ?? '—')));
         }
 
+        $lines = explode("\0", $result['stdout']);
+        // Вывод обрезан по объёму посреди записи — неполную запись отбрасываем
+        $cut = $result['stdout'] !== '' && ! str_ends_with($result['stdout'], "\0");
+        if ($cut) {
+            array_pop($lines);
+        }
+
         $entries = [];
-        foreach (explode("\0", $result['stdout']) as $line) {
+        foreach ($lines as $line) {
             $fields = explode("\t", $line, 4);
             if (count($fields) !== 4 || $fields[3] === '') {
                 continue;
@@ -94,7 +103,7 @@ class RemoteFiles
             ];
         }
 
-        $truncated = count($entries) > $limit;
+        $truncated = $cut || count($entries) > $limit;
         $entries = array_slice($entries, 0, $limit);
         usort($entries, fn ($a, $b) => [$a['type'] !== 'dir', mb_strtolower($a['name'])] <=> [$b['type'] !== 'dir', mb_strtolower($b['name'])]);
 

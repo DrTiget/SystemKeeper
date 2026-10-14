@@ -86,6 +86,17 @@ class ServerFilesTest extends TestCase
             ->assertJsonPath('data.truncated', true);
     }
 
+    public function test_output_cut_by_size_drops_partial_entry(): void
+    {
+        // старый head без -z (CentOS 7) обрезает вывод по байтам
+        $fake = $this->fake(['stdout' => "f\tf\t1\ta\0d\td\t0\tbin\0f\tf\t1\tpart"]);
+
+        $this->getJson("/api/v1/servers/{$this->server->id}/files")
+            ->assertJsonCount(2, 'data.entries')
+            ->assertJsonPath('data.truncated', true);
+        $this->assertStringContainsString('else head -c 8388608; fi', $fake->calls[0]['command']);
+    }
+
     public function test_errors(): void
     {
         $url = "/api/v1/servers/{$this->server->id}/files";
