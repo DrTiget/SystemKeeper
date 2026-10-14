@@ -20,6 +20,7 @@ interface NavItem {
 
 // Меню: сначала проекты (серверы и базы — внутри них), затем хранение и администрирование
 const navGroups: { title: string; admin?: boolean; items: NavItem[] }[] = [
+  { title: 'Мониторинг', items: [{ to: '/monitors', label: 'Аптайм', icon: 'activity' }] },
   { title: 'Бекапы', items: [{ to: '/storages', label: 'Диски и облака', icon: 'archive' }] },
   { title: 'Администрирование', admin: true, items: [{ to: '/users', label: 'Пользователи', icon: 'users', admin: true }] },
 ]

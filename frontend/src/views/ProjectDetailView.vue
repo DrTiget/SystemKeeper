@@ -6,6 +6,8 @@ import type { DatabaseConnection } from '@/api/databases'
 import type { Project } from '@/api/projects'
 import { type Backup, BACKUP_STATUS as STATUS, backupTrigger } from '@/api/backups'
 import type { Server } from '@/api/servers'
+import type { Monitor } from '@/api/monitors'
+import MonitorsTable from '@/components/monitors/MonitorsTable.vue'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
 import ProjectFormModal from '@/components/ProjectFormModal.vue'
@@ -25,17 +27,21 @@ const project = ref<Project | null>(null)
 const servers = ref<Server[]>([])
 const databases = ref<DatabaseConnection[]>([])
 const backups = ref<Backup[]>([])
+const monitors = ref<Monitor[]>([])
 const loadError = ref('')
 const store = useProjectsStore()
 
 async function load() {
   try {
-    const [p, s, d, b] = await Promise.all([
+    const [p, s, d, b, m] = await Promise.all([
       api<{ data: Project }>(`/projects/${id}`),
       api<{ data: Server[] }>(`/servers?project_id=${id}&per_page=100`),
       api<{ data: DatabaseConnection[] }>(`/databases?project_id=${id}&per_page=100`),
       api<{ data: Backup[] }>(`/projects/${id}/backups?per_page=15`),
+      // мониторинг — отдельный модуль: если он недоступен, остальная страница проекта всё равно работает
+      api<{ data: Monitor[] }>(`/monitors?project_id=${id}&per_page=100`).catch(() => ({ data: [] as Monitor[] })),
     ])
+    monitors.value = m.data
     backups.value = b.data
     store.crumbs = [{ label: 'Проекты', to: '/projects' }, { label: p.data.name }]
     project.value = p.data
@@ -147,6 +153,14 @@ const backupLink = (b: Backup) => ({ name: 'backup', params: { id: b.id } })
             <button class="rounded p-1 hover:bg-accent hover:text-foreground" title="Убрать из проекта" @click="detach('database', item.id)"><Icon name="x" class="size-4" /></button>
           </template>
         </DatabasesTable>
+      </section>
+
+      <section :class="card" class="grid gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h3 class="font-semibold">Аптайм <span class="font-normal text-muted-foreground">{{ monitors.length }}</span></h3>
+          <RouterLink :to="{ name: 'monitor-new', query: { project_id: id } }" :class="btnClass.primary"><Icon name="plus" />Новый монитор</RouterLink>
+        </div>
+        <MonitorsTable :items="monitors" :show-project="false" empty-text="Мониторов в проекте нет — добавьте сайт или API, чтобы следить за доступностью" />
       </section>
 
       <section :class="card" class="grid gap-4">

@@ -8,7 +8,7 @@ export function useUnsavedGuard(dirty: Ref<boolean>) {
   }
   onMounted(() => window.addEventListener('beforeunload', onUnload))
   onBeforeUnmount(() => window.removeEventListener('beforeunload', onUnload))
-  onBeforeRouteLeave(() => !dirty.value || confirm('Настройки бекапа не сохранены. Уйти со страницы?'))
+  onBeforeRouteLeave(() => !dirty.value || confirm('Изменения не сохранены. Уйти со страницы?'))
 }
 
 /**
