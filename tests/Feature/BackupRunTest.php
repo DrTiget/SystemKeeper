@@ -66,14 +66,20 @@ class BackupRunTest extends TestCase
 
         $backup = Backup::findOrFail($id);
         $this->assertSame(Backup::SUCCESS, $backup->status);
-        $this->assertSame([['name' => 'files.tar.gz', 'size' => 7]], $backup->files);
+        // 'TARDATA' — не gzip: объём до сжатия не считается
+        $this->assertSame([['name' => 'files.tar.gz', 'size' => 7, 'sha256' => hash('sha256', 'TARDATA')]], $backup->files);
         $this->assertSame(7, $backup->size);
         Storage::disk('backups')->assertExists($backup->path.'/files.tar.gz');
         $this->assertSame('TARDATA', Storage::disk('backups')->get($backup->path.'/files.tar.gz'));
         $this->assertStringStartsWith("servers/{$server->id}/", $backup->path);
 
-        $this->assertSame('echo pre', $fake->calls[0]['command']);
-        $this->assertStringContainsString("then exec tar -czf - --ignore-failed-read -C / --exclude='*.log' --exclude='var/www/cache' -- 'var/www' 'etc/nginx'; else exec tar -czf - -C / --exclude", $fake->calls[1]['command']);
+        $this->assertSame(ServerBackupRunner::HOST_INFO_COMMAND, $fake->calls[0]['command']);
+        $this->assertSame('echo pre', $fake->calls[1]['command']);
+        $this->assertStringContainsString("then exec tar -czf - --ignore-failed-read --totals -C / --exclude='*.log' --exclude='var/www/cache' -- 'var/www' 'etc/nginx'; else exec tar -czf - -C / --exclude", $fake->calls[2]['command']);
+
+        $this->assertEquals(['type' => 'server', 'name' => $server->name, 'address' => "{$server->username}@{$server->host}:{$server->port}", 'paths' => ['/var/www', '/etc/nginx'], 'excludes' => ['*.log', '/var/www/cache']], $backup->meta['source']);
+        $this->assertEquals(['command' => 'echo pre', 'exit_code' => 0, 'output' => 'TARDATA', 'continued_on_error' => false], array_diff_key($backup->meta['pre_command'], ['duration_ms' => 1]));
+        $this->assertArrayHasKey('archive', $backup->meta);
 
         $this->getJson("/api/v1/servers/{$server->id}/backups")->assertOk()->assertJsonPath('data.0.id', $id)->assertJsonPath('data.0.status', 'success');
         $this->getJson("/api/v1/backups/{$id}/files/files.tar.gz")->assertOk()->assertDownload('files.tar.gz');
@@ -88,7 +94,7 @@ class BackupRunTest extends TestCase
         $this->getJson("/api/v1/backups/{$id}")
             ->assertJsonPath('data.status', 'failed')
             ->assertJsonPath('data.error', 'Команда перед бекапом завершилась с кодом 2: boom');
-        $this->assertCount(1, $fake->calls);
+        $this->assertCount(2, $fake->calls); // сведения о сервере и команда — tar не запускался
 
         $server->backupSettings->update(['pre_command_continue_on_error' => true]);
         $id = $this->postJson("/api/v1/servers/{$server->id}/backups")->assertStatus(202)->json('data.id');
@@ -145,7 +151,10 @@ class BackupRunTest extends TestCase
             'engine' => 'mysql', 'via' => 'ssh', 'server_id' => Server::factory()->create()->id, 'username' => 'bk', 'password' => 'secret',
             'databases' => ['shop', 'blog'], 'exclude_tables' => ['shop.logs'], 'schema_only_tables' => ['shop.sessions'],
         ]);
-        $fake = $this->fake(['stdout' => 'DUMP']);
+        $fake = $this->fake(['stdout' => 'DUMP'], [
+            'information_schema' => ['exit_code' => 0, 'stdout' => "shop\t1000\nblog\t2000\nmysql\t10\n", 'stderr' => ''],
+            'VERSION()' => ['exit_code' => 0, 'stdout' => "8.4.2\n", 'stderr' => ''],
+        ]);
 
         $id = $this->postJson("/api/v1/databases/{$db->id}/backups")->assertStatus(202)->json('data.id');
 
@@ -154,14 +163,20 @@ class BackupRunTest extends TestCase
         $this->assertSame(['shop.sql.gz', 'blog.sql.gz'], array_column($backup->files, 'name'));
         $this->assertStringStartsWith("databases/{$db->id}/", $backup->path);
 
-        $cmd = $fake->calls[0]['command'];
+        $this->assertSame('8.4.2', $backup->meta['source']['version']);
+        $this->assertSame('single_transaction', $backup->meta['source']['options']['lock_mode']);
+        $this->assertSame(['shop.logs'], $backup->meta['source']['exclude_tables']);
+        $this->assertSame([['shop', 1000, 'shop.sql.gz', 4, 'success'], ['blog', 2000, 'blog.sql.gz', 4, 'success']],
+            array_map(fn ($d) => [$d['name'], $d['size'], $d['file'], $d['dump_size'], $d['status']], $backup->meta['databases']));
+
+        $cmd = $fake->calls[2]['command'];
         $this->assertStringContainsString("--ignore-table='shop.logs' --ignore-table='shop.sessions' --databases 'shop'", $cmd);
         $this->assertStringContainsString("--no-data --skip-lock-tables 'shop' 'sessions'", $cmd);
         $this->assertStringContainsString('--single-transaction', $cmd);
         $this->assertStringContainsString('| gzip -c', $cmd);
         $this->assertStringNotContainsString('secret', $cmd);
-        $this->assertSame("secret\n", $fake->calls[0]['stdin']);
-        $this->assertStringNotContainsString('--ignore-table', $fake->calls[1]['command']);
+        $this->assertSame("secret\n", $fake->calls[2]['stdin']);
+        $this->assertStringNotContainsString('--ignore-table', $fake->calls[3]['command']);
     }
 
     public function test_database_dump_failure_lists_failed_databases(): void
@@ -211,5 +226,33 @@ class BackupRunTest extends TestCase
     public function test_tar_command_root_path(): void
     {
         $this->assertStringEndsWith("else exec tar -czf - -C / -- '.'; fi", ServerBackupRunner::tarCommand(['/'], []));
+    }
+
+    public function test_host_info_and_tar_totals_are_parsed(): void
+    {
+        $this->assertSame(
+            ['hostname' => 'web1', 'os' => 'CentOS Linux 7 (Core)', 'kernel' => 'Linux 3.10.0', 'tools' => ['tar' => 'tar (GNU tar) 1.26']],
+            ServerBackupRunner::parseHostInfo("hostname=web1\nkernel=Linux 3.10.0\nos=CentOS Linux 7 (Core)\ntar=tar (GNU tar) 1.26\n"),
+        );
+
+        $server = $this->server();
+        $this->fake(['exit_code' => 0, 'stdout' => 'TAR', 'stderr' => "Total bytes written: 10240 (10KiB, 5MiB/s)\n"]);
+        $id = $this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id');
+        $meta = Backup::find($id)->meta;
+        $this->assertSame(10240, $meta['archive']['uncompressed_size']);
+        $this->assertNull($meta['archive']['warnings']);
+        $this->getJson("/api/v1/backups/{$id}")->assertJsonPath('data.meta.archive.uncompressed_size', 10240);
+    }
+
+    public function test_uncompressed_size_is_counted_from_gzip_stream(): void
+    {
+        $server = $this->server();
+        $raw = str_repeat('a', 5_000_000);
+        $this->fake(['exit_code' => 0, 'stdout' => gzencode($raw), 'stderr' => '']);
+
+        $id = $this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id');
+        $backup = Backup::find($id);
+        $this->assertSame(5_000_000, $backup->files[0]['uncompressed_size']);
+        $this->assertSame(5_000_000, $backup->meta['archive']['uncompressed_size']);
     }
 }

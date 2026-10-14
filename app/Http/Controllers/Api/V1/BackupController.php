@@ -36,7 +36,7 @@ class BackupController extends Controller
             ->where(fn ($q) => $q
                 ->where(fn ($q) => $q->where('source_type', 'server')->whereIn('source_id', $project->servers()->select('id')))
                 ->orWhere(fn ($q) => $q->where('source_type', 'database')->whereIn('source_id', $project->databases()->select('id'))))
-            ->with(['user', 'source', 'copies.storage'])
+            ->with(['user', 'source.project', 'copies.storage'])
             ->latest('id')
             ->paginate($request->integer('per_page', 20));
 
@@ -76,9 +76,10 @@ class BackupController extends Controller
         return $this->start($request, $database);
     }
 
+    /** Бекап с подробностями (`meta`), копиями по местам хранения и источником (`source` с проектом). */
     public function show(Backup $backup): BackupResource
     {
-        return new BackupResource($backup->load(['user', 'copies.storage']));
+        return new BackupResource($backup->load(['user', 'copies.storage', 'source.project']));
     }
 
     /** Удаляет запись и файлы бекапа. 409 — бекап ещё выполняется. */

@@ -33,7 +33,9 @@ export interface BackupDetail extends Backup {
   /** Каталог бекапа внутри хранилища */
   path?: string | null
   /** Файлы с контрольными суммами */
-  files: { name: string; size: number; sha256?: string | null }[]
+  files: { name: string; size: number; sha256?: string | null; uncompressed_size?: number }[]
+  /** Подробности, собранные при снятии; старые бекапы — без них */
+  meta: BackupMeta
   /** Что бекапилось — снимок настроек на момент запуска */
   settings?: {
     /** Сервер: каталоги, исключения и команда перед бекапом */
@@ -50,6 +52,28 @@ export interface BackupDetail extends Backup {
   source_info?: { host?: string | null; version?: string | null } | null
   /** Хранение: место среди хранимых копий источника (1 — самый новый) и его правила хранения */
   retention?: { position: number; keep_count: number; max_size: number | null } | null
+}
+
+export interface BackupMeta {
+  host?: { hostname: string | null; os: string | null; kernel: string | null; tools: Record<string, string> }
+  source?:
+    | { type: 'server'; name: string; address: string; paths: string[]; excludes: string[] }
+    | {
+        type: 'database'
+        name: string
+        engine: 'mysql' | 'postgres'
+        version: string | null
+        address: string
+        via: 'ssh' | 'direct'
+        server: string | null
+        docker_container: string | null
+        options: Record<string, string | boolean>
+        exclude_tables: string[]
+        schema_only_tables: string[]
+      }
+  pre_command?: { command: string; exit_code: number | null; duration_ms: number; output: string; continued_on_error: boolean }
+  archive?: { format: string; uncompressed_size: number | null; duration_ms: number; warnings: string | null }
+  databases?: { name: string; size: number | null; file: string; dump_size: number; uncompressed_size: number | null; duration_ms: number; status: 'success' | 'failed'; error: string | null }[]
 }
 
 export interface BackupCopy {

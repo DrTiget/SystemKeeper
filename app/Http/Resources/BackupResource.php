@@ -22,7 +22,12 @@ class BackupResource extends JsonResource
             'source_type' => $this->source_type,
             'source_id' => $this->source_id,
             /** Сервер или база данных — в списках по проекту */
-            'source' => $this->whenLoaded('source', fn () => $this->source ? ['type' => $this->source_type, 'id' => $this->source->id, 'name' => $this->source->name] : null),
+            'source' => $this->whenLoaded('source', fn () => $this->source ? [
+                'type' => $this->source_type,
+                'id' => $this->source->id,
+                'name' => $this->source->name,
+                'project' => $this->source->project ? ['id' => $this->source->project->id, 'name' => $this->source->project->name] : null,
+            ] : null),
             /** manual | schedule */
             'trigger' => $this->trigger,
             /** queued | running | success | failed */
@@ -30,8 +35,15 @@ class BackupResource extends JsonResource
             'user' => $this->whenLoaded('user', fn () => $this->user ? ['id' => $this->user->id, 'name' => $this->user->name] : null),
             'started_at' => $this->started_at,
             'finished_at' => $this->finished_at,
-            /** @var list<array{name: string, size: int}> */
+            /** @var list<array{name: string, size: int, sha256?: string}> */
             'files' => $this->files ?? [],
+            /**
+             * Подробности: `host` (hostname, os, tools), `source` (что бекапилось), `pre_command`,
+             * `archive` (uncompressed_size) для сервера, `databases` (по базам) для БД. Ключи есть не всегда.
+             *
+             * @var array<string, mixed>
+             */
+            'meta' => (object) ($this->meta ?? []),
             'size' => $this->size,
             /** Копии по хранилищам: `status` — success | failed */
             'copies' => $this->copies->map(fn ($c) => [

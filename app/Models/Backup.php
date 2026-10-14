@@ -15,7 +15,7 @@ use Throwable;
  * Запуск бекапа сервера или базы данных: статус, журнал и получившиеся файлы.
  * Файлы лежат на диске `backups` в каталоге `path`.
  */
-#[Fillable(['trigger', 'status', 'user_id', 'started_at', 'finished_at', 'path', 'files', 'size', 'log', 'error'])]
+#[Fillable(['trigger', 'status', 'user_id', 'started_at', 'finished_at', 'path', 'files', 'meta', 'size', 'log', 'error'])]
 class Backup extends Model
 {
     public const TRIGGER_MANUAL = 'manual';
@@ -44,6 +44,7 @@ class Backup extends Model
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
             'files' => 'array',
+            'meta' => 'array',
             'size' => 'integer',
             'log' => 'array',
         ];
@@ -104,6 +105,13 @@ class Backup extends Model
     public function isActive(): bool
     {
         return in_array($this->status, [self::QUEUED, self::RUNNING], true);
+    }
+
+    /** Дописывает раздел подробностей бекапа (`meta`) и сразу сохраняет. */
+    public function putMeta(string $key, mixed $value): void
+    {
+        $this->meta = [...($this->meta ?? []), $key => $value];
+        $this->save();
     }
 
     /** Строка журнала с отметкой времени; сохраняется сразу — чтобы ход бекапа был виден в API. */

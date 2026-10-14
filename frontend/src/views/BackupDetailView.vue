@@ -69,6 +69,38 @@ async function destroy() {
 onMounted(load)
 onBeforeUnmount(() => clearTimeout(timer))
 
+const meta = computed(() => backup.value?.meta ?? {})
+const serverSource = computed(() => (meta.value.source?.type === 'server' ? meta.value.source : null))
+const dbSource = computed(() => (meta.value.source?.type === 'database' ? meta.value.source : null))
+
+const ms = (v: number) => (v < 1000 ? `${v} мс` : v < 60_000 ? `${(v / 1000).toFixed(1).replace('.', ',')} с` : `${Math.floor(v / 60_000)} мин ${Math.round((v % 60_000) / 1000)} с`)
+
+/** Во сколько раз сжато: объём файлов (сервер) или SQL (БД) до сжатия к размеру бекапа */
+const original = computed(() => meta.value.archive?.uncompressed_size ?? (meta.value.databases?.length ? meta.value.databases.reduce((a, d) => a + (d.uncompressed_size ?? 0), 0) || null : null))
+const ratio = computed(() => (original.value && backup.value?.size ? original.value / backup.value.size : null))
+const speed = computed(() => {
+  const b = backup.value
+  if (!b?.size || !b.started_at || !b.finished_at) return null
+  const sec = (new Date(b.finished_at).getTime() - new Date(b.started_at).getTime()) / 1000
+  return sec > 0 ? b.size / sec : null
+})
+
+const LOCK_MODES: Record<string, string> = { single_transaction: 'снимок без блокировки', lock_tables: 'блокировка таблиц', none: 'без блокировок' }
+const dbOptions = computed(() => {
+  const o = dbSource.value?.options
+  if (!o) return []
+  return dbSource.value!.engine === 'mysql'
+    ? [LOCK_MODES[String(o.lock_mode)] ?? String(o.lock_mode), o.routines && 'процедуры', o.events && 'события', o.triggers && 'триггеры', o.compress && 'gzip'].filter(Boolean)
+    : [o.format === 'custom' ? 'формат custom' : 'SQL', o.no_owner && 'без владельцев', o.compress && 'сжатие'].filter(Boolean)
+})
+
+const copied = ref<string | null>(null)
+async function copy(text: string) {
+  await navigator.clipboard?.writeText(text)
+  copied.value = text
+  setTimeout(() => copied.value === text && (copied.value = null), 1500)
+}
+
 const card = 'rounded-xl border bg-card p-6 shadow-xs'
 const dt = 'text-xs text-muted-foreground'
 </script>
@@ -109,7 +141,12 @@ const dt = 'text-xs text-muted-foreground'
             <ul v-if="backup.files.length" class="divide-y rounded-lg border text-sm">
               <li v-for="f in backup.files" :key="f.name" class="flex items-center gap-3 py-2 pr-2 pl-3">
                 <Icon name="file" class="size-4 shrink-0 text-muted-foreground" />
-                <span class="min-w-0 flex-1 truncate font-mono text-xs">{{ f.name }}</span>
+                <span class="grid min-w-0 flex-1">
+                  <span class="truncate font-mono text-xs">{{ f.name }}</span>
+                  <button v-if="f.sha256" class="justify-self-start truncate font-mono text-[11px] text-muted-foreground hover:text-foreground" title="SHA-256 — нажмите, чтобы скопировать" @click="copy(f.sha256)">
+                    {{ copied === f.sha256 ? 'скопировано' : `sha256 ${f.sha256.slice(0, 16)}…` }}
+                  </button>
+                </span>
                 <span class="text-xs whitespace-nowrap text-muted-foreground">{{ formatBytes(f.size) }}</span>
                 <button :class="btnClass.outline" class="h-8! px-3!" @click="download(f.name)"><Icon name="download" />Скачать</button>
               </li>
@@ -118,6 +155,83 @@ const dt = 'text-xs text-muted-foreground'
               {{ isActive(backup) ? 'Файлы появятся, когда бекап завершится' : 'Файлов нет' }}
             </p>
             <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
+          </section>
+
+          <section v-if="serverSource" :class="card" class="grid gap-4">
+            <div class="flex items-baseline justify-between gap-3">
+              <h3 class="font-semibold">Что сохранено</h3>
+              <span v-if="meta.archive?.uncompressed_size" class="text-sm text-muted-foreground">до сжатия {{ formatBytes(meta.archive.uncompressed_size) }}</span>
+            </div>
+            <ul class="grid gap-1 font-mono text-xs">
+              <li v-for="p in serverSource.paths" :key="p" class="flex items-center gap-2"><Icon name="folder" class="size-4 text-muted-foreground" />{{ p }}</li>
+            </ul>
+            <div v-if="serverSource.excludes.length" class="grid gap-1.5">
+              <span :class="dt">Исключено</span>
+              <div class="flex flex-wrap gap-1.5">
+                <span v-for="x in serverSource.excludes" :key="x" class="rounded-md border px-1.5 py-0.5 font-mono text-xs text-muted-foreground">{{ x }}</span>
+              </div>
+            </div>
+            <p v-if="meta.archive?.warnings" class="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs whitespace-pre-wrap">{{ meta.archive.warnings }}</p>
+          </section>
+
+          <section v-if="meta.databases?.length" :class="card" class="grid gap-4">
+            <div class="flex flex-wrap items-baseline justify-between gap-3">
+              <h3 class="font-semibold">Базы</h3>
+              <span v-if="dbOptions.length" class="text-sm text-muted-foreground">{{ dbOptions.join(' · ') }}</span>
+            </div>
+            <div class="overflow-x-auto rounded-lg border">
+              <table class="w-full text-sm">
+                <thead class="border-b text-left text-muted-foreground">
+                  <tr>
+                    <th class="px-3 py-2 font-medium">База</th>
+                    <th class="px-3 py-2 text-right font-medium">В СУБД</th>
+                    <th class="px-3 py-2 text-right font-medium">SQL</th>
+                    <th class="px-3 py-2 text-right font-medium">Дамп</th>
+                    <th class="px-3 py-2 text-right font-medium">Время</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y">
+                  <tr v-for="d in meta.databases" :key="d.name">
+                    <td class="px-3 py-2">
+                      <span class="inline-flex items-center gap-1.5 font-mono text-xs">
+                        <span class="size-2 rounded-full" :class="d.status === 'success' ? 'bg-emerald-500' : 'bg-destructive'" />{{ d.name }}
+                      </span>
+                      <div v-if="d.error" class="mt-1 text-xs whitespace-pre-wrap text-destructive">{{ d.error }}</div>
+                    </td>
+                    <td class="px-3 py-2 text-right whitespace-nowrap text-muted-foreground">{{ d.size !== null ? formatBytes(d.size) : '—' }}</td>
+                    <td class="px-3 py-2 text-right whitespace-nowrap text-muted-foreground">{{ d.uncompressed_size ? formatBytes(d.uncompressed_size) : '—' }}</td>
+                    <td class="px-3 py-2 text-right whitespace-nowrap">{{ formatBytes(d.dump_size) }}</td>
+                    <td class="px-3 py-2 text-right whitespace-nowrap text-muted-foreground">{{ ms(d.duration_ms) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div v-if="dbSource && (dbSource.exclude_tables.length || dbSource.schema_only_tables.length)" class="grid gap-2 text-xs">
+              <div v-if="dbSource.exclude_tables.length" class="grid gap-1">
+                <span :class="dt">Не вошли таблицы</span>
+                <div class="flex flex-wrap gap-1.5"><span v-for="t in dbSource.exclude_tables" :key="t" class="rounded-md border px-1.5 py-0.5 font-mono text-muted-foreground">{{ t }}</span></div>
+              </div>
+              <div v-if="dbSource.schema_only_tables.length" class="grid gap-1">
+                <span :class="dt">Только структура</span>
+                <div class="flex flex-wrap gap-1.5"><span v-for="t in dbSource.schema_only_tables" :key="t" class="rounded-md border px-1.5 py-0.5 font-mono text-muted-foreground">{{ t }}</span></div>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="meta.pre_command" :class="card" class="grid gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <h3 class="font-semibold">Команда перед бекапом</h3>
+              <span class="inline-flex items-center gap-2 text-sm">
+                <span class="size-2 rounded-full" :class="meta.pre_command.exit_code === 0 ? 'bg-emerald-500' : 'bg-destructive'" />
+                {{ meta.pre_command.exit_code === 0 ? 'выполнена' : `код ${meta.pre_command.exit_code ?? '—'}${meta.pre_command.continued_on_error ? ', бекап продолжен' : ''}` }}
+                <span class="text-muted-foreground">· {{ ms(meta.pre_command.duration_ms) }}</span>
+              </span>
+            </div>
+            <pre class="overflow-x-auto rounded-lg border bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap">{{ meta.pre_command.command }}</pre>
+            <details v-if="meta.pre_command.output" class="text-sm">
+              <summary class="cursor-pointer text-muted-foreground hover:text-foreground">Вывод команды</summary>
+              <pre class="mt-2 max-h-72 overflow-auto rounded-lg border bg-muted/30 p-3 font-mono text-xs whitespace-pre-wrap">{{ meta.pre_command.output }}</pre>
+            </details>
           </section>
 
           <section :class="card" class="grid gap-4">
@@ -179,6 +293,45 @@ const dt = 'text-xs text-muted-foreground'
             <div class="grid gap-0.5">
               <dt :class="dt">Размер</dt>
               <dd>{{ backup.size !== null ? formatBytes(backup.size) : '—' }}<span v-if="backup.files.length" class="text-muted-foreground"> · файлов: {{ backup.files.length }}</span></dd>
+            </div>
+            <div v-if="ratio" class="grid gap-0.5">
+              <dt :class="dt">{{ meta.archive ? 'До сжатия' : 'SQL до сжатия' }}</dt>
+              <dd>{{ formatBytes(original!) }} <span class="text-muted-foreground">· сжато в {{ ratio.toFixed(1).replace('.', ',') }} раза</span></dd>
+            </div>
+            <div v-if="speed" class="grid gap-0.5">
+              <dt :class="dt">Скорость</dt>
+              <dd>{{ formatBytes(speed) }}/с</dd>
+            </div>
+            <template v-if="meta.host">
+              <div class="grid gap-0.5 border-t pt-3">
+                <dt :class="dt">Хост</dt>
+                <dd class="font-mono text-xs">{{ meta.host.hostname ?? '—' }}</dd>
+              </div>
+              <div v-if="meta.host.os || meta.host.kernel" class="grid gap-0.5">
+                <dt :class="dt">Система</dt>
+                <dd>{{ meta.host.os }}<span v-if="meta.host.kernel" class="block text-xs text-muted-foreground">{{ meta.host.kernel }}</span></dd>
+              </div>
+              <div v-for="(v, k) in meta.host.tools" :key="k" class="grid gap-0.5">
+                <dt :class="dt">{{ k }}</dt>
+                <dd class="text-xs">{{ v }}</dd>
+              </div>
+            </template>
+            <template v-if="dbSource">
+              <div class="grid gap-0.5 border-t pt-3">
+                <dt :class="dt">СУБД</dt>
+                <dd>{{ dbSource.version ?? (dbSource.engine === 'mysql' ? 'MySQL / MariaDB' : 'PostgreSQL') }}</dd>
+              </div>
+              <div class="grid gap-0.5">
+                <dt :class="dt">Подключение</dt>
+                <dd>
+                  <span class="font-mono text-xs">{{ dbSource.address }}</span>
+                  <span class="block text-xs text-muted-foreground">{{ dbSource.via === 'ssh' ? `через ${dbSource.server ?? 'сервер'}${dbSource.docker_container ? `, контейнер ${dbSource.docker_container}` : ''}` : 'напрямую' }}</span>
+                </dd>
+              </div>
+            </template>
+            <div v-else-if="serverSource" class="grid gap-0.5">
+              <dt :class="dt">Подключение</dt>
+              <dd class="font-mono text-xs">{{ serverSource.address }}</dd>
             </div>
           </dl>
         </aside>

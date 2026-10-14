@@ -90,7 +90,7 @@ class ProjectApiTest extends TestCase
         $this->getJson("/api/v1/projects/{$project->id}/backups")
             ->assertOk()
             ->assertJsonCount(2, 'data')
-            ->assertJsonPath('data.0.source', ['type' => 'database', 'id' => $db->id, 'name' => $db->name])
+            ->assertJsonPath('data.0.source', ['type' => 'database', 'id' => $db->id, 'name' => $db->name, 'project' => ['id' => $project->id, 'name' => $project->name]])
             ->assertJsonPath('data.1.source.id', $server->id);
     }
 

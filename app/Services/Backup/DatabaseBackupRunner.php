@@ -2,10 +2,12 @@
 
 namespace App\Services\Backup;
 
+use App\Exceptions\Ssh\SshConnectionException;
 use App\Models\Backup;
 use App\Models\DatabaseConnection;
 use App\Services\Database\DatabaseClient;
 use App\Services\Database\DatabaseCommandRunner;
+use App\Services\Database\DatabaseException;
 
 /**
  * Бекап баз данных: по файлу на базу (mysqldump / pg_dump), потоком с сервера или напрямую.
@@ -16,8 +18,17 @@ class DatabaseBackupRunner
 
     public function run(DatabaseConnection $c, Backup $backup): void
     {
+        // Список баз с размерами: нужен для «все базы» и для истории; при явном списке ошибка не критична
+        try {
+            $sizes = array_column($this->client->databases($c), 'size', 'name');
+        } catch (DatabaseException|SshConnectionException $e) {
+            if (! $c->databases) {
+                throw $e;
+            }
+            $sizes = [];
+        }
         $databases = $c->databases ?: array_values(array_filter(
-            array_column($this->client->databases($c), 'name'),
+            array_keys($sizes),
             fn ($name) => ! in_array($name, DatabaseConnection::SYSTEM_DATABASES[$c->engine], true),
         ));
         if ($databases === []) {
@@ -25,26 +36,65 @@ class DatabaseBackupRunner
         }
 
         $options = $c->resolvedOptions();
+        $backup->putMeta('source', [
+            'type' => 'database',
+            'name' => $c->name,
+            'engine' => $c->engine,
+            'version' => $this->version($c),
+            'address' => "{$c->username}@{$c->host}:{$c->port}",
+            'via' => $c->via,
+            'server' => $c->server?->name,
+            'docker_container' => $c->docker_container,
+            'options' => $options,
+            'exclude_tables' => $c->exclude_tables ?? [],
+            'schema_only_tables' => $c->schema_only_tables ?? [],
+        ]);
+
         $failed = [];
+        $report = [];
         foreach ($databases as $db) {
             $backup->appendLog("Дампим {$db}");
             [$command, $ext] = $c->engine === DatabaseConnection::MYSQL ? self::mysqlCommand($c, $db, $options) : self::postgresCommand($c, $db, $options);
 
+            $started = hrtime(true);
             $file = new BackupFile($backup, self::fileName($db).$ext);
             $result = $this->runner->stream($c, $command, $file->write(...), (int) config('backup.run_timeout'));
             $file->close();
 
+            $error = null;
             if ($result['exit_code'] !== 0) {
-                $error = DatabaseClient::explain($c, $result['exit_code'], trim($result['stderr']));
-                $backup->appendLog("Ошибка дампа {$db}: ".mb_substr($error, -2000));
+                $error = mb_substr(DatabaseClient::explain($c, $result['exit_code'], trim($result['stderr'])), -2000);
+                $backup->appendLog("Ошибка дампа {$db}: {$error}");
                 $failed[] = $db;
             }
+            $report[] = [
+                'name' => $db,
+                // размер базы в СУБД (данные и индексы) — для сравнения с размером дампа
+                'size' => $sizes[$db] ?? null,
+                'file' => $file->name,
+                'dump_size' => $file->size,
+                // объём SQL до сжатия (для .gz)
+                'uncompressed_size' => $file->uncompressedSize,
+                'duration_ms' => intdiv(hrtime(true) - $started, 1_000_000),
+                'status' => $error === null ? 'success' : 'failed',
+                'error' => $error,
+            ];
+            $backup->putMeta('databases', $report);
         }
 
         if ($failed !== []) {
             throw new BackupException('Не удалось сделать дамп: '.implode(', ', $failed).'.');
         }
         $backup->appendLog('Дампы получены');
+    }
+
+    private function version(DatabaseConnection $c): ?string
+    {
+        try {
+            return $this->client->version($c) ?: $c->server_version;
+        } catch (DatabaseException|SshConnectionException) {
+            return $c->server_version;
+        }
     }
 
     /** Имя файла из имени базы — без символов, опасных для файловой системы. */
