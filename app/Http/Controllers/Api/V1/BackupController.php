@@ -10,6 +10,7 @@ use App\Models\BackupCopy;
 use App\Models\DatabaseConnection;
 use App\Models\Project;
 use App\Models\Server;
+use App\Services\Backup\BackupManifest;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -83,10 +84,17 @@ class BackupController extends Controller
     }
 
     /** Удаляет запись и файлы бекапа. 409 — бекап ещё выполняется. */
-    public function destroy(Backup $backup): Response
+    public function destroy(Backup $backup, BackupManifest $manifest): Response
     {
         abort_if($backup->isActive(), 409, 'Бекап ещё выполняется.');
+        $source = $backup->source;
+        $storages = $backup->copies()->with('storage')->get()->pluck('storage')->filter();
         $backup->delete();
+
+        // убираем бекап и из оглавления мест, где он лежал
+        if ($source) {
+            $storages->each(fn ($storage) => $manifest->sync($storage, $source));
+        }
 
         return response()->noContent();
     }

@@ -9,6 +9,7 @@ use App\Models\BackupStorage;
 use App\Models\DatabaseConnection;
 use App\Models\Server;
 use App\Services\Backup\BackupException;
+use App\Services\Backup\BackupManifest;
 use App\Services\Backup\BackupRetention;
 use App\Services\Backup\DatabaseBackupRunner;
 use App\Services\Backup\ServerBackupRunner;
@@ -39,7 +40,7 @@ class RunBackup implements ShouldQueue
         $this->onQueue('backups');
     }
 
-    public function handle(ServerBackupRunner $servers, DatabaseBackupRunner $databases, BackupRetention $retention): void
+    public function handle(ServerBackupRunner $servers, DatabaseBackupRunner $databases, BackupRetention $retention, BackupManifest $manifest): void
     {
         $backup = $this->backup;
         $source = $backup->source;
@@ -65,7 +66,7 @@ class RunBackup implements ShouldQueue
                 $source instanceof Server => $servers->run($source, $backup),
                 $source instanceof DatabaseConnection => $databases->run($source, $backup),
             };
-            $this->distribute($storages);
+            $this->distribute($storages, $manifest);
             $backup->forceFill(['status' => Backup::SUCCESS, 'finished_at' => now()])->save();
         } catch (BackupException|DatabaseException|SshConnectionException $e) {
             $this->markFailed($e->getMessage());
@@ -78,6 +79,26 @@ class RunBackup implements ShouldQueue
         foreach ($retention->apply($source) as $message) {
             $backup->appendLog($message);
         }
+
+        // Оглавление в каждом месте, где лежат (или должны лежать) бекапы источника
+        foreach (self::storagesOf($source, $storages) as $storage) {
+            if ($error = $manifest->sync($storage, $source)) {
+                $backup->appendLog($error);
+            }
+        }
+    }
+
+    /**
+     * Выбранные места и те, где ещё остались копии бекапов источника.
+     *
+     * @param  Collection<int, BackupStorage>  $selected
+     * @return Collection<int, BackupStorage>
+     */
+    public static function storagesOf(Server|DatabaseConnection $source, Collection $selected): Collection
+    {
+        $ids = BackupCopy::query()->whereIn('backup_id', $source->backups()->select('id'))->distinct()->pluck('storage_id');
+
+        return BackupStorage::query()->whereKey($selected->pluck('id')->merge($ids)->unique())->orderBy('id')->get();
     }
 
     /**
@@ -86,7 +107,7 @@ class RunBackup implements ShouldQueue
      *
      * @param  Collection<int, BackupStorage>  $storages
      */
-    private function distribute(Collection $storages): void
+    private function distribute(Collection $storages, BackupManifest $manifest): void
     {
         $backup = $this->backup;
         $local = Storage::disk('backups');
@@ -94,6 +115,7 @@ class RunBackup implements ShouldQueue
 
         foreach ($storages as $storage) {
             if ($storage->type === BackupStorage::LOCAL) {
+                $manifest->writeBackupInfo($local, $backup);
                 $backup->copies()->create(['storage_id' => $storage->id, 'status' => BackupCopy::SUCCESS]);
 
                 continue;
@@ -106,6 +128,7 @@ class RunBackup implements ShouldQueue
                     $fs->writeStream($backup->path.'/'.$file['name'], $stream);
                     is_resource($stream) && fclose($stream);
                 }
+                $manifest->writeBackupInfo($fs, $backup);
                 $backup->copies()->create(['storage_id' => $storage->id, 'status' => BackupCopy::SUCCESS]);
                 $backup->appendLog("Загружено в «{$storage->name}»");
             } catch (Throwable $e) {
