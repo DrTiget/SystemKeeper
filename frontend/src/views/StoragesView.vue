@@ -65,7 +65,7 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
 </script>
 
 <template>
-  <div class="flex max-w-5xl flex-col gap-6 p-4">
+  <div class="flex flex-col gap-6 p-4">
     <header class="space-y-0.5">
       <h2 class="text-xl font-semibold tracking-tight">Хранилища</h2>
       <p class="text-sm text-muted-foreground">Где лежат бекапы, сколько места занято и сколько копий хранится у каждого сервера и базы</p>

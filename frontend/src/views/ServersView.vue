@@ -6,6 +6,7 @@ import type { Server } from '@/api/servers'
 import Icon from '@/components/Icon.vue'
 import ProjectSelect from '@/components/ProjectSelect.vue'
 import ServerFormModal from '@/components/servers/ServerFormModal.vue'
+import ServersTable from '@/components/servers/ServersTable.vue'
 import { describeCron } from '@/lib/cron'
 import { btnClass, formatDate, inputClass } from '@/lib/ui'
 
@@ -94,54 +95,7 @@ const pluralDirs = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'путь' :
 
     <p v-if="loadError" class="text-sm text-destructive">{{ loadError }}</p>
 
-    <div class="overflow-x-auto rounded-xl border bg-card">
-      <table class="w-full text-sm">
-        <thead class="border-b text-left text-muted-foreground">
-          <tr>
-            <th class="px-4 py-3 font-medium">Название</th>
-            <th class="px-4 py-3 font-medium">Подключение</th>
-            <th class="px-4 py-3 font-medium">SSH</th>
-            <th class="px-4 py-3 font-medium">Бекап</th>
-            <th class="w-8 px-2" />
-          </tr>
-        </thead>
-        <tbody class="divide-y">
-          <tr v-for="s in servers" :key="s.id" class="cursor-pointer hover:bg-accent/40" @click="openServer(s)">
-            <td class="px-4 py-3">
-              <RouterLink :to="{ name: 'server', params: { id: s.id } }" class="font-medium hover:underline" @click.stop>{{ s.name }}</RouterLink>
-              <RouterLink v-if="s.project" :to="{ name: 'project', params: { id: s.project.id } }" class="ml-2 rounded-md border px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground" @click.stop>{{ s.project.name }}</RouterLink>
-              <div v-if="s.description" class="max-w-xs truncate text-xs text-muted-foreground">{{ s.description }}</div>
-            </td>
-            <td class="px-4 py-3 whitespace-nowrap">
-              <div class="font-mono text-xs">{{ s.username }}@{{ s.host }}{{ s.port === 22 ? '' : `:${s.port}` }}</div>
-              <div class="text-xs text-muted-foreground">{{ s.auth_type === 'key' ? 'по ключу' : 'по паролю' }}</div>
-            </td>
-            <td class="px-4 py-3">
-              <span v-if="s.last_check.status === 'ok'" class="inline-flex items-center gap-1.5" :title="`Проверено ${formatDate(s.last_check.checked_at)}`">
-                <span class="size-2 rounded-full bg-emerald-500" />Работает
-              </span>
-              <span v-else-if="s.last_check.status === 'failed'" class="inline-flex max-w-56 items-center gap-1.5 text-destructive" :title="s.last_check.error ?? ''">
-                <span class="size-2 shrink-0 rounded-full bg-destructive" /><span class="truncate">{{ s.last_check.error }}</span>
-              </span>
-              <span v-else class="text-muted-foreground">Не проверялся</span>
-            </td>
-            <td class="px-4 py-3">
-              <template v-if="s.backup?.enabled && s.backup.schedule">
-                <div class="whitespace-nowrap">{{ describeCron(s.backup.schedule) }}</div>
-                <div class="text-xs text-muted-foreground">
-                  {{ s.backup.paths_count }} {{ pluralDirs(s.backup.paths_count) }}<template v-if="s.backup.next_run_at"> · след. {{ formatDate(s.backup.next_run_at) }}</template>
-                </div>
-              </template>
-              <span v-else class="text-muted-foreground">Не настроен</span>
-            </td>
-            <td class="px-2 text-muted-foreground"><Icon name="chevron-right" class="size-4" /></td>
-          </tr>
-          <tr v-if="!servers.length && !loading">
-            <td colspan="5" class="px-4 py-10 text-center text-muted-foreground">{{ search ? 'Ничего не нашли' : 'Серверов пока нет — добавьте первый' }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <ServersTable :items="servers" :empty-text="loading ? 'Загрузка…' : search ? 'Ничего не нашли' : 'Серверов пока нет — добавьте первый'" />
 
     <div v-if="meta && meta.last_page > 1" class="flex items-center justify-between gap-3 text-sm text-muted-foreground">
       <span>Всего: {{ meta.total }}</span>

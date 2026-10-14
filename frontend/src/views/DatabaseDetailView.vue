@@ -26,7 +26,7 @@ const id = Number(route.params.id)
 
 const connection = ref<DatabaseConnection | null>(null)
 const projects = useProjectsStore()
-watch(connection, (c) => c && projects.setFor(c.project, { label: 'Базы данных', to: '/databases' }, c.name))
+watch(connection, (c) => c && projects.setFor(c.project, { label: 'Без проекта' }, c.name))
 const loadError = ref('')
 // Форма бекапа пересоздаётся после изменения подключения — чтобы заново получить список баз
 const formKey = ref(0)
@@ -97,9 +97,9 @@ const dt = 'text-xs text-muted-foreground'
 </script>
 
 <template>
-  <div class="flex max-w-4xl flex-col gap-6 p-4">
-    <RouterLink :to="connection?.project ? `/projects/${connection.project.id}` : '/databases'" class="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground">
-      <Icon name="arrow-left" class="size-4" />{{ connection?.project ? connection.project.name : 'Все базы данных' }}
+  <div class="flex flex-col gap-6 p-4">
+    <RouterLink :to="connection?.project ? `/projects/${connection.project.id}` : '/projects'" class="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground">
+      <Icon name="arrow-left" class="size-4" />{{ connection?.project ? connection.project.name : 'Все проекты' }}
     </RouterLink>
 
     <p v-if="loadError" class="text-sm text-destructive">{{ loadError }}</p>

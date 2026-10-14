@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, ApiError } from '@/api/client'
-import { type DatabaseConnection, ENGINE_LABELS } from '@/api/databases'
+import type { DatabaseConnection } from '@/api/databases'
 import type { Project } from '@/api/projects'
 import type { Backup } from '@/api/backups'
 import type { Server } from '@/api/servers'
@@ -12,7 +12,8 @@ import ProjectFormModal from '@/components/ProjectFormModal.vue'
 import SelectMenu from '@/components/SelectMenu.vue'
 import DatabaseFormModal from '@/components/databases/DatabaseFormModal.vue'
 import ServerFormModal from '@/components/servers/ServerFormModal.vue'
-import { describeCron } from '@/lib/cron'
+import ServersTable from '@/components/servers/ServersTable.vue'
+import DatabasesTable from '@/components/databases/DatabasesTable.vue'
 import { btnClass, formatBytes, formatDate } from '@/lib/ui'
 import { useProjectsStore } from '@/stores/projects'
 
@@ -96,7 +97,6 @@ const empty = computed(() => !servers.value.length && !databases.value.length)
 onMounted(load)
 
 const card = 'rounded-xl border bg-card p-6 shadow-xs'
-const row = 'flex items-center gap-3 px-4 py-3 hover:bg-accent/40'
 const STATUS: Record<Backup['status'], { label: string; dot: string }> = {
   queued: { label: 'В очереди', dot: 'bg-muted-foreground' },
   running: { label: 'Выполняется', dot: 'bg-amber-500 animate-pulse' },
@@ -104,11 +104,10 @@ const STATUS: Record<Backup['status'], { label: string; dot: string }> = {
   failed: { label: 'Ошибка', dot: 'bg-destructive' },
 }
 const backupLink = (b: Backup) => ({ name: b.source_type === 'server' ? 'server' : 'database', params: { id: b.source_id } })
-const dot = (status: string | null) => (status === 'ok' ? 'bg-emerald-500' : status === 'failed' ? 'bg-destructive' : 'bg-muted-foreground/40')
 </script>
 
 <template>
-  <div class="flex max-w-4xl flex-col gap-6 p-4">
+  <div class="flex flex-col gap-6 p-4">
     <RouterLink to="/projects" class="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground hover:text-foreground">
       <Icon name="arrow-left" class="size-4" />Все проекты
     </RouterLink>
@@ -134,16 +133,11 @@ const dot = (status: string | null) => (status === 'ok' ? 'bg-emerald-500' : sta
             <button :class="btnClass.primary" @click="createServerOpen = true"><Icon name="plus" />Новый сервер</button>
           </div>
         </div>
-        <ul v-if="servers.length" class="divide-y rounded-lg border text-sm">
-          <li v-for="s in servers" :key="s.id" :class="row">
-            <span class="size-2 shrink-0 rounded-full" :class="dot(s.last_check.status)" />
-            <RouterLink :to="{ name: 'server', params: { id: s.id } }" class="font-medium hover:underline">{{ s.name }}</RouterLink>
-            <span class="font-mono text-xs text-muted-foreground">{{ s.host }}</span>
-            <span class="ml-auto text-xs text-muted-foreground">{{ s.backup?.enabled ? describeCron(s.backup.schedule ?? '') : 'бекап не настроен' }}</span>
-            <button class="text-muted-foreground hover:text-foreground" title="Убрать из проекта" @click="detach('server', s.id)"><Icon name="x" class="size-4" /></button>
-          </li>
-        </ul>
-        <p v-else class="text-sm text-muted-foreground">Серверов в проекте нет.</p>
+        <ServersTable :items="servers" :show-project="false" empty-text="Серверов в проекте нет">
+          <template #actions="{ item }">
+            <button class="rounded p-1 hover:bg-accent hover:text-foreground" title="Убрать из проекта" @click="detach('server', item.id)"><Icon name="x" class="size-4" /></button>
+          </template>
+        </ServersTable>
       </section>
 
       <section :class="card" class="grid gap-4">
@@ -154,16 +148,11 @@ const dot = (status: string | null) => (status === 'ok' ? 'bg-emerald-500' : sta
             <button :class="btnClass.primary" @click="createDbOpen = true"><Icon name="plus" />Новая база</button>
           </div>
         </div>
-        <ul v-if="databases.length" class="divide-y rounded-lg border text-sm">
-          <li v-for="c in databases" :key="c.id" :class="row">
-            <span class="size-2 shrink-0 rounded-full" :class="dot(c.last_check.status)" />
-            <RouterLink :to="{ name: 'database', params: { id: c.id } }" class="font-medium hover:underline">{{ c.name }}</RouterLink>
-            <span class="text-xs text-muted-foreground">{{ ENGINE_LABELS[c.engine] }}<template v-if="c.server"> · через {{ c.server.name }}</template></span>
-            <span class="ml-auto text-xs text-muted-foreground">{{ c.backup.enabled ? describeCron(c.backup.schedule) : 'бекап не настроен' }}</span>
-            <button class="text-muted-foreground hover:text-foreground" title="Убрать из проекта" @click="detach('database', c.id)"><Icon name="x" class="size-4" /></button>
-          </li>
-        </ul>
-        <p v-else class="text-sm text-muted-foreground">Баз данных в проекте нет.</p>
+        <DatabasesTable :items="databases" :show-project="false" empty-text="Баз данных в проекте нет">
+          <template #actions="{ item }">
+            <button class="rounded p-1 hover:bg-accent hover:text-foreground" title="Убрать из проекта" @click="detach('database', item.id)"><Icon name="x" class="size-4" /></button>
+          </template>
+        </DatabasesTable>
       </section>
 
       <section :class="card" class="grid gap-4">
@@ -171,18 +160,37 @@ const dot = (status: string | null) => (status === 'ok' ? 'bg-emerald-500' : sta
           <h3 class="font-semibold">Последние бекапы</h3>
           <p class="text-sm text-muted-foreground">Всех серверов и баз проекта. Запуск и файлы — на странице сервера или базы.</p>
         </div>
-        <ul v-if="backups.length" class="divide-y rounded-lg border text-sm">
-          <li v-for="b in backups" :key="b.id">
-            <RouterLink :to="backupLink(b)" :class="row" class="flex-wrap">
-              <span class="inline-flex w-28 items-center gap-1.5" :class="b.status === 'failed' && 'text-destructive'"><span class="size-2 rounded-full" :class="STATUS[b.status].dot" />{{ STATUS[b.status].label }}</span>
-              <span class="inline-flex items-center gap-1.5 font-medium"><Icon :name="b.source_type === 'server' ? 'server' : 'database'" class="size-4 text-muted-foreground" />{{ b.source?.name }}</span>
-              <span class="text-muted-foreground">{{ formatDate(b.started_at ?? b.created_at) }}</span>
-              <span class="text-muted-foreground">{{ b.trigger === 'manual' ? 'вручную' : 'по расписанию' }}</span>
-              <span v-if="b.size !== null" class="ml-auto text-muted-foreground">{{ formatBytes(b.size) }}</span>
-            </RouterLink>
-          </li>
-        </ul>
-        <p v-else class="text-sm text-muted-foreground">Бекапов ещё не было.</p>
+        <div class="overflow-x-auto rounded-xl border bg-card">
+          <table class="w-full text-sm">
+            <thead class="border-b text-left text-muted-foreground">
+              <tr>
+                <th class="px-4 py-3 font-medium">Что</th>
+                <th class="px-4 py-3 font-medium">Статус</th>
+                <th class="px-4 py-3 font-medium">Когда</th>
+                <th class="px-4 py-3 font-medium">Запуск</th>
+                <th class="px-4 py-3 text-right font-medium">Размер</th>
+                <th class="w-8 px-2" />
+              </tr>
+            </thead>
+            <tbody class="divide-y">
+              <tr v-for="b in backups" :key="b.id" class="cursor-pointer hover:bg-accent/40" @click="router.push(backupLink(b))">
+                <td class="px-4 py-3">
+                  <span class="inline-flex items-center gap-2 font-medium"><Icon :name="b.source_type === 'server' ? 'server' : 'database'" class="size-4 text-muted-foreground" />{{ b.source?.name }}</span>
+                </td>
+                <td class="px-4 py-3">
+                  <span class="inline-flex items-center gap-1.5" :class="b.status === 'failed' && 'text-destructive'" :title="b.error ?? ''"><span class="size-2 rounded-full" :class="STATUS[b.status].dot" />{{ STATUS[b.status].label }}</span>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">{{ formatDate(b.started_at ?? b.created_at) }}</td>
+                <td class="px-4 py-3 text-muted-foreground">{{ b.trigger === 'manual' ? `вручную${b.user ? ', ' + b.user.name : ''}` : 'по расписанию' }}</td>
+                <td class="px-4 py-3 text-right whitespace-nowrap">{{ b.size !== null ? formatBytes(b.size) : '—' }}</td>
+                <td class="px-2 text-muted-foreground"><Icon name="chevron-right" class="size-4" /></td>
+              </tr>
+              <tr v-if="!backups.length">
+                <td colspan="6" class="px-4 py-10 text-center text-muted-foreground">Бекапов ещё не было</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
     </template>
 

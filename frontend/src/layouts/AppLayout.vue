@@ -18,15 +18,8 @@ interface NavItem {
   admin?: boolean
 }
 
-// Меню: сначала проекты, затем все ресурсы, хранение и администрирование
+// Меню: сначала проекты (серверы и базы — внутри них), затем хранение и администрирование
 const navGroups: { title: string; admin?: boolean; items: NavItem[] }[] = [
-  {
-    title: 'Все ресурсы',
-    items: [
-      { to: '/servers', label: 'Сервера', icon: 'server' },
-      { to: '/databases', label: 'Базы данных', icon: 'database' },
-    ],
-  },
   { title: 'Хранение бекапов', items: [{ to: '/storages', label: 'Хранилища', icon: 'archive' }] },
   { title: 'Администрирование', admin: true, items: [{ to: '/users', label: 'Пользователи', icon: 'users', admin: true }] },
 ]
