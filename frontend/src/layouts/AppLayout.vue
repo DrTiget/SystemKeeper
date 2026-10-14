@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '@/api/client'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '@/components/Icon.vue'
+import SystemUpdate from '@/components/SystemUpdate.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useProjectsStore } from '@/stores/projects'
 
@@ -153,6 +154,7 @@ async function logout() {
           </RouterLink>
         </div>
       </nav>
+      <SystemUpdate />
       <div class="p-2">
         <div class="flex h-12 items-center gap-1 rounded-md text-sm">
           <RouterLink

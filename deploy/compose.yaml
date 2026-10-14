@@ -1,0 +1,76 @@
+# SystemKeeper — установка на сервер. Ставится install.sh в каталог SK_DIR (по умолчанию /opt/systemkeeper),
+# настройки — в .env рядом. Версия образа — SK_VERSION; её меняет updater при обновлении.
+name: systemkeeper
+
+x-app: &app
+  image: ${SK_IMAGE:-ghcr.io/drtiget/systemkeeper}:${SK_VERSION:-latest}
+  env_file: .env
+  volumes:
+    - ./data/storage:/var/www/html/storage
+    - ./state:/var/www/html/storage/app/updater
+  restart: unless-stopped
+  healthcheck:
+    disable: true
+  depends_on:
+    web:
+      condition: service_healthy
+
+services:
+  web:
+    <<: *app
+    command: web
+    ports:
+      - "${APP_PORT:-8080}:80"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/up"]
+      interval: 10s
+      timeout: 5s
+      start_period: 120s
+      retries: 5
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  queue:
+    <<: *app
+    command: queue
+
+  # Бекапы — отдельный воркер: длинные задачи не задерживают остальную очередь
+  backups:
+    <<: *app
+    command: backups
+    stop_grace_period: 60s
+
+  scheduler:
+    <<: *app
+    command: scheduler
+
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-systemkeeper}
+      MYSQL_USER: ${DB_USERNAME:-systemkeeper}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      retries: 30
+
+  # Обновление в один клик: ждёт запрос от web в ./state, делает дамп базы, меняет SK_VERSION,
+  # перезапускает сервисы и откатывается, если новая версия не поднялась. Наружу портов нет.
+  updater:
+    image: docker:27-cli
+    working_dir: ${SK_DIR:-/opt/systemkeeper}
+    command: ["sh", "./updater.sh"]
+    environment:
+      SK_DIR: ${SK_DIR:-/opt/systemkeeper}
+      SK_REPO: ${SK_REPO:-DrTiget/SystemKeeper}
+      SK_RELEASES_URL: ${SK_RELEASES_URL:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${SK_DIR:-/opt/systemkeeper}:${SK_DIR:-/opt/systemkeeper}
+    restart: unless-stopped

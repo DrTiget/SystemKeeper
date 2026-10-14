@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\ProjectGroupController;
 use App\Http\Controllers\Api\V1\ServerBackupSettingsController;
 use App\Http\Controllers\Api\V1\ServerController;
 use App\Http\Controllers\Api\V1\ServerFilesController;
+use App\Http\Controllers\Api\V1\SystemController;
 use App\Http\Controllers\Api\V1\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -65,4 +66,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('backups/{backup}', [BackupController::class, 'show']);
     Route::delete('backups/{backup}', [BackupController::class, 'destroy']);
     Route::get('backups/{backup}/files/{file}', [BackupController::class, 'download'])->where('file', '[^/]+');
+
+    Route::get('system/version', [SystemController::class, 'version']);
+    Route::post('system/check', [SystemController::class, 'check'])->middleware('throttle:10,1');
+    Route::post('system/update', [SystemController::class, 'update']);
 });
