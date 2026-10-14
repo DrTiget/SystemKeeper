@@ -4,7 +4,9 @@ import { api, ApiError } from '@/api/client'
 import type { BackupSettings, PreCommandTemplate } from '@/api/servers'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
+import RetentionFields from '@/components/RetentionFields.vue'
 import SchedulePicker from '@/components/SchedulePicker.vue'
+import type { Retention } from '@/api/storages'
 import FileBrowserModal from '@/components/servers/FileBrowserModal.vue'
 import { btnClass, formatDate, inputClass } from '@/lib/ui'
 
@@ -31,6 +33,7 @@ const newExclude = ref('')
 const newPath = ref('')
 
 const schedule = ref('0 3 * * *')
+const retention = ref<Retention>({ storage_id: null, keep_count: 7, max_size: null })
 
 function fill(s: BackupSettings) {
   saved.value = s
@@ -41,6 +44,7 @@ function fill(s: BackupSettings) {
   form.pre_command_timeout = s.pre_command_timeout
   form.pre_command_continue_on_error = s.pre_command_continue_on_error
   schedule.value = s.schedule
+  retention.value = { ...s.retention }
 }
 
 // Каталоги: файловый менеджер и ручной ввод
@@ -120,6 +124,7 @@ async function save() {
         pre_command: form.pre_command,
         pre_command_timeout: form.pre_command_timeout,
         pre_command_continue_on_error: form.pre_command_continue_on_error,
+        ...retention.value,
       },
     })
     fill(res.data)
@@ -236,6 +241,11 @@ const chip = 'inline-flex items-center gap-1 rounded-md border bg-background py-
           {{ form.pre_command_continue_on_error ? 'Бекап выполнится, ошибка команды будет записана в результат.' : 'Запуск будет отмечен как неудачный, каталоги не копируются.' }}
         </p>
       </template>
+    </section>
+
+    <section class="grid gap-2">
+      <span :class="label">Хранение</span>
+      <RetentionFields v-model="retention" :errors="errors" />
     </section>
 
     <p v-if="formError" class="text-sm text-destructive">{{ formError }}</p>

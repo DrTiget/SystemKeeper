@@ -1,3 +1,4 @@
+import type { Retention } from './storages'
 export type Engine = 'mysql' | 'postgres'
 export type Via = 'ssh' | 'direct'
 
@@ -38,6 +39,7 @@ export interface DatabaseConnection {
     schema_only_tables: string[]
     options: Partial<MysqlOptions & PostgresOptions>
   }
+  retention: Retention
   last_check: { status: 'ok' | 'failed' | null; error: string | null; checked_at: string | null; server_version: string | null }
 }
 

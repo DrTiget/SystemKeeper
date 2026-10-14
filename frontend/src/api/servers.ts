@@ -1,3 +1,4 @@
+import type { Retention } from './storages'
 export type AuthType = 'key' | 'password'
 
 export interface Server {
@@ -35,6 +36,7 @@ export interface BackupSettings {
   pre_command: string | null
   pre_command_timeout: number
   pre_command_continue_on_error: boolean
+  retention: Retention
 }
 
 export interface PreCommandTemplate {

@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Storage;
  * Запуск бекапа сервера или базы данных: статус, журнал и получившиеся файлы.
  * Файлы лежат на диске `backups` в каталоге `path`.
  */
-#[Fillable(['trigger', 'status', 'user_id', 'started_at', 'finished_at', 'path', 'files', 'size', 'log', 'error'])]
+#[Fillable(['trigger', 'status', 'user_id', 'storage_id', 'started_at', 'finished_at', 'path', 'files', 'size', 'log', 'error'])]
 class Backup extends Model
 {
     public const TRIGGER_MANUAL = 'manual';
@@ -53,6 +53,20 @@ class Backup extends Model
     public function source(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    public function storage(): BelongsTo
+    {
+        return $this->belongsTo(BackupStorage::class);
+    }
+
+    /** Удаляет файлы, оставляя запись в истории (неудачный бекап, вытесненный по объёму). */
+    public function deleteFiles(): void
+    {
+        if ($this->path) {
+            Storage::disk('backups')->deleteDirectory($this->path);
+        }
+        $this->forceFill(['files' => [], 'size' => null])->save();
     }
 
     public function user(): BelongsTo

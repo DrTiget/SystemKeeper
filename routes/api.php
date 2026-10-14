@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BackupController;
+use App\Http\Controllers\Api\V1\BackupStorageController;
 use App\Http\Controllers\Api\V1\BackupTemplateController;
 use App\Http\Controllers\Api\V1\DatabaseConnectionController;
 use App\Http\Controllers\Api\V1\ProfileController;
@@ -52,6 +53,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('servers/{server}/backups', [BackupController::class, 'serverRun']);
     Route::get('databases/{database}/backups', [BackupController::class, 'databaseIndex']);
     Route::post('databases/{database}/backups', [BackupController::class, 'databaseRun']);
+    Route::apiResource('storages', BackupStorageController::class)->only(['index', 'show', 'update']);
+
     Route::get('backups/{backup}', [BackupController::class, 'show']);
     Route::delete('backups/{backup}', [BackupController::class, 'destroy']);
     Route::get('backups/{backup}/files/{file}', [BackupController::class, 'download'])->where('file', '[^/]+');

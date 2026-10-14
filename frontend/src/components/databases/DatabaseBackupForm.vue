@@ -3,7 +3,9 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { api, ApiError } from '@/api/client'
 import type { DatabaseConnection, DbSchema, DbTable } from '@/api/databases'
 import Icon from '@/components/Icon.vue'
+import RetentionFields from '@/components/RetentionFields.vue'
 import SchedulePicker from '@/components/SchedulePicker.vue'
+import type { Retention } from '@/api/storages'
 import { btnClass, formatBytes, formatDate, inputClass } from '@/lib/ui'
 
 const props = defineProps<{ connection: DatabaseConnection }>()
@@ -12,6 +14,7 @@ const emit = defineEmits<{ saved: [connection: DatabaseConnection] }>()
 const c = props.connection
 const isMysql = c.engine === 'mysql'
 
+const retention = ref<Retention>({ ...c.retention })
 const form = reactive({
   enabled: c.backup.enabled,
   mode: (c.backup.databases.length ? 'selected' : 'all') as 'all' | 'selected',
@@ -109,6 +112,7 @@ async function save() {
         exclude_tables: entries.filter(([, m]) => m === 'skip').map(([k]) => k),
         schema_only_tables: entries.filter(([, m]) => m === 'schema').map(([k]) => k),
         options: form.options,
+        ...retention.value,
       },
     })
     savedNotice.value = true
@@ -271,6 +275,12 @@ const lockModes = [
         <label class="flex items-center gap-2 text-sm"><input v-model="form.options.no_owner" type="checkbox" class="size-4 accent-primary" />Без владельцев и прав (--no-owner --no-privileges) — для восстановления под другим пользователем</label>
       </template>
       <label class="flex items-center gap-2 text-sm"><input v-model="form.options.compress" type="checkbox" class="size-4 accent-primary" />Сжимать дамп (gzip)</label>
+    </section>
+
+    <section class="grid gap-2">
+      <span class="text-sm leading-none font-medium">Хранение</span>
+      <!-- ошибки полей показываются общим списком ниже -->
+      <RetentionFields v-model="retention" />
     </section>
 
     <div v-if="allErrors.length || formError" class="grid gap-1">

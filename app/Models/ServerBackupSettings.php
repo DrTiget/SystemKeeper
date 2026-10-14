@@ -12,7 +12,7 @@ use Illuminate\Support\Carbon;
 /**
  * Настройки бекапа сервера: какие каталоги, по какому расписанию и что выполнить перед бекапом.
  */
-#[Fillable(['enabled', 'paths', 'excludes', 'schedule', 'pre_command', 'pre_command_timeout', 'pre_command_continue_on_error'])]
+#[Fillable(['enabled', 'paths', 'excludes', 'schedule', 'pre_command', 'pre_command_timeout', 'pre_command_continue_on_error', 'storage_id', 'keep_count', 'max_size'])]
 class ServerBackupSettings extends Model
 {
     protected $table = 'server_backup_settings';
@@ -25,6 +25,8 @@ class ServerBackupSettings extends Model
             'excludes' => 'array',
             'pre_command_timeout' => 'integer',
             'pre_command_continue_on_error' => 'boolean',
+            'keep_count' => 'integer',
+            'max_size' => 'integer',
         ];
     }
 
@@ -39,10 +41,18 @@ class ServerBackupSettings extends Model
             'pre_command' => null,
             'pre_command_timeout' => config('backup.pre_command_timeout'),
             'pre_command_continue_on_error' => false,
+            'storage_id' => null,
+            'keep_count' => 7,
+            'max_size' => null,
         ]);
         $settings->server()->associate($server);
 
         return $settings;
+    }
+
+    public function storage(): BelongsTo
+    {
+        return $this->belongsTo(BackupStorage::class);
     }
 
     public function server(): BelongsTo

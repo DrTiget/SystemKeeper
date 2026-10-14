@@ -71,6 +71,12 @@ class DatabaseConnectionRequest extends FormRequest
             'options.triggers' => ['sometimes', 'boolean'],
             'options.no_owner' => ['sometimes', 'boolean'],
             'options.compress' => ['sometimes', 'boolean'],
+
+            'storage_id' => ['sometimes', 'nullable', 'integer', Rule::exists('backup_storages', 'id')],
+            // Сколько последних успешных бекапов хранить
+            'keep_count' => ['sometimes', 'integer', 'between:1,1000'],
+            // Предельный объём всех бекапов, байт (не меньше 1 МБ); null — без ограничения
+            'max_size' => ['sometimes', 'nullable', 'integer', 'min:1048576'],
         ];
     }
 
@@ -146,6 +152,9 @@ class DatabaseConnectionRequest extends FormRequest
             'schedule' => 'расписание',
             'databases' => 'базы',
             'databases.*' => 'база',
+            'storage_id' => 'хранилище',
+            'keep_count' => 'сколько бекапов хранить',
+            'max_size' => 'лимит объёма',
             'exclude_tables.*' => 'таблица',
             'schema_only_tables.*' => 'таблица',
             'options' => 'параметры дампа',

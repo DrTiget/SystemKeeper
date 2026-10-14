@@ -7,9 +7,11 @@ use App\Models\Backup;
 use App\Models\DatabaseConnection;
 use App\Models\Server;
 use App\Services\Backup\BackupException;
+use App\Services\Backup\BackupRetention;
 use App\Services\Backup\DatabaseBackupRunner;
 use App\Services\Backup\ServerBackupRunner;
 use App\Services\Database\DatabaseException;
+use App\Support\Bytes;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
@@ -33,7 +35,7 @@ class RunBackup implements ShouldQueue
         $this->onQueue('backups');
     }
 
-    public function handle(ServerBackupRunner $servers, DatabaseBackupRunner $databases): void
+    public function handle(ServerBackupRunner $servers, DatabaseBackupRunner $databases, BackupRetention $retention): void
     {
         $backup = $this->backup;
         $source = $backup->source;
@@ -43,9 +45,16 @@ class RunBackup implements ShouldQueue
             return;
         }
 
-        $backup->forceFill(['status' => Backup::RUNNING, 'started_at' => now(), 'path' => self::pathFor($backup)])->save();
+        $storage = $source->retention()->storage();
+        $backup->forceFill(['status' => Backup::RUNNING, 'started_at' => now(), 'storage_id' => $storage->id, 'path' => self::pathFor($backup)])->save();
 
         try {
+            $free = $storage->disk()['free'] ?? null;
+            $min = (int) config('backup.min_free_space');
+            if ($free !== null && $free < $min) {
+                throw new BackupException('В хранилище «'.$storage->name.'» свободно '.Bytes::format($free).' — меньше минимума '.Bytes::format($min).'.');
+            }
+
             match (true) {
                 $source instanceof Server => $servers->run($source, $backup),
                 $source instanceof DatabaseConnection => $databases->run($source, $backup),
@@ -56,6 +65,11 @@ class RunBackup implements ShouldQueue
         } catch (Throwable $e) {
             Log::error('Бекап завершился с ошибкой', ['backup' => $backup->id, 'exception' => $e]);
             $this->markFailed('Внутренняя ошибка: '.$e->getMessage());
+        }
+
+        // Старые бекапы чистим и после неудачи — чтобы не копились записи
+        foreach ($retention->apply($source) as $message) {
+            $backup->appendLog($message);
         }
     }
 
@@ -68,9 +82,11 @@ class RunBackup implements ShouldQueue
         }
     }
 
+    /** Файлы неудачного бекапа неполные — удаляем их, запись с журналом остаётся. */
     private function markFailed(string $error): void
     {
         $this->backup->forceFill(['status' => Backup::FAILED, 'finished_at' => now(), 'error' => $error])->save();
+        $this->backup->deleteFiles();
     }
 
     /** servers/5/2026-10-14_120000-17 */

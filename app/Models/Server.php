@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Backup\Retention;
 use Database\Factories\ServerFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -41,6 +42,14 @@ class Server extends Model
     public function backupSettingsOrDefault(): ServerBackupSettings
     {
         return $this->backupSettings ?? ServerBackupSettings::defaultsFor($this);
+    }
+
+    /** Настройки хранения бекапов: хранилище, сколько копий держать и предельный объём. */
+    public function retention(): Retention
+    {
+        $s = $this->backupSettingsOrDefault();
+
+        return new Retention($s->storage_id, $s->keep_count, $s->max_size);
     }
 
     public function backups(): MorphMany

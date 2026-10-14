@@ -4,6 +4,7 @@ namespace App\Http\Requests\Server;
 
 use Cron\CronExpression;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 /**
@@ -26,6 +27,11 @@ class UpdateBackupSettingsRequest extends FormRequest
             'pre_command' => ['sometimes', 'nullable', 'string', 'max:5000'],
             'pre_command_timeout' => ['sometimes', 'integer', 'between:10,86400'],
             'pre_command_continue_on_error' => ['sometimes', 'boolean'],
+            'storage_id' => ['sometimes', 'nullable', 'integer', Rule::exists('backup_storages', 'id')],
+            // Сколько последних успешных бекапов хранить
+            'keep_count' => ['sometimes', 'integer', 'between:1,1000'],
+            // Предельный объём всех бекапов, байт (не меньше 1 МБ); null — без ограничения
+            'max_size' => ['sometimes', 'nullable', 'integer', 'min:1048576'],
         ];
     }
 
@@ -74,6 +80,9 @@ class UpdateBackupSettingsRequest extends FormRequest
             'paths.*' => 'каталог',
             'excludes' => 'исключения',
             'excludes.*' => 'исключение',
+            'storage_id' => 'хранилище',
+            'keep_count' => 'сколько бекапов хранить',
+            'max_size' => 'лимит объёма',
             'schedule' => 'расписание',
             'pre_command' => 'команда перед бекапом',
             'pre_command_timeout' => 'таймаут команды',

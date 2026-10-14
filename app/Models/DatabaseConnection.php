@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Backup\Retention;
 use Cron\CronExpression;
 use Database\Factories\DatabaseConnectionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,7 +20,7 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'name', 'description', 'engine', 'via', 'server_id', 'docker_container', 'host', 'port', 'username', 'password',
     'maintenance_database', 'backup_enabled', 'schedule', 'databases', 'exclude_tables', 'schema_only_tables', 'options',
-    'last_checked_at', 'last_check_status', 'last_check_error', 'server_version',
+    'last_checked_at', 'last_check_status', 'last_check_error', 'server_version', 'storage_id', 'keep_count', 'max_size',
 ])]
 #[Hidden(['password'])]
 class DatabaseConnection extends Model
@@ -58,6 +59,7 @@ class DatabaseConnection extends Model
         'exclude_tables' => '[]',
         'schema_only_tables' => '[]',
         'options' => '{}',
+        'keep_count' => 7,
     ];
 
     public function backups(): MorphMany
@@ -82,7 +84,20 @@ class DatabaseConnection extends Model
             'schema_only_tables' => 'array',
             'options' => 'array',
             'last_checked_at' => 'datetime',
+            'keep_count' => 'integer',
+            'max_size' => 'integer',
         ];
+    }
+
+    public function storage(): BelongsTo
+    {
+        return $this->belongsTo(BackupStorage::class);
+    }
+
+    /** Настройки хранения бекапов: хранилище, сколько копий держать и предельный объём. */
+    public function retention(): Retention
+    {
+        return new Retention($this->storage_id, $this->keep_count, $this->max_size);
     }
 
     public function server(): BelongsTo

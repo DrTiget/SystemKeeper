@@ -41,6 +41,13 @@ class DatabaseConnectionResource extends JsonResource
                 'schema_only_tables' => $this->schema_only_tables,
                 'options' => $this->resolvedOptions(),
             ],
+            'retention' => [
+                'storage_id' => $this->storage_id,
+                'keep_count' => $this->keep_count,
+                /** Лимит объёма, байт; null — без ограничения */
+                'max_size' => $this->max_size,
+            ],
+
             'last_check' => [
                 'status' => $this->last_check_status,
                 'error' => $this->last_check_error,

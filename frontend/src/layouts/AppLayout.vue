@@ -26,7 +26,7 @@ const navGroups: { title: string; admin?: boolean; items: NavItem[] }[] = [
       { to: '/databases', label: 'Базы данных', icon: 'database' },
     ],
   },
-  { title: 'Хранение бекапов', items: [] },
+  { title: 'Хранение бекапов', items: [{ to: '/storages', label: 'Хранилища', icon: 'archive' }] },
 ]
 
 const visibleGroups = computed(() =>
