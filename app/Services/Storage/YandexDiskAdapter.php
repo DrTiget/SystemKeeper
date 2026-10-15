@@ -68,7 +68,7 @@ class YandexDiskAdapter implements FilesystemAdapter
         try {
             $this->writeStream($path, $stream, $config);
         } finally {
-            fclose($stream);
+            is_resource($stream) && fclose($stream);
         }
     }
 

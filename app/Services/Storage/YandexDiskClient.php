@@ -71,7 +71,7 @@ class YandexDiskClient
             if (isset($this->directories[$current])) {
                 continue;
             }
-            $response = $this->send(fn () => $this->api()->put('/resources?'.http_build_query(['path' => $current])), [409]);
+            $response = $this->send(fn () => $this->api()->send('PUT', '/resources?'.http_build_query(['path' => $current])), [409]);
             if ($response->status() === 409 && $response->json('error') !== 'DiskPathPointsToExistentDirectoryError') {
                 throw new YandexDiskException($this->describe($response));
             }
@@ -101,14 +101,20 @@ class YandexDiskClient
         $href = $this->send(fn () => $this->api()->get('/resources/upload', ['path' => $path, 'overwrite' => 'true']))->json('href')
             ?: throw new YandexDiskException('Яндекс Диск не вернул ссылку для загрузки.');
 
-        $this->send(function () use ($href, $stream, $start, $size) {
-            fseek($stream, $start);
+        // Один PSR-поток на все попытки; в конце отвязываем его, не закрывая: потоком владеет вызывающий
+        $body = Utils::streamFor($stream, ['size' => $size]);
+        try {
+            $this->send(function () use ($href, $body, $start, $size) {
+                $body->seek($start);
 
-            return Http::timeout((int) config('yandex_disk.transfer_timeout'))
-                ->withHeaders(['Content-Length' => (string) $size])
-                ->withBody(Utils::streamFor($stream, ['size' => $size]), 'application/octet-stream')
-                ->put($href);
-        });
+                return Http::timeout((int) config('yandex_disk.transfer_timeout'))
+                    ->withHeaders(['Content-Length' => (string) $size])
+                    ->withBody($body, 'application/octet-stream')
+                    ->put($href);
+            });
+        } finally {
+            $body->detach();
+        }
 
         $actual = $this->info($path, 'size')['size'] ?? null;
         if ($actual !== null && (int) $actual !== (int) $size) {
@@ -130,14 +136,14 @@ class YandexDiskClient
     public function delete(string $path): void
     {
         // большие папки удаляются асинхронно (202) — ждать не нужно
-        $this->send(fn () => $this->api()->delete('/resources?'.http_build_query(['path' => $path, 'permanently' => 'true'])), [404]);
+        $this->send(fn () => $this->api()->send('DELETE', '/resources?'.http_build_query(['path' => $path, 'permanently' => 'true'])), [404]);
         unset($this->directories[$path]);
     }
 
     public function copy(string $from, string $to, bool $move = false): void
     {
         $this->mkdir(dirname($to));
-        $this->send(fn () => $this->api()->post('/resources/'.($move ? 'move' : 'copy').'?'.http_build_query(['from' => $from, 'path' => $to, 'overwrite' => 'true'])));
+        $this->send(fn () => $this->api()->send('POST', '/resources/'.($move ? 'move' : 'copy').'?'.http_build_query(['from' => $from, 'path' => $to, 'overwrite' => 'true'])));
     }
 
     /** @return array{string, string} схема (`disk:` / `app:`) и путь */
@@ -146,6 +152,7 @@ class YandexDiskClient
         return preg_match('#^([a-z]+:)(/.*)?$#', $path, $m) ? [$m[1], $m[2] ?? '/'] : ['disk:', $path];
     }
 
+    /** Запросы без тела: Диск отвечает 400 «No payload expected», если прислать хотя бы `[]` (как делают put/post/delete Laravel). */
     private function api(): PendingRequest
     {
         return Http::baseUrl((string) config('yandex_disk.base_url'))

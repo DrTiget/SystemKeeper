@@ -51,6 +51,10 @@ class FakeYandexDisk
         }
 
         $this->token = $r->header('Authorization')[0] ?? null;
+        // как настоящий Диск: у запросов к API, кроме загрузки по ссылке, тела быть не должно
+        if (in_array($r->method(), ['PUT', 'POST', 'DELETE'], true) && $r->body() !== '') {
+            return $this->json(['message' => 'No payload expected.', 'error' => 'BadRequest'], 400);
+        }
         if ($this->failWith) {
             return $this->json($this->failWith[1], $this->failWith[0]);
         }
