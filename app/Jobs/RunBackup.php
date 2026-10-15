@@ -17,6 +17,8 @@ use App\Services\Database\DatabaseException;
 use App\Support\Bytes;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -153,7 +155,12 @@ class RunBackup implements ShouldQueue
     {
         $this->backup->refresh();
         if ($this->backup->isActive()) {
-            $this->markFailed($e?->getMessage() ?: 'Бекап прерван.');
+            $this->markFailed(match (true) {
+                // задачу забрали у воркера, который упал или был перезапущен посреди бекапа
+                $e instanceof MaxAttemptsExceededException => 'Бекап прерван: воркер бекапов был остановлен или перезапущен во время работы. Запустите бекап заново.',
+                $e instanceof TimeoutExceededException => 'Бекап не уложился в '.intdiv($this->timeout, 3600).' ч и был остановлен.',
+                default => $e?->getMessage() ?: 'Бекап прерван.',
+            });
         }
     }
 

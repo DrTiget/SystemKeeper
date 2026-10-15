@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Exceptions\Ssh\SshConnectionException;
+use App\Jobs\RunBackup;
 use App\Models\Backup;
 use App\Models\DatabaseConnection;
 use App\Models\Server;
@@ -11,6 +12,7 @@ use App\Services\Backup\DatabaseBackupRunner;
 use App\Services\Backup\ServerBackupRunner;
 use App\Services\Ssh\SshConnectorInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Queue\MaxAttemptsExceededException;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
@@ -126,6 +128,17 @@ class BackupRunTest extends TestCase
 
         $id = $this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id');
         $this->assertSame('Не удалось подключиться', Backup::find($id)->error);
+    }
+
+    public function test_interrupted_worker_gives_clear_error(): void
+    {
+        $server = $this->server();
+        $backup = $server->backups()->create(['trigger' => 'manual', 'status' => Backup::RUNNING]);
+
+        (new RunBackup($backup))->failed(new MaxAttemptsExceededException('App\\Jobs\\RunBackup has been attempted too many times.'));
+
+        $this->assertSame(Backup::FAILED, $backup->fresh()->status);
+        $this->assertStringStartsWith('Бекап прерван: воркер бекапов был остановлен', $backup->fresh()->error);
     }
 
     public function test_server_without_paths_is_rejected(): void
