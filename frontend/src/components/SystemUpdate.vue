@@ -18,6 +18,22 @@ const changelog = ref<ChangelogEntry[] | null>(null)
 let timer: ReturnType<typeof setTimeout> | undefined
 let startedFrom: string | null = null
 
+/** Этапы обновления — как их проходит контейнер updater */
+const STEPS = [
+  { key: 'waiting', title: 'Ожидание бекапов', text: 'Идущие бекапы и синхронизации не прерываются: обновление ждёт их окончания (до 6 часов), новые бекапы на это время не стартуют.' },
+  { key: 'backup', title: 'Дамп базы', text: 'Полный дамп базы SystemKeeper в каталог backups установки, обычно /opt/systemkeeper/backups (хранятся 3 последних). Не получился — обновление отменяется.' },
+  { key: 'pulling', title: 'Скачивание версии', text: 'Скачиваются файлы релиза и образ новой версии; работающие сервисы пока не трогаются.' },
+  { key: 'restarting', title: 'Перезапуск', text: 'Сервисы перезапускаются на новой версии, миграции базы применяются при старте. Интерфейс недоступен около минуты.' },
+  { key: 'done', title: 'Проверка', text: 'Новая версия должна ответить на проверку здоровья. Не ответила — возвращается прежняя версия и база из дампа.' },
+] as const
+const stepIndex = computed(() => {
+  const s = info.value?.updater.status
+  if (s === 'pending') return 0
+  const i = STEPS.findIndex((x) => x.key === s)
+  return i === -1 ? -1 : i
+})
+const finished = computed(() => ['done', 'failed', 'rolled_back'].includes(info.value?.updater.status ?? ''))
+
 const active = computed(() => !!info.value && ACTIVE_STATUSES.includes(info.value.updater.status))
 const busyCount = computed(() => (info.value ? info.value.busy.backups + info.value.busy.syncs : 0))
 const showUpdate = computed(() => auth.user?.is_admin && (info.value?.update_available || active.value))
@@ -128,14 +144,33 @@ onBeforeUnmount(() => clearTimeout(timer))
         </div>
 
         <template v-if="auth.user?.is_admin && (info.update_available || active)">
-          <p class="text-muted-foreground">
-            Перед обновлением делается дамп базы; если новая версия не запустится, вернётся прежняя.
-            Идущие бекапы не прерываются — обновление начнётся после них.
+          <ol class="grid gap-0">
+            <li v-for="(step, i) in STEPS" :key="step.key" class="relative grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3 pb-3 last:pb-0">
+              <span v-if="i < STEPS.length - 1" class="absolute top-6 bottom-0 left-3 w-px -translate-x-1/2 bg-border" />
+              <span
+                class="relative z-10 flex size-6 items-center justify-center rounded-full border text-[0.7rem] font-semibold"
+                :class="
+                  active && i === stepIndex
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : active && i < stepIndex
+                      ? 'border-primary text-primary'
+                      : 'bg-background text-muted-foreground'
+                "
+              >
+                <Icon v-if="active && i === stepIndex" name="loader" class="size-3.5 animate-spin" />
+                <Icon v-else-if="active && i < stepIndex" name="check" class="size-3.5" />
+                <template v-else>{{ i + 1 }}</template>
+              </span>
+              <div class="grid gap-0.5">
+                <span class="font-medium" :class="active && i === stepIndex && 'text-primary'">{{ step.title }}</span>
+                <span class="text-xs text-muted-foreground">{{ step.text }}</span>
+              </div>
+            </li>
+          </ol>
+          <p v-if="active" class="text-xs text-muted-foreground">
+            {{ info.updater.message }}<template v-if="info.updater.updated_at"> · {{ formatDate(info.updater.updated_at) }}</template>.
+            Окно можно закрыть — обновление идёт на сервере; страница перезагрузится сама, когда поднимется новая версия.
           </p>
-          <div v-if="info.updater.status !== 'idle'" class="rounded-md border p-3" :class="['failed', 'rolled_back'].includes(info.updater.status) && 'border-destructive text-destructive'">
-            <div class="font-medium">{{ stageLabel[info.updater.status] }}</div>
-            <div v-if="info.updater.message" class="text-xs text-muted-foreground">{{ info.updater.message }}</div>
-          </div>
           <p v-if="!info.updater.available" class="text-xs text-muted-foreground">
             Обновлятор не запущен. На сервере выполните: <code class="rounded bg-muted px-1">systemkeeper update</code>
           </p>
@@ -149,6 +184,18 @@ onBeforeUnmount(() => clearTimeout(timer))
             </button>
           </div>
         </template>
+        <div
+          v-if="finished"
+          class="grid gap-0.5 rounded-md border p-3 text-xs"
+          :class="info.updater.status === 'done' ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-destructive/50 bg-destructive/5 text-destructive'"
+        >
+          <span class="font-medium">
+            Последнее обновление<template v-if="info.updater.from && info.updater.to"> {{ info.updater.from }} → {{ info.updater.to }}</template>: {{ stageLabel[info.updater.status].toLowerCase() }}
+          </span>
+          <span v-if="info.updater.message" :class="info.updater.status === 'done' && 'text-muted-foreground'">{{ info.updater.message }}</span>
+          <span v-if="info.updater.updated_at" class="text-muted-foreground">{{ formatDate(info.updater.updated_at) }}</span>
+          <span v-if="info.updater.status !== 'done'" class="text-muted-foreground">Подробный журнал на сервере: state/update.log в каталоге установки (обычно /opt/systemkeeper)</span>
+        </div>
         <p v-if="error" class="text-destructive">{{ error }}</p>
 
         <div class="grid gap-3">
