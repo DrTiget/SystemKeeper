@@ -128,30 +128,41 @@ class YandexDiskClient
      */
     public function uploadFromUrl(string $path, string $url, ?int $expectedSize = null): void
     {
+        $operation = $this->startUploadFromUrl($path, $url);
+        $deadline = time() + (int) config('yandex_disk.transfer_timeout');
+        while (($status = $this->operationStatus($operation)) === 'in-progress' && time() < $deadline) {
+            usleep((int) config('yandex_disk.poll_ms') * 1000);
+        }
+        $this->finishUploadFromUrl($path, $status, $expectedSize);
+    }
+
+    /** Запускает скачивание файла Диском по ссылке; возвращает адрес операции. */
+    public function startUploadFromUrl(string $path, string $url): string
+    {
         $this->mkdir(dirname($path));
         if ($this->info($path, 'type') !== null) {
             $this->delete($path);
         }
 
-        $operation = $this->send(fn () => $this->api()->send('POST', '/resources/upload?'.http_build_query(['path' => $path, 'url' => $url])))->json('href')
+        return $this->send(fn () => $this->api()->send('POST', '/resources/upload?'.http_build_query(['path' => $path, 'url' => $url])))->json('href')
             ?: throw new YandexDiskException('Яндекс Диск не вернул операцию скачивания.');
+    }
 
-        $deadline = time() + (int) config('yandex_disk.transfer_timeout');
-        do {
-            $status = $this->send(fn () => $this->api()->get($operation))->json('status');
-            if ($status === 'success') {
-                break;
-            }
-            if ($status === 'failed') {
-                throw new YandexDiskException('Яндекс Диск не смог скачать файл по ссылке — адрес SystemKeeper недоступен из интернета?');
-            }
-            usleep((int) config('yandex_disk.poll_ms') * 1000);
-        } while (time() < $deadline);
+    /** success | failed | in-progress */
+    public function operationStatus(string $operation): string
+    {
+        return (string) $this->send(fn () => $this->api()->get($operation))->json('status');
+    }
 
+    /** Итог операции скачивания по ссылке: исключение, если не удалась или размер не совпал. */
+    public function finishUploadFromUrl(string $path, string $status, ?int $expectedSize = null): void
+    {
+        if ($status === 'failed') {
+            throw new YandexDiskException('Яндекс Диск не смог скачать файл по ссылке — адрес SystemKeeper недоступен из интернета?');
+        }
         if ($status !== 'success') {
             throw new YandexDiskException('Яндекс Диск не успел скачать файл по ссылке.');
         }
-
         $actual = $this->info($path, 'size')['size'] ?? null;
         if ($expectedSize !== null && (int) $actual !== $expectedSize) {
             throw new YandexDiskException("Размер на Диске ({$actual}) не совпал с ожидаемым ({$expectedSize}).");

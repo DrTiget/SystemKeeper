@@ -46,7 +46,7 @@ class YandexDiskStorageTest extends TestCase
         $this->getJson("/api/v1/storages/{$id}")
             ->assertOk()
             ->assertJsonPath('data.type', 'yandex_disk')
-            ->assertJsonPath('data.yandex_disk', ['folder' => 'disk:/Бекапы/Серверы', 'has_token' => true])
+            ->assertJsonPath('data.yandex_disk', ['folder' => 'disk:/Бекапы/Серверы', 'has_token' => true, 'parallel' => 4])
             ->assertJsonPath('data.s3', null)
             ->assertJsonPath('data.disk.total', 10 * 1024 ** 3)
             ->assertDontSee('y0_secret-token');
@@ -203,5 +203,39 @@ class YandexDiskStorageTest extends TestCase
 
         $this->assertSame([], $this->disk->fetched);
         $this->assertContains("disk:/SystemKeeper/{$backup->path}/files.tar.gz", $this->disk->uploaded);
+    }
+
+    public function test_sync_runs_several_link_downloads_at_once(): void
+    {
+        config(['systemkeeper.public_url' => 'https://public.test', 'yandex_disk.poll_ms' => 0, 'yandex_disk.fetch_min_size' => 0]);
+        $this->disk->operationPolls = 2;
+        $server = Server::factory()->create();
+        $server->backupSettings()->create(['enabled' => false, 'paths' => ['/var/www'], 'excludes' => [], 'schedule' => '0 3 * * *', 'pre_command_timeout' => 60]);
+        $ids = [];
+        for ($i = 0; $i < 5; $i++) {
+            $ids[] = $this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id');
+            Backup::query()->update(['created_at' => now()->subMinutes(10 - $i)]);
+        }
+        $storage = $this->create(['parallel' => 3]);
+        $this->getJson("/api/v1/storages/{$storage}")->assertJsonPath('data.yandex_disk.parallel', 3);
+
+        $this->postJson("/api/v1/storages/{$storage}/sync")
+            ->assertStatus(202)
+            ->assertJsonPath('data.last.status', 'success')
+            ->assertJsonPath('data.last.done', 5)
+            ->assertJsonPath('data.last.bytes_done', 35);
+
+        $this->assertSame(3, $this->disk->maxConcurrent);
+        $this->assertCount(5, $this->disk->fetched);
+        foreach (Backup::findMany($ids) as $b) {
+            $this->assertArrayHasKey("disk:/SystemKeeper/{$b->path}/backup.json", $this->disk->files);
+        }
+    }
+
+    public function test_parallel_is_validated(): void
+    {
+        $this->postJson('/api/v1/storages', ['type' => 'yandex_disk', 'name' => 'x', 'token' => 't', 'parallel' => 11])
+            ->assertStatus(422)->assertJsonValidationErrors('parallel');
+        $this->assertSame(4, BackupStorage::find($this->create())->settings['parallel']);
     }
 }

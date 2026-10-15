@@ -38,6 +38,8 @@ class BackupStorageResource extends JsonResource
             'yandex_disk' => $this->type === BackupStorage::YANDEX_DISK ? [
                 'folder' => $this->settings['folder'] ?? 'disk:/SystemKeeper',
                 'has_token' => filled($this->settings['token'] ?? null),
+                /** Сколько файлов Диск скачивает по ссылке одновременно (1–10) */
+                'parallel' => (int) ($this->settings['parallel'] ?? config('yandex_disk.parallel')),
             ] : null,
             'is_default' => $this->is(BackupStorage::default()),
             /** Объём и свободное место, байт: диск сервера SystemKeeper или квота Яндекс Диска; null — неизвестно (S3) */

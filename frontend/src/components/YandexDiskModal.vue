@@ -11,6 +11,7 @@ const emit = defineEmits<{ close: []; saved: [storage: BackupStorage] }>()
 const form = reactive({
   name: props.storage?.name ?? 'Яндекс Диск',
   folder: props.storage?.yandex_disk?.folder ?? 'disk:/SystemKeeper',
+  parallel: props.storage?.yandex_disk?.parallel ?? 4,
   token: '',
 })
 // ID своего приложения Яндекс OAuth — только чтобы собрать ссылку на получение токена, не сохраняется
@@ -26,7 +27,7 @@ async function save() {
   saving.value = true
   errors.value = {}
   formError.value = ''
-  const body: Record<string, unknown> = { name: form.name, folder: form.folder.trim() || null }
+  const body: Record<string, unknown> = { name: form.name, folder: form.folder.trim() || null, parallel: Number(form.parallel) }
   if (form.token || !props.storage) body.token = form.token.trim()
   try {
     const res = props.storage
@@ -59,6 +60,13 @@ const hint = 'text-sm text-muted-foreground'
         <input id="yd-folder" v-model="form.folder" placeholder="disk:/SystemKeeper" spellcheck="false" :class="inputClass" class="font-mono" :aria-invalid="!!errors.folder" />
         <p :class="hint">Создастся сама. Для токена с доступом только к папке приложения укажите <code>app:/</code>.</p>
         <p v-for="m in errors.folder" :key="m" class="text-sm text-destructive">{{ m }}</p>
+      </div>
+
+      <div class="grid gap-2">
+        <label for="yd-parallel" :class="label">Одновременных загрузок</label>
+        <input id="yd-parallel" v-model.number="form.parallel" type="number" min="1" max="10" :class="inputClass" class="w-24" :aria-invalid="!!errors.parallel" />
+        <p :class="hint">Сколько файлов от 8 МБ Диск скачивает с SystemKeeper (или из S3) одновременно, 1–10. Больше — быстрее, пока хватает исходящего канала сервера.</p>
+        <p v-for="m in errors.parallel" :key="m" class="text-sm text-destructive">{{ m }}</p>
       </div>
 
       <details class="rounded-lg border p-3 text-sm" :open="!storage">

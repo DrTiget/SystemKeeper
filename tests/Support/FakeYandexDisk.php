@@ -31,6 +31,15 @@ class FakeYandexDisk
     /** @var array<string, string> операции скачивания по ссылке: id → статус */
     private array $operations = [];
 
+    /** @var array<string, int> сколько опросов осталось до конца операции */
+    private array $pollsLeft = [];
+
+    /** Сколько опросов статуса длится каждая операция скачивания по ссылке */
+    public int $operationPolls = 0;
+
+    /** Наибольшее число одновременно идущих операций скачивания */
+    public int $maxConcurrent = 0;
+
     /** Ответ API на любой запрос (например, 401 — отозванный токен) */
     public ?array $failWith = null;
 
@@ -72,7 +81,15 @@ class FakeYandexDisk
         $path = $q['path'] ?? null;
         $resource = substr($url['path'], strlen('/v1/disk'));
         if (str_starts_with($resource, '/operations/')) {
-            return $this->json(['status' => $this->operations[substr($resource, 12)] ?? 'failed']);
+            $id = substr($resource, 12);
+            if (($this->pollsLeft[$id] ?? 0) > 0) {
+                $this->pollsLeft[$id]--;
+
+                return $this->json(['status' => 'in-progress']);
+            }
+            unset($this->pollsLeft[$id]);
+
+            return $this->json(['status' => $this->operations[$id] ?? 'failed']);
         }
         if ($resource === '/resources/upload' && $r->method() === 'POST') {
             return $this->fetch($q['path'], $q['url']);
@@ -109,6 +126,9 @@ class FakeYandexDisk
                 $this->operations[$id] = 'success';
             }
         }
+
+        $this->pollsLeft[$id] = $this->operationPolls;
+        $this->maxConcurrent = max($this->maxConcurrent, count(array_filter($this->pollsLeft)));
 
         return $this->json(['href' => "https://cloud-api.test/v1/disk/operations/{$id}"], 202);
     }

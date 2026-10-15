@@ -136,8 +136,15 @@ class RunBackup implements ShouldQueue
                 $fs = $storage->filesystem();
                 // локальная копия — источник: на Яндекс Диск файл скачивается по временной ссылке с SystemKeeper
                 $staging = BackupStorage::query()->where('type', BackupStorage::LOCAL)->firstOrFail();
-                foreach ($backup->files ?? [] as $file) {
-                    app(StorageTransfer::class)->copy($staging, $local, $storage, $fs, $backup->path.'/'.$file['name'], $file['size'] ?? null, log: $backup->appendLog(...));
+                $failedFiles = [];
+                app(StorageTransfer::class)->copyMany(array_map(fn (array $file) => [
+                    'from' => $staging, 'fs' => $local, 'path' => $backup->path.'/'.$file['name'], 'size' => $file['size'] ?? null,
+                    'done' => function (?Throwable $e) use ($file, &$failedFiles) {
+                        $e && $failedFiles[] = "{$file['name']}: {$e->getMessage()}";
+                    },
+                ], $backup->files ?? []), $storage, $fs, $backup->appendLog(...));
+                if ($failedFiles) {
+                    throw new BackupException(implode('; ', $failedFiles));
                 }
                 $manifest->writeBackupInfo($fs, $backup);
                 $backup->copies()->create(['storage_id' => $storage->id, 'status' => BackupCopy::SUCCESS]);

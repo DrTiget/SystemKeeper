@@ -30,6 +30,8 @@ class BackupStorageRequest extends FormRequest
             'type' => [$creating ? 'required' : 'prohibited', Rule::in([BackupStorage::S3, BackupStorage::YANDEX_DISK])],
             // Яндекс Диск: OAuth-токен с правами на Диск и папка (`disk:/…` или `app:/…` для доступа только к папке приложения)
             'token' => $yandex ? [$creating ? 'required' : 'sometimes', 'string', 'max:1000'] : ['prohibited'],
+            // сколько файлов Диск скачивает по ссылке одновременно
+            'parallel' => $yandex ? ['sometimes', 'integer', 'between:1,10'] : ['prohibited'],
             'folder' => $yandex ? ['sometimes', 'nullable', 'string', 'max:255', 'regex:#^(disk:|app:)?/?[^\\\\:*?"<>|]*$#u'] : ['prohibited'],
             // Пусто — Amazon S3; для Яндекса, Selectel, MinIO и т. п. — их адрес
             'endpoint' => $s3 ? ['sometimes', 'nullable', 'url:http,https', 'max:255'] : ['prohibited'],
@@ -52,11 +54,12 @@ class BackupStorageRequest extends FormRequest
         $data = array_intersect_key($v, array_flip(['name', 'type']));
 
         $type = $this->route('storage')?->type ?? ($v['type'] ?? BackupStorage::S3);
-        $keys = $type === BackupStorage::YANDEX_DISK ? ['token', 'folder'] : ['endpoint', 'region', 'bucket', 'prefix', 'path_style', 'key', 'secret'];
+        $keys = $type === BackupStorage::YANDEX_DISK ? ['token', 'folder', 'parallel'] : ['endpoint', 'region', 'bucket', 'prefix', 'path_style', 'key', 'secret'];
         if (array_intersect(array_keys($v), $keys) || $this->route('storage') === null) {
             $settings = [...($this->route('storage')?->settings ?? []), ...array_intersect_key($v, array_flip($keys))];
             if ($type === BackupStorage::YANDEX_DISK) {
                 $settings['folder'] = self::folder((string) ($settings['folder'] ?? ''));
+                $settings['parallel'] = (int) ($settings['parallel'] ?? config('yandex_disk.parallel'));
             } else {
                 $settings['prefix'] = trim((string) ($settings['prefix'] ?? ''), '/');
                 $settings['path_style'] = (bool) ($settings['path_style'] ?? false);
@@ -91,7 +94,7 @@ class BackupStorageRequest extends FormRequest
         return [
             'name' => 'название', 'type' => 'тип', 'endpoint' => 'адрес', 'region' => 'регион', 'bucket' => 'бакет',
             'prefix' => 'каталог', 'path_style' => 'path-style', 'key' => 'ключ доступа', 'secret' => 'секретный ключ',
-            'token' => 'токен', 'folder' => 'папка',
+            'token' => 'токен', 'folder' => 'папка', 'parallel' => 'одновременных загрузок',
         ];
     }
 

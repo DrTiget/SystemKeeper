@@ -11,7 +11,6 @@ use App\Models\StorageSync;
 use App\Services\Backup\BackupManifest;
 use App\Services\Backup\StorageTransfer;
 use App\Services\System\Updater;
-use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use RuntimeException;
@@ -57,29 +56,68 @@ class SyncStorage implements ShouldQueue
         $to = $target->filesystem();
         $sources = [];
         $errors = [];
+        $progress = [];
+        $tasks = [];
+        $pending = [];
+
+        // бекап готов, когда скопированы все его файлы; ошибка любого файла — неудачная копия всего бекапа
+        $finish = function (Backup $backup, ?Throwable $e) use ($sync, $target, $to, $manifest, &$sources, &$errors, &$progress) {
+            if ($e === null) {
+                try {
+                    $manifest->writeBackupInfo($to, $backup);
+                    $backup->copies()->updateOrCreate(['storage_id' => $target->id], ['status' => BackupCopy::SUCCESS, 'error' => null]);
+                    $sync->increment('done');
+                    $sources[$backup->source_type.':'.$backup->source_id] = $backup->source;
+
+                    return;
+                } catch (Throwable $writeError) {
+                    $e = $writeError;
+                }
+            }
+            // бекап удалили, пока шла синхронизация (очистка старых) — копировать уже нечего
+            if (! Backup::whereKey($backup->id)->exists()) {
+                $sync->decrement('total');
+                $sync->update(['bytes_total' => max(0, $sync->bytes_total - (int) $backup->size)]);
+
+                return;
+            }
+            $error = mb_substr($e->getMessage(), 0, 1000);
+            $backup->copies()->updateOrCreate(['storage_id' => $target->id], ['status' => BackupCopy::FAILED, 'error' => $error]);
+            $sync->increment('failed');
+            $errors[] = "{$backup->path}: {$error}";
+        };
 
         foreach ($backups as $backup) {
-            $sync->update(['current' => $backup->path]);
-            $base = $sync->bytes_done;
-            try {
-                $this->copy($backup, $target, $to, $manifest, fn (int $bytes) => $sync->update(['bytes_done' => $base + min($bytes, (int) $backup->size)]));
-                $sync->increment('done');
-                $sources[$backup->source_type.':'.$backup->source_id] = $backup->source;
-            } catch (Throwable $e) {
-                // бекап удалили, пока шла синхронизация (очистка старых) — копировать уже нечего
-                if (! Backup::whereKey($backup->id)->exists()) {
-                    $sync->decrement('total');
-                    $sync->update(['bytes_done' => $base, 'bytes_total' => max(0, $sync->bytes_total - (int) $backup->size)]);
+            $from = $this->sourceOf($backup, $target);
+            if ($from === null || ! $backup->files) {
+                $finish($backup, $from === null ? new RuntimeException('Бекап не найден ни в одном хранилище') : null);
 
-                    continue;
-                }
-                $error = mb_substr($e->getMessage(), 0, 1000);
-                $backup->copies()->updateOrCreate(['storage_id' => $target->id], ['status' => BackupCopy::FAILED, 'error' => $error]);
-                $sync->increment('failed');
-                $errors[] = "{$backup->path}: {$error}";
+                continue;
             }
-            $sync->update(['bytes_done' => $base + (int) $backup->size]);
+            $fs = $from->filesystem();
+            $pending[$backup->id] = ['left' => count($backup->files), 'error' => null];
+            foreach ($backup->files as $file) {
+                $path = $backup->path.'/'.$file['name'];
+                $tasks[] = [
+                    'from' => $from, 'fs' => $fs, 'path' => $path, 'size' => isset($file['size']) ? (int) $file['size'] : null,
+                    'progress' => function (int $bytes) use ($sync, $path, &$progress) {
+                        $progress[$path] = $bytes;
+                        $sync->update(['current' => $path, 'bytes_done' => min((int) array_sum($progress), $sync->bytes_total)]);
+                    },
+                    'done' => function (?Throwable $e) use ($backup, $path, $file, &$pending, &$progress, $finish, $sync) {
+                        $progress[$path] = (int) ($file['size'] ?? 0);
+                        $sync->update(['bytes_done' => min((int) array_sum($progress), $sync->bytes_total)]);
+                        $state = &$pending[$backup->id];
+                        $state['error'] ??= $e;
+                        if (--$state['left'] === 0) {
+                            $finish($backup, $state['error']);
+                        }
+                    },
+                ];
+            }
         }
+
+        app(StorageTransfer::class)->copyMany($tasks, $target, $to);
 
         foreach (array_filter($sources) as $source) {
             if ($error = $manifest->sync($target, $source)) {
@@ -106,29 +144,11 @@ class SyncStorage implements ShouldQueue
         ]);
     }
 
-    /** @param callable(int): void $onProgress сколько байт бекапа уже скопировано */
-    private function copy(Backup $backup, BackupStorage $target, Filesystem $to, BackupManifest $manifest, callable $onProgress): void
+    /** Откуда копировать: хранилище с удачной копией бекапа, диск SystemKeeper — в первую очередь. */
+    private function sourceOf(Backup $backup, BackupStorage $target): ?BackupStorage
     {
-        $from = $backup->copies->where('status', BackupCopy::SUCCESS)->where('storage_id', '!=', $target->id)->map->storage->filter()
-            ->sortBy(fn (BackupStorage $s) => $s->type === BackupStorage::LOCAL ? 0 : 1)->first()
-            ?? throw new RuntimeException('Бекап не найден ни в одном хранилище');
-        $fs = $from->filesystem();
-
-        $copied = 0;
-        foreach ($backup->files ?? [] as $file) {
-            $path = $backup->path.'/'.$file['name'];
-            $before = $copied;
-            app(StorageTransfer::class)->copy($from, $fs, $target, $to, $path, isset($file['size']) ? (int) $file['size'] : null, function (int $bytes) use (&$copied, $before, $onProgress) {
-                $copied = $before + $bytes;
-                $onProgress($copied);
-            });
-            if (isset($file['size']) && $to->size($path) !== (int) $file['size']) {
-                throw new RuntimeException("Размер {$file['name']} после копирования не совпал");
-            }
-        }
-
-        $manifest->writeBackupInfo($to, $backup);
-        $backup->copies()->updateOrCreate(['storage_id' => $target->id], ['status' => BackupCopy::SUCCESS, 'error' => null]);
+        return $backup->copies->where('status', BackupCopy::SUCCESS)->where('storage_id', '!=', $target->id)->map->storage->filter()
+            ->sortBy(fn (BackupStorage $s) => $s->type === BackupStorage::LOCAL ? 0 : 1)->first();
     }
 
     /** Новые бекапы источника тоже будут сохраняться в это хранилище. */
