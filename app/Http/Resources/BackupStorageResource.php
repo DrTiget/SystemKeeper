@@ -22,7 +22,7 @@ class BackupStorageResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
-            /** local — диск SystemKeeper, s3 — бакет S3 */
+            /** local — диск SystemKeeper, s3 — бакет S3, yandex_disk — папка на Яндекс Диске */
             'type' => $this->type,
             /** Параметры S3 без секретного ключа; null у диска */
             's3' => $this->type === BackupStorage::S3 ? [
@@ -34,8 +34,13 @@ class BackupStorageResource extends JsonResource
                 'key' => $this->settings['key'] ?? null,
                 'has_secret' => filled($this->settings['secret'] ?? null),
             ] : null,
+            /** Яндекс Диск: папка и есть ли токен (сам токен наружу не отдаётся); null у остальных */
+            'yandex_disk' => $this->type === BackupStorage::YANDEX_DISK ? [
+                'folder' => $this->settings['folder'] ?? 'disk:/SystemKeeper',
+                'has_token' => filled($this->settings['token'] ?? null),
+            ] : null,
             'is_default' => $this->is(BackupStorage::default()),
-            /** Диск хранилища, байт; null — неизвестно */
+            /** Объём и свободное место, байт: диск сервера SystemKeeper или квота Яндекс Диска; null — неизвестно (S3) */
             'disk' => $this->disk(),
             /** Занято бекапами, байт */
             'used' => (int) $backups->clone()->sum('backups.size'),

@@ -79,7 +79,7 @@ export interface BackupMeta {
 export interface BackupCopy {
   storage_id: number
   name: string | null
-  type: 'local' | 's3' | null
+  type: 'local' | 's3' | 'yandex_disk' | null
   status: 'success' | 'failed'
   error: string | null
 }

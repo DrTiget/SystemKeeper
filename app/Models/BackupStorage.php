@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\Backup\StorageFilesystems;
+use App\Services\Storage\YandexDiskClient;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -10,11 +11,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 /**
  * Куда складываются бекапы: `local` — диск самого SystemKeeper (диск `backups`), `s3` — бакет S3-совместимого
- * хранилища. Настройки S3 (`endpoint`, `region`, `bucket`, `prefix`, `path_style`, `key`, `secret`) шифруются.
+ * хранилища, `yandex_disk` — папка на Яндекс Диске. Настройки шифруются: у S3 — `endpoint`, `region`, `bucket`, `prefix`,
+ * `path_style`, `key`, `secret`; у Яндекс Диска — `token` (OAuth) и `folder` (`disk:/SystemKeeper`).
  */
 #[Fillable(['name', 'type', 'settings'])]
 #[Hidden(['settings'])]
@@ -24,7 +28,9 @@ class BackupStorage extends Model
 
     public const S3 = 's3';
 
-    public const TYPES = [self::LOCAL, self::S3];
+    public const YANDEX_DISK = 'yandex_disk';
+
+    public const TYPES = [self::LOCAL, self::S3, self::YANDEX_DISK];
 
     protected function casts(): array
     {
@@ -121,6 +127,9 @@ class BackupStorage extends Model
      */
     public function disk(): ?array
     {
+        if ($this->type === self::YANDEX_DISK) {
+            return $this->yandexQuota();
+        }
         if ($this->type !== self::LOCAL) {
             return null;
         }
@@ -130,5 +139,19 @@ class BackupStorage extends Model
         $free = @disk_free_space($root);
 
         return $total === false || $free === false ? null : ['total' => (int) $total, 'free' => (int) $free];
+    }
+
+    /** Объём и свободное место на Яндекс Диске (кешируется на 5 минут); null — Диск недоступен. */
+    private function yandexQuota(): ?array
+    {
+        return Cache::remember("yandex-disk-quota:{$this->id}:".md5((string) ($this->settings['token'] ?? '')), 300, function () {
+            try {
+                $q = (new YandexDiskClient((string) ($this->settings['token'] ?? '')))->quota();
+
+                return ['total' => $q['total'], 'free' => $q['free']];
+            } catch (Throwable) {
+                return null;
+            }
+        });
     }
 }

@@ -6,6 +6,7 @@ import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
 import RetentionFields from '@/components/RetentionFields.vue'
 import S3StorageModal from '@/components/S3StorageModal.vue'
+import YandexDiskModal from '@/components/YandexDiskModal.vue'
 import StorageSync from '@/components/StorageSync.vue'
 import { btnClass, formatBytes } from '@/lib/ui'
 
@@ -74,8 +75,10 @@ function grouped(sources: StorageSource[]) {
   return [...groups.values()].sort(byName).map((g) => ({ ...g, projects: [...g.projects.values()].sort(byName) }))
 }
 
-// S3: добавление, изменение, проверка, удаление
+// S3 и Яндекс Диск: добавление, изменение, проверка, удаление
 const s3Edit = ref<{ storage: BackupStorage | null } | null>(null)
+const yandexEdit = ref<{ storage: BackupStorage | null } | null>(null)
+const editStorage = (st: BackupStorage) => (st.type === 'yandex_disk' ? (yandexEdit.value = { storage: st }) : (s3Edit.value = { storage: st }))
 const checks = ref<Record<number, { status: 'checking' | 'ok' | 'failed'; error?: string | null }>>({})
 const deleting = ref<BackupStorage | null>(null)
 const deleteError = ref('')
@@ -91,6 +94,7 @@ async function check(st: BackupStorage) {
 
 async function onS3Saved(st: BackupStorage) {
   s3Edit.value = null
+  yandexEdit.value = null
   await load()
   check(st)
 }
@@ -120,7 +124,10 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
         <h2 class="text-xl font-semibold tracking-tight">Диски и облака</h2>
         <p class="text-sm text-muted-foreground">Где лежат бекапы, сколько места занято и сколько копий хранится у каждого сервера и базы</p>
       </div>
-      <button :class="btnClass.primary" @click="s3Edit = { storage: null }"><Icon name="plus" />Подключить S3</button>
+      <div class="flex flex-wrap gap-2">
+        <button :class="btnClass.outline" @click="yandexEdit = { storage: null }"><Icon name="plus" />Яндекс Диск</button>
+        <button :class="btnClass.primary" @click="s3Edit = { storage: null }"><Icon name="plus" />Подключить S3</button>
+      </div>
     </header>
 
     <p v-if="loadError" class="text-sm text-destructive">{{ loadError }}</p>
@@ -136,6 +143,7 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
               · <span class="font-mono text-xs">{{ st.s3.bucket }}{{ st.s3.prefix ? '/' + st.s3.prefix : '' }}</span>
               · {{ st.s3.endpoint ? st.s3.endpoint.replace(/^https?:\/\//, '') : 'Amazon S3' }}
             </template>
+            <template v-if="st.yandex_disk"> · <span class="font-mono text-xs">{{ st.yandex_disk.folder }}</span></template>
           </p>
         </div>
         <div class="flex items-start gap-4">
@@ -143,11 +151,11 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
             <div class="font-medium">{{ formatBytes(st.used) }}</div>
             <div class="text-muted-foreground">в {{ st.backups_count }} бекапах</div>
           </div>
-          <div v-if="st.type === 's3'" class="flex gap-2">
+          <div v-if="st.type !== 'local'" class="flex gap-2">
             <button :class="btnClass.outline" :disabled="checks[st.id]?.status === 'checking'" @click="check(st)">
               <Icon :name="checks[st.id]?.status === 'checking' ? 'loader' : 'plug'" :class="checks[st.id]?.status === 'checking' && 'animate-spin'" />Проверить
             </button>
-            <button :class="btnClass.outline" class="size-9! p-0!" title="Изменить" @click="s3Edit = { storage: st }"><Icon name="pencil" class="size-4" /></button>
+            <button :class="btnClass.outline" class="size-9! p-0!" title="Изменить" @click="editStorage(st)"><Icon name="pencil" class="size-4" /></button>
             <button :class="btnClass.destructive" class="size-9! p-0!" title="Удалить" @click="(deleting = st), (deleteError = '')"><Icon name="trash" class="size-4" /></button>
           </div>
         </div>
@@ -214,7 +222,7 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
           </tbody>
           <tbody v-if="!st.sources?.length">
             <tr>
-              <td colspan="4" class="px-4 py-8 text-center text-muted-foreground">Сюда пока ничего не бекапится{{ st.type === 's3' ? ' — выберите это место в настройках бекапа сервера или базы' : '' }}</td>
+              <td colspan="4" class="px-4 py-8 text-center text-muted-foreground">Сюда пока ничего не бекапится{{ st.type !== 'local' ? ' — выберите это место в настройках бекапа сервера или базы' : '' }}</td>
             </tr>
           </tbody>
         </table>
@@ -222,6 +230,7 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
     </section>
 
     <S3StorageModal v-if="s3Edit" :storage="s3Edit.storage" @close="s3Edit = null" @saved="onS3Saved" />
+    <YandexDiskModal v-if="yandexEdit" :storage="yandexEdit.storage" @close="yandexEdit = null" @saved="onS3Saved" />
 
     <Modal v-if="deleting" title="Удалить хранилище?" @close="deleting = null">
       <p class="text-sm text-muted-foreground">«{{ deleting.name }}» будет отключено от SystemKeeper. Файлы в бакете не удаляются.</p>

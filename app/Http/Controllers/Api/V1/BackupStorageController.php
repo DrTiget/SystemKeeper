@@ -11,6 +11,7 @@ use App\Models\BackupStorage;
 use App\Models\DatabaseConnection;
 use App\Models\ServerBackupSettings;
 use App\Models\StorageSync;
+use App\Services\Storage\YandexDiskException;
 use App\Services\System\Updater;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,7 @@ use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * Хранилища бекапов («Диски и облака»): встроенный диск SystemKeeper и бакеты S3.
+ * Хранилища бекапов («Диски и облака»): встроенный диск SystemKeeper, бакеты S3 и Яндекс Диск.
  * Настройки хранения (сколько копий и лимит объёма) задаются у каждого сервера и базы данных.
  */
 class BackupStorageController extends Controller
@@ -31,7 +32,7 @@ class BackupStorageController extends Controller
         return BackupStorageResource::collection(BackupStorage::query()->orderBy('id')->get());
     }
 
-    /** Добавить S3-хранилище. Подключение не проверяется — для этого `POST /storages/{id}/check`. */
+    /** Добавить S3-хранилище или Яндекс Диск. Подключение не проверяется — для этого `POST /storages/{id}/check`. */
     public function store(BackupStorageRequest $request): JsonResponse
     {
         $storage = BackupStorage::create($request->storageData());
@@ -45,7 +46,7 @@ class BackupStorageController extends Controller
         return new BackupStorageResource($storage);
     }
 
-    /** Изменить название и (у S3) параметры подключения; `secret` можно не передавать. */
+    /** Изменить название и параметры подключения; `secret` (S3) и `token` (Диск) можно не передавать. */
     public function update(BackupStorageRequest $request, BackupStorage $storage): BackupStorageResource
     {
         $storage->update($request->storageData());
@@ -159,6 +160,10 @@ class BackupStorageController extends Controller
     {
         $all = '';
         for ($x = $e; $x; $x = $x->getPrevious()) {
+            // у Яндекс Диска сообщение уже понятное
+            if ($x instanceof YandexDiskException) {
+                return Str::limit($x->getMessage(), 300);
+            }
             $all .= ' '.$x->getMessage();
         }
 

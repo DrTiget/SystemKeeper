@@ -21,8 +21,10 @@ export interface StorageSource {
 export interface BackupStorage {
   id: number
   name: string
-  type: 'local' | 's3'
+  type: 'local' | 's3' | 'yandex_disk'
   s3: { endpoint: string | null; region: string | null; bucket: string; prefix: string; path_style: boolean; key: string; has_secret: boolean } | null
+  /** Яндекс Диск: папка; сам токен наружу не отдаётся */
+  yandex_disk: { folder: string; has_token: boolean } | null
   is_default: boolean
   disk: { total: number; free: number } | null
   used: number
@@ -30,7 +32,7 @@ export interface BackupStorage {
   sources?: StorageSource[]
 }
 
-export const STORAGE_TYPE_LABELS: Record<BackupStorage['type'], string> = { local: 'Диск SystemKeeper', s3: 'S3' }
+export const STORAGE_TYPE_LABELS: Record<BackupStorage['type'], string> = { local: 'Диск SystemKeeper', s3: 'S3', yandex_disk: 'Яндекс Диск' }
 
 /** Синхронизация хранилища — GET/POST /storages/{id}/sync: копирование сюда бекапов из других хранилищ. */
 export interface StorageSyncState {

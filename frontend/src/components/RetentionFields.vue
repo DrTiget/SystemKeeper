@@ -53,7 +53,7 @@ function toggleStorage(id: number) {
   model.value = { ...model.value, storage_ids: storages.value.filter((s) => ids.includes(s.id)).map((s) => s.id) }
 }
 const storageHint = (s: BackupStorage) =>
-  s.disk ? `${STORAGE_TYPE_LABELS[s.type]} · свободно ${formatBytes(s.disk.free)}` : s.s3 ? `S3 · ${s.s3.bucket}${s.s3.prefix ? '/' + s.s3.prefix : ''}` : STORAGE_TYPE_LABELS[s.type]
+  s.disk ? `${STORAGE_TYPE_LABELS[s.type]}${s.yandex_disk ? ' ' + s.yandex_disk.folder : ''} · свободно ${formatBytes(s.disk.free)}` : s.yandex_disk ? `Яндекс Диск · ${s.yandex_disk.folder}` : s.s3 ? `S3 · ${s.s3.bucket}${s.s3.prefix ? '/' + s.s3.prefix : ''}` : STORAGE_TYPE_LABELS[s.type]
 
 const unitOptions = (Object.keys(UNITS) as Unit[]).map((u) => ({ value: u, label: u }))
 </script>
