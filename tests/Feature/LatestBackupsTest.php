@@ -19,7 +19,7 @@ class LatestBackupsTest extends TestCase
 
     private function backup(Model $source, string $status, string $finished): Backup
     {
-        $backup = new Backup(['trigger' => Backup::TRIGGER_SCHEDULE, 'status' => $status, 'finished_at' => $finished]);
+        $backup = new Backup(['trigger' => Backup::TRIGGER_SCHEDULE, 'status' => $status, 'finished_at' => $finished, 'size' => 100]);
         $backup->source()->associate($source)->save();
 
         return $backup;
@@ -47,6 +47,8 @@ class LatestBackupsTest extends TestCase
         $this->assertSame($last->id, $s['latest']['id']);
         $this->assertSame('failed', $s['latest']['status']);
         $this->assertStringStartsWith('2026-10-15T03:10:00', $s['last_success_at']);
+        $this->assertSame(200, $s['total_size']);
+        $this->assertSame(2, $s['total_count']);
         $this->assertNull(collect($data['servers'])->firstWhere('id', $empty->id)['latest']);
         $d = collect($data['databases'])->firstWhere('id', $db->id);
         $this->assertSame($server->id, $d['server_id']);

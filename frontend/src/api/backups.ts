@@ -148,6 +148,9 @@ interface LatestSource {
   schedule_enabled: boolean
   latest: LatestBackup | null
   last_success_at: string | null
+  /** Объём и число всех хранящихся удачных бекапов */
+  total_size: number
+  total_count: number
 }
 
 export interface LatestBackups {

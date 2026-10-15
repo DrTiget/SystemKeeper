@@ -47,7 +47,7 @@ class BackupController extends Controller
 
     /**
      * Сводка: последний бекап каждого сервера и базы данных (`latest` — null, если бекапов нет) и время последнего
-     * удачного (`last_success_at`). Плюс группы и проекты — чтобы собрать дерево «группа → проект → сервер → базы».
+     * удачного (`last_success_at`), объём и число всех удачных бекапов (`total_size`, `total_count`). Плюс группы и проекты — чтобы собрать дерево «группа → проект → сервер → базы».
      */
     public function latest(): JsonResponse
     {
@@ -56,6 +56,9 @@ class BackupController extends Controller
         $success = Backup::query()->where('status', Backup::SUCCESS)
             ->selectRaw('source_type, source_id, max(finished_at) as at')->groupBy('source_type', 'source_id')
             ->get()->mapWithKeys(fn ($r) => [$r->source_type.':'.$r->source_id => $r->at]);
+        $totals = Backup::query()->where('status', Backup::SUCCESS)
+            ->selectRaw('source_type, source_id, sum(size) as size, count(*) as count')->groupBy('source_type', 'source_id')
+            ->get()->keyBy(fn ($r) => $r->source_type.':'.$r->source_id);
 
         $backup = fn (string $key) => [
             'latest' => ($b = $latest->get($key)) ? [
@@ -63,6 +66,9 @@ class BackupController extends Controller
                 'started_at' => $b->started_at, 'finished_at' => $b->finished_at, 'created_at' => $b->created_at,
             ] : null,
             'last_success_at' => isset($success[$key]) ? Carbon::parse($success[$key]) : null,
+            /** Все хранящиеся удачные бекапы источника: объём и число */
+            'total_size' => (int) ($totals[$key]->size ?? 0),
+            'total_count' => (int) ($totals[$key]->count ?? 0),
         ];
 
         return response()->json(['data' => [

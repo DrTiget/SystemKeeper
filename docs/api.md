@@ -175,7 +175,7 @@ docker compose exec app php artisan user:create
 | GET | `/servers/{id}/backups` | История бекапов сервера, новые сверху (`per_page` до 100) |
 | POST | `/databases/{id}/backups` | Запустить бекап базы данных сейчас (`202` / `409`) |
 | GET | `/databases/{id}/backups` | История бекапов базы данных |
-| GET | `/backups/latest` | Сводка: `groups`, `projects`, `servers`, `databases`; у сервера и базы — `latest` (последний бекап: `id`, `status`, `trigger`, `size`, `error`, `started_at`, `finished_at`; `null` — бекапов нет), `last_success_at`, `schedule_enabled` |
+| GET | `/backups/latest` | Сводка: `groups`, `projects`, `servers`, `databases`; у сервера и базы — `latest` (последний бекап: `id`, `status`, `trigger`, `size`, `error`, `started_at`, `finished_at`; `null` — бекапов нет), `last_success_at`, `schedule_enabled`, `total_size` и `total_count` (все хранящиеся удачные бекапы) |
 | GET | `/backups/{id}` | Бекап: `status` (`queued`, `running`, `success`, `failed`), `trigger` (`manual`, `schedule`, `hook`), `user`, `started_at`, `finished_at`, `files` (`name`, `size`), `size`, `log` (`at`, `message`), `error` |
 | GET | `/backups/{id}/files/{name}` | Скачать файл бекапа |
 | DELETE | `/backups/{id}` | Удалить бекап с файлами (`409`, пока выполняется) |
