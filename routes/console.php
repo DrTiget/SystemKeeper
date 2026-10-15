@@ -9,3 +9,4 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('system:check-updates')->everyTenMinutes()->withoutOverlapping()->runInBackground();
+Schedule::command('backups:dispatch-due')->everyMinute()->withoutOverlapping();
