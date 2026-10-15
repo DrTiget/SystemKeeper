@@ -80,6 +80,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('storages/{storage}/sync', [BackupStorageController::class, 'sync']);
     Route::apiResource('storages', BackupStorageController::class);
 
+    Route::get('backups/latest', [BackupController::class, 'latest']);
     Route::get('backups/{backup}', [BackupController::class, 'show']);
     Route::delete('backups/{backup}', [BackupController::class, 'destroy']);
     Route::get('backups/{backup}/files/{file}', [BackupController::class, 'download'])->where('file', '[^/]+');

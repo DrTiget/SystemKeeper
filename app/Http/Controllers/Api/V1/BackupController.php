@@ -8,6 +8,7 @@ use App\Models\Backup;
 use App\Models\BackupCopy;
 use App\Models\DatabaseConnection;
 use App\Models\Project;
+use App\Models\ProjectGroup;
 use App\Models\Server;
 use App\Services\Backup\BackupLauncher;
 use App\Services\Backup\BackupManifest;
@@ -16,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
+use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
@@ -41,6 +43,42 @@ class BackupController extends Controller
             ->paginate($request->integer('per_page', 20));
 
         return BackupResource::collection($backups);
+    }
+
+    /**
+     * Сводка: последний бекап каждого сервера и базы данных (`latest` — null, если бекапов нет) и время последнего
+     * удачного (`last_success_at`). Плюс группы и проекты — чтобы собрать дерево «группа → проект → сервер → базы».
+     */
+    public function latest(): JsonResponse
+    {
+        $latestIds = Backup::query()->selectRaw('max(id)')->groupBy('source_type', 'source_id');
+        $latest = Backup::query()->whereIn('id', $latestIds)->get()->keyBy(fn (Backup $b) => $b->source_type.':'.$b->source_id);
+        $success = Backup::query()->where('status', Backup::SUCCESS)
+            ->selectRaw('source_type, source_id, max(finished_at) as at')->groupBy('source_type', 'source_id')
+            ->get()->mapWithKeys(fn ($r) => [$r->source_type.':'.$r->source_id => $r->at]);
+
+        $backup = fn (string $key) => [
+            'latest' => ($b = $latest->get($key)) ? [
+                'id' => $b->id, 'status' => $b->status, 'trigger' => $b->trigger, 'size' => $b->size, 'error' => $b->error,
+                'started_at' => $b->started_at, 'finished_at' => $b->finished_at, 'created_at' => $b->created_at,
+            ] : null,
+            'last_success_at' => isset($success[$key]) ? Carbon::parse($success[$key]) : null,
+        ];
+
+        return response()->json(['data' => [
+            'groups' => ProjectGroup::query()->orderBy('name')->get(['id', 'name']),
+            'projects' => Project::query()->orderBy('name')->get(['id', 'name', 'group_id']),
+            'servers' => Server::query()->with('backupSettings')->orderBy('name')->get()->map(fn (Server $s) => [
+                'id' => $s->id, 'name' => $s->name, 'host' => $s->host, 'project_id' => $s->project_id,
+                'schedule_enabled' => (bool) $s->backupSettings?->enabled,
+                ...$backup('server:'.$s->id),
+            ]),
+            'databases' => DatabaseConnection::query()->orderBy('name')->get()->map(fn (DatabaseConnection $d) => [
+                'id' => $d->id, 'name' => $d->name, 'engine' => $d->engine, 'server_id' => $d->server_id, 'project_id' => $d->project_id,
+                'schedule_enabled' => (bool) $d->backup_enabled,
+                ...$backup('database:'.$d->id),
+            ]),
+        ]]);
     }
 
     /** История бекапов сервера, новые сверху. */

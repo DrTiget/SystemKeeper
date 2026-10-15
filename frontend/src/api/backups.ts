@@ -128,3 +128,31 @@ export async function downloadBackupFile(b: Backup, name: string): Promise<void>
   a.click()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
+
+/** Сводка последних бекапов — GET /backups/latest */
+export interface LatestBackup {
+  id: number
+  status: BackupStatus
+  trigger: Backup['trigger']
+  size: number | null
+  error: string | null
+  started_at: string | null
+  finished_at: string | null
+  created_at: string
+}
+
+interface LatestSource {
+  id: number
+  name: string
+  project_id: number | null
+  schedule_enabled: boolean
+  latest: LatestBackup | null
+  last_success_at: string | null
+}
+
+export interface LatestBackups {
+  groups: { id: number; name: string }[]
+  projects: { id: number; name: string; group_id: number | null }[]
+  servers: (LatestSource & { host: string })[]
+  databases: (LatestSource & { engine: string; server_id: number | null })[]
+}

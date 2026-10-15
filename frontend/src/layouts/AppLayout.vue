@@ -33,7 +33,7 @@ const navGroups: { title: string; admin?: boolean; items: NavItem[] }[] = [
       { to: '/alerts', label: 'Алерты', icon: 'bell', badge: 'alerts' },
     ],
   },
-  { title: 'Бекапы', items: [{ to: '/storages', label: 'Диски и облака', icon: 'archive' }] },
+  { title: 'Бекапы', items: [{ to: '/backups', label: 'Последние бекапы', icon: 'clock' }, { to: '/storages', label: 'Диски и облака', icon: 'archive' }] },
   { title: 'Администрирование', admin: true, items: [{ to: '/users', label: 'Пользователи', icon: 'users', admin: true }] },
 ]
 
