@@ -6,6 +6,7 @@ use App\Jobs\RunBackup;
 use App\Models\Backup;
 use App\Models\DatabaseConnection;
 use App\Models\ServerBackupSettings;
+use App\Services\System\Updater;
 use Cron\CronExpression;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -18,8 +19,15 @@ use Throwable;
 #[Description('Поставить в очередь бекапы, у которых по расписанию подошло время (планировщик, каждую минуту)')]
 class DispatchDueBackups extends Command
 {
-    public function handle(): int
+    public function handle(Updater $updater): int
     {
+        // во время обновления сервисы перезапускаются — бекап по расписанию не начинаем
+        if ($updater->locked()) {
+            $this->line('Идёт обновление SystemKeeper — плановые бекапы пропущены');
+
+            return self::SUCCESS;
+        }
+
         $tz = config('backup.timezone');
         $now = now()->setTimezone($tz)->startOfMinute();
 

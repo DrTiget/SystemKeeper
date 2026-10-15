@@ -213,6 +213,6 @@ docker compose exec app php artisan user:create
 
 ## API: версия и обновление
 
-- `GET /system/version` — `{current, latest: {version, name, notes, url, published_at} | null, update_available, checked_at, check_error, updater: {available, status, message, from, to, updated_at}}`. `updater.available` — запущен ли контейнер `updater`; `status`: `idle`, `pending`, `waiting` (ждёт бекапы), `backup`, `pulling`, `restarting`, `done`, `failed`, `rolled_back`.
+- `GET /system/version` — `{current, latest: {version, name, notes, url, published_at} | null, update_available, checked_at, check_error, busy: {backups, syncs}, updater: {available, status, message, from, to, updated_at}}`. `updater.available` — запущен ли контейнер `updater`; `status`: `idle`, `pending`, `waiting` (ждёт бекапы), `backup`, `pulling`, `restarting`, `done`, `failed`, `rolled_back`.
 - `POST /system/check` — проверить релизы сейчас (администратор, не чаще 10 раз в минуту).
-- `POST /system/update` — обновиться до последней версии (администратор), `202`; `422`, если обновлений нет, обновлятор не запущен или обновление уже идёт.
+- `POST /system/update` — обновиться до последней версии (администратор), `202`; `422`, если обновлений нет, обновлятор не запущен, обновление уже идёт или идут бекапы/синхронизации (`busy`). Пока идёт обновление, запуск бекапа отвечает `409`, синхронизации — `422`.

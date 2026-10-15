@@ -16,6 +16,7 @@ let timer: ReturnType<typeof setTimeout> | undefined
 let startedFrom: string | null = null
 
 const active = computed(() => !!info.value && ACTIVE_STATUSES.includes(info.value.updater.status))
+const busyCount = computed(() => (info.value ? info.value.busy.backups + info.value.busy.syncs : 0))
 const showUpdate = computed(() => auth.user?.is_admin && (info.value?.update_available || active.value))
 
 const stageLabel: Record<string, string> = {
@@ -38,7 +39,7 @@ async function load() {
   } catch {
     // во время перезапуска API недоступен — просто ждём
   }
-  timer = setTimeout(load, active.value || startedFrom ? 3000 : 600_000)
+  timer = setTimeout(load, active.value || startedFrom ? 3000 : open.value ? 15_000 : 600_000)
 }
 
 async function update() {
@@ -74,7 +75,7 @@ onBeforeUnmount(() => clearTimeout(timer))
     <button
       v-if="showUpdate"
       class="flex w-full items-center gap-2 rounded-md bg-sidebar-accent px-2 py-1.5 text-left text-sidebar-accent-foreground hover:ring-1 hover:ring-primary"
-      @click="open = true"
+      @click="(open = true), load()"
     >
       <Icon :name="active ? 'loader' : 'download'" class="size-3.5 shrink-0" :class="active && 'animate-spin'" />
       <span class="truncate">{{ active ? stageLabel[info.updater.status] : `Доступна ${info.latest?.version}` }}</span>
@@ -97,11 +98,15 @@ onBeforeUnmount(() => clearTimeout(timer))
         <p v-if="!info.updater.available" class="text-xs text-muted-foreground">
           Обновлятор не запущен. На сервере выполните: <code class="rounded bg-muted px-1">systemkeeper update</code>
         </p>
+        <p v-if="busyCount && !active" class="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+          Сейчас идут бекапы ({{ info.busy.backups }}<template v-if="info.busy.syncs">, синхронизаций хранилищ — {{ info.busy.syncs }}</template>).
+          Обновление перезапускает сервисы и прервало бы их — обновить можно будет после окончания.
+        </p>
         <p v-if="error" class="text-destructive">{{ error }}</p>
 
         <div class="flex justify-end gap-2">
           <button type="button" :class="btnClass.outline" :disabled="busy || active" @click="check">Проверить снова</button>
-          <button type="button" :class="btnClass.primary" :disabled="busy || active || !info.updater.available || !info.update_available" @click="update">
+          <button type="button" :class="btnClass.primary" :disabled="busy || active || busyCount > 0 || !info.updater.available || !info.update_available" @click="update">
             {{ active ? 'Обновляется…' : 'Обновить' }}
           </button>
         </div>

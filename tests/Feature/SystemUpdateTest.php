@@ -2,12 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\RunBackup;
 use App\Models\Backup;
+use App\Models\BackupStorage;
 use App\Models\Server;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -154,5 +157,49 @@ class SystemUpdateTest extends TestCase
         // Зависший «running» от упавшего воркера обновлению не мешает
         Backup::whereKey($backup->id)->update(['updated_at' => now()->subHours(5)]);
         $this->artisan('system:idle')->assertSuccessful();
+    }
+
+    public function test_update_is_refused_while_backups_or_syncs_run(): void
+    {
+        $this->fakeRelease();
+        $this->artisan('system:check-updates');
+        touch($this->dir.'/heartbeat');
+
+        $backup = Server::factory()->create()->backups()->create(['trigger' => 'manual', 'status' => 'running']);
+        $this->getJson('/api/v1/system/version')->assertJsonPath('data.busy', ['backups' => 1, 'syncs' => 0]);
+        $this->postJson('/api/v1/system/update')->assertStatus(422)->assertJsonPath('message', 'Идут бекапы — обновить можно будет после их окончания.');
+
+        $backup->update(['status' => 'success']);
+        $storage = BackupStorage::default();
+        $storage->syncs()->create(['status' => 'running']);
+        $this->postJson('/api/v1/system/update')->assertStatus(422);
+        $this->artisan('system:idle')->assertFailed();
+
+        $storage->syncs()->update(['status' => 'success']);
+        $this->postJson('/api/v1/system/update')->assertStatus(202);
+    }
+
+    public function test_new_backups_do_not_start_during_update(): void
+    {
+        Queue::fake();
+        touch($this->dir.'/heartbeat');
+        File::put($this->dir.'/status.json', json_encode(['status' => 'restarting', 'to' => 'v1.1.0']));
+
+        $server = Server::factory()->create();
+        $server->backupSettings()->create(['enabled' => true, 'paths' => ['/var/www'], 'excludes' => [], 'schedule' => '* * * * *', 'pre_command_timeout' => 60]);
+
+        $this->postJson("/api/v1/servers/{$server->id}/backups")->assertStatus(409)->assertJsonPath('message', 'Идёт обновление SystemKeeper — запустите бекап после него.');
+        $this->artisan('backups:dispatch-due')->assertSuccessful();
+        $this->assertSame(0, $server->backups()->count());
+
+        // уже стоящий в очереди бекап откладывается, а не начинается
+        $queued = $server->backups()->create(['trigger' => 'manual', 'status' => 'queued']);
+        app()->call([new RunBackup($queued), 'handle']);
+        $this->assertSame('queued', $queued->fresh()->status);
+        Queue::assertPushed(RunBackup::class, 1);
+
+        // обновлятор не запущен (нет heartbeat) — застрявший статус ничего не блокирует
+        touch($this->dir.'/heartbeat', time() - 600);
+        $this->postJson("/api/v1/servers/{$server->id}/backups")->assertStatus(409)->assertJsonPath('message', 'Бекап уже выполняется.');
     }
 }

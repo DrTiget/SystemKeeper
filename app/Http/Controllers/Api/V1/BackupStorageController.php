@@ -11,6 +11,7 @@ use App\Models\BackupStorage;
 use App\Models\DatabaseConnection;
 use App\Models\ServerBackupSettings;
 use App\Models\StorageSync;
+use App\Services\System\Updater;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -88,6 +89,9 @@ class BackupStorageController extends Controller
     {
         $data = $request->validate(['add_to_sources' => ['sometimes', 'boolean']]);
 
+        if (app(Updater::class)->locked()) {
+            return response()->json(['message' => 'Идёт обновление SystemKeeper — запустите синхронизацию после него.', 'errors' => ['storage' => ['Идёт обновление SystemKeeper.']]], 422);
+        }
         if ($storage->syncs()->whereIn('status', [StorageSync::QUEUED, StorageSync::RUNNING])->exists()) {
             return response()->json(['message' => 'Синхронизация уже идёт.', 'errors' => ['storage' => ['Синхронизация уже идёт.']]], 422);
         }

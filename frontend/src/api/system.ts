@@ -9,6 +9,8 @@ export interface SystemVersion {
   update_available: boolean
   checked_at: string | null
   check_error: string | null
+  /** Идущие бекапы и синхронизации — пока они есть, обновиться нельзя */
+  busy: { backups: number; syncs: number }
   updater: {
     available: boolean
     status: UpdaterStatus

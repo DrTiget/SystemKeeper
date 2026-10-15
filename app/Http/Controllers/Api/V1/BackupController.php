@@ -11,6 +11,7 @@ use App\Models\DatabaseConnection;
 use App\Models\Project;
 use App\Models\Server;
 use App\Services\Backup\BackupManifest;
+use App\Services\System\Updater;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -137,6 +138,7 @@ class BackupController extends Controller
     {
         $active = Backup::query()->whereMorphedTo('source', $source)->whereIn('status', [Backup::QUEUED, Backup::RUNNING])->exists();
         abort_if($active, 409, 'Бекап уже выполняется.');
+        abort_if(app(Updater::class)->locked(), 409, 'Идёт обновление SystemKeeper — запустите бекап после него.');
 
         $backup = new Backup(['trigger' => Backup::TRIGGER_MANUAL, 'status' => Backup::QUEUED, 'user_id' => $request->user()->id]);
         $backup->source()->associate($source)->save();

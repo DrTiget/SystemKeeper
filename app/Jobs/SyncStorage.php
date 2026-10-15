@@ -9,6 +9,7 @@ use App\Models\DatabaseConnection;
 use App\Models\Server;
 use App\Models\StorageSync;
 use App\Services\Backup\BackupManifest;
+use App\Services\System\Updater;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -34,8 +35,15 @@ class SyncStorage implements ShouldQueue
         $this->onQueue('backups');
     }
 
-    public function handle(BackupManifest $manifest): void
+    public function handle(BackupManifest $manifest, Updater $updater): void
     {
+        // идёт обновление — начнём после него
+        if ($updater->locked()) {
+            self::dispatch($this->sync)->delay(60);
+
+            return;
+        }
+
         $sync = $this->sync;
         $target = $sync->storage;
         $backups = $target->missingBackups()->with('copies.storage', 'source')->orderBy('backups.id')->get();

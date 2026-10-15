@@ -14,6 +14,7 @@ use App\Services\Backup\BackupRetention;
 use App\Services\Backup\DatabaseBackupRunner;
 use App\Services\Backup\ServerBackupRunner;
 use App\Services\Database\DatabaseException;
+use App\Services\System\Updater;
 use App\Support\Bytes;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -42,8 +43,15 @@ class RunBackup implements ShouldQueue
         $this->onQueue('backups');
     }
 
-    public function handle(ServerBackupRunner $servers, DatabaseBackupRunner $databases, BackupRetention $retention, BackupManifest $manifest): void
+    public function handle(ServerBackupRunner $servers, DatabaseBackupRunner $databases, BackupRetention $retention, BackupManifest $manifest, Updater $updater): void
     {
+        // идёт обновление — сервисы вот-вот перезапустятся; бекап остаётся в очереди и начнётся после
+        if ($updater->locked()) {
+            self::dispatch($this->backup)->delay(60);
+
+            return;
+        }
+
         $backup = $this->backup;
         $source = $backup->source;
         if ($source === null) {

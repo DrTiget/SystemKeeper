@@ -45,6 +45,7 @@ class SystemController extends Controller
             ! $this->checker->updateAvailable() => 'Обновлений нет.',
             ! $this->updater->available() => 'Обновлятор не запущен: обновите командой systemkeeper update на сервере.',
             $this->updater->inProgress() => 'Обновление уже идёт.',
+            array_sum(Updater::busy()) > 0 => 'Идут бекапы — обновить можно будет после их окончания.',
             default => null,
         };
 
@@ -67,6 +68,8 @@ class SystemController extends Controller
             'update_available' => $this->checker->updateAvailable(),
             'checked_at' => $state['checked_at'],
             'check_error' => $state['error'],
+            /** Идущие бекапы и синхронизации: пока они есть, обновление недоступно */
+            'busy' => Updater::busy(),
             'updater' => [
                 'available' => $this->updater->available(),
                 ...$this->updater->status(),

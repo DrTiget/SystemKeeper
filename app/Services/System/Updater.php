@@ -2,6 +2,8 @@
 
 namespace App\Services\System;
 
+use App\Models\Backup;
+use App\Models\StorageSync;
 use Illuminate\Support\Facades\File;
 
 /**
@@ -49,6 +51,26 @@ class Updater
     public function inProgress(): bool
     {
         return in_array($this->status()['status'], self::ACTIVE, true);
+    }
+
+    /** Идёт обновление: новые бекапы и синхронизации не запускаются, пока оно не закончится. */
+    public function locked(): bool
+    {
+        return $this->available() && $this->inProgress();
+    }
+
+    /**
+     * Что сейчас выполняется и помешает обновлению: идущие бекапы и синхронизации хранилищ.
+     *
+     * @return array{backups: int, syncs: int}
+     */
+    public static function busy(): array
+    {
+        return [
+            // «running» старше 4 часов — остаток упавшего воркера, он не мешает
+            'backups' => Backup::query()->where('status', Backup::RUNNING)->where('updated_at', '>', now()->subHours(4)->subMinutes(15))->count(),
+            'syncs' => StorageSync::query()->where('status', StorageSync::RUNNING)->where('updated_at', '>', now()->subHours(4)->subMinutes(15))->count(),
+        ];
     }
 
     public function requested(): ?string
