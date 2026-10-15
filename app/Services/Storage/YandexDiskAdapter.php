@@ -35,6 +35,12 @@ class YandexDiskAdapter implements FilesystemAdapter
         return $this->root;
     }
 
+    /** Полный путь на Диске для пути внутри хранилища. */
+    public function fullPath(string $path): string
+    {
+        return $this->full($path);
+    }
+
     private function full(string $path): string
     {
         $path = trim($path, '/');

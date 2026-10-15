@@ -15,4 +15,11 @@ return [
 
     // Updater считается запущенным, если обновлял heartbeat не позже, секунд
     'updater_heartbeat' => 60,
+
+    // Адрес SystemKeeper, доступный из интернета (для временных ссылок, по которым облака сами скачивают бекапы);
+    // по умолчанию — APP_URL. localhost и внутренние адреса не используются.
+    'public_url' => env('SK_PUBLIC_URL'),
+
+    // Сколько живёт временная ссылка на файл бекапа, минут
+    'transfer_link_ttl' => (int) env('SK_TRANSFER_LINK_TTL', 180),
 ];

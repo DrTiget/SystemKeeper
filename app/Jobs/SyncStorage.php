@@ -9,7 +9,7 @@ use App\Models\DatabaseConnection;
 use App\Models\Server;
 use App\Models\StorageSync;
 use App\Services\Backup\BackupManifest;
-use App\Services\Backup\ProgressStream;
+use App\Services\Backup\StorageTransfer;
 use App\Services\System\Updater;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -117,17 +117,11 @@ class SyncStorage implements ShouldQueue
         $copied = 0;
         foreach ($backup->files ?? [] as $file) {
             $path = $backup->path.'/'.$file['name'];
-            $stream = $fs->readStream($path) ?: throw new RuntimeException("Нет файла {$file['name']} в «{$from->name}»");
             $before = $copied;
-            ProgressStream::watch($stream, function (int $bytes) use (&$copied, $before, $onProgress) {
+            app(StorageTransfer::class)->copy($from, $fs, $target, $to, $path, isset($file['size']) ? (int) $file['size'] : null, function (int $bytes) use (&$copied, $before, $onProgress) {
                 $copied = $before + $bytes;
                 $onProgress($copied);
             });
-            try {
-                $to->writeStream($path, $stream);
-            } finally {
-                is_resource($stream) && fclose($stream);
-            }
             if (isset($file['size']) && $to->size($path) !== (int) $file['size']) {
                 throw new RuntimeException("Размер {$file['name']} после копирования не совпал");
             }

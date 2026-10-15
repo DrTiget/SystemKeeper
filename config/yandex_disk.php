@@ -12,4 +12,13 @@ return [
     // Таймаут обычных запросов и передачи файла, сек.
     'timeout' => (int) env('YANDEX_DISK_TIMEOUT', 30),
     'transfer_timeout' => (int) env('YANDEX_DISK_TRANSFER_TIMEOUT', 14400),
+
+    // Загрузка «по ссылке»: Диск сам скачивает файл с SystemKeeper (или из S3). false — только прямая загрузка
+    'fetch_by_url' => (bool) env('YANDEX_DISK_FETCH_BY_URL', true),
+
+    // Файлы меньше, байт, загружаются напрямую — у скачивания по ссылке постоянная задержка около 15 секунд
+    'fetch_min_size' => (int) env('YANDEX_DISK_FETCH_MIN_SIZE', 8 * 1024 * 1024),
+
+    // Как часто спрашивать о ходе скачивания по ссылке, мс
+    'poll_ms' => (int) env('YANDEX_DISK_POLL_MS', 3000),
 ];

@@ -6,6 +6,7 @@ use App\Models\Backup;
 use App\Models\BackupStorage;
 use App\Models\Server;
 use App\Models\User;
+use App\Services\Backup\TransferLinks;
 use App\Services\Ssh\SshConnectorInterface;
 use App\Services\Storage\YandexDiskClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -119,5 +120,88 @@ class YandexDiskStorageTest extends TestCase
         $this->assertSame(100_000, strlen($this->disk->files['disk:/SystemKeeper/a/b/c.bin']));
         $this->assertTrue(isset($this->disk->dirs['disk:/SystemKeeper/a/b']));
         $this->assertSame(str_repeat('x', 100_000), stream_get_contents($client->download('disk:/SystemKeeper/a/b/c.bin')));
+    }
+
+    private function serverBackingUpTo(int $storageId): Server
+    {
+        $server = Server::factory()->create();
+        $server->backupSettings()->create(['enabled' => false, 'paths' => ['/var/www'], 'excludes' => [], 'schedule' => '0 3 * * *', 'pre_command_timeout' => 60, 'storage_ids' => [$storageId]]);
+
+        return $server;
+    }
+
+    public function test_disk_fetches_backup_by_signed_link_when_systemkeeper_is_public(): void
+    {
+        config(['systemkeeper.public_url' => 'https://public.test', 'yandex_disk.poll_ms' => 0, 'yandex_disk.fetch_min_size' => 0]);
+        $id = $this->create();
+        $server = $this->serverBackingUpTo($id);
+
+        $backup = Backup::find($this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id'));
+
+        $this->assertSame(Backup::SUCCESS, $backup->status, (string) $backup->error);
+        $file = "disk:/SystemKeeper/{$backup->path}/files.tar.gz";
+        $this->assertSame('TARDATA', $this->disk->files[$file]);
+        $this->assertSame([$file], $this->disk->fetched);
+        $this->assertNotContains($file, $this->disk->uploaded);
+    }
+
+    public function test_falls_back_to_direct_upload_when_disk_cannot_fetch(): void
+    {
+        // адрес «публичный», но ссылку Диск открыть не смог
+        config(['systemkeeper.public_url' => 'https://unreachable.test', 'yandex_disk.poll_ms' => 0, 'yandex_disk.fetch_min_size' => 0]);
+        $id = $this->create();
+        $server = $this->serverBackingUpTo($id);
+
+        $backup = Backup::find($this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id'));
+
+        $this->assertSame(Backup::SUCCESS, $backup->status, (string) $backup->error);
+        $file = "disk:/SystemKeeper/{$backup->path}/files.tar.gz";
+        $this->assertContains($file, $this->disk->uploaded);
+        $this->assertTrue(collect($backup->log)->contains(fn ($l) => str_contains($l['message'], 'не скачал files.tar.gz по ссылке')));
+    }
+
+    public function test_local_address_uses_direct_upload_without_trying_link(): void
+    {
+        config(['systemkeeper.public_url' => null, 'app.url' => 'http://localhost:8080']);
+        $this->assertNull(app(TransferLinks::class)->base());
+        config(['app.url' => 'http://192.168.1.10']);
+        $this->assertNull(app(TransferLinks::class)->base());
+        config(['app.url' => 'https://sk.example.com/']);
+        $this->assertSame('https://sk.example.com', app(TransferLinks::class)->base());
+    }
+
+    public function test_transfer_link_requires_valid_signature_and_backup_path(): void
+    {
+        config(['systemkeeper.public_url' => 'https://public.test']);
+        $local = BackupStorage::default();
+        Storage::disk('backups')->put('servers/1/2026-10-15_100000-1/files.tar.gz', 'DATA');
+        Storage::disk('backups')->put('secret.txt', 'NO');
+        $links = app(TransferLinks::class);
+
+        $url = $links->for($local, 'servers/1/2026-10-15_100000-1/files.tar.gz');
+        $this->assertStringStartsWith('https://public.test/api/v1/transfers/', $url);
+        $relative = substr($url, strlen('https://public.test'));
+
+        $this->app['auth']->forgetGuards();
+        $this->get($relative)->assertOk()->assertHeader('Content-Length', '4');
+        $this->get(str_replace('files.tar.gz', 'other.tar.gz', $relative))->assertForbidden();
+        $this->get(strtok($relative, '?'))->assertForbidden();
+
+        $other = substr($links->for($local, 'secret.txt'), strlen('https://public.test'));
+        $this->get($other)->assertNotFound();
+
+        $this->travel(4)->hours();
+        $this->get($relative)->assertForbidden();
+    }
+
+    public function test_small_files_are_uploaded_directly_even_when_public(): void
+    {
+        config(['systemkeeper.public_url' => 'https://public.test', 'yandex_disk.poll_ms' => 0]);
+        $server = $this->serverBackingUpTo($this->create());
+
+        $backup = Backup::find($this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id'));
+
+        $this->assertSame([], $this->disk->fetched);
+        $this->assertContains("disk:/SystemKeeper/{$backup->path}/files.tar.gz", $this->disk->uploaded);
     }
 }

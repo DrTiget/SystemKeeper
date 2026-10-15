@@ -122,6 +122,42 @@ class YandexDiskClient
         }
     }
 
+    /**
+     * Яндекс Диск сам скачивает файл по ссылке (`POST /resources/upload?url=`), мы ждём окончания операции.
+     * Перезаписи у этого способа нет — прежний файл удаляется заранее. После скачивания сверяется размер.
+     */
+    public function uploadFromUrl(string $path, string $url, ?int $expectedSize = null): void
+    {
+        $this->mkdir(dirname($path));
+        if ($this->info($path, 'type') !== null) {
+            $this->delete($path);
+        }
+
+        $operation = $this->send(fn () => $this->api()->send('POST', '/resources/upload?'.http_build_query(['path' => $path, 'url' => $url])))->json('href')
+            ?: throw new YandexDiskException('Яндекс Диск не вернул операцию скачивания.');
+
+        $deadline = time() + (int) config('yandex_disk.transfer_timeout');
+        do {
+            $status = $this->send(fn () => $this->api()->get($operation))->json('status');
+            if ($status === 'success') {
+                break;
+            }
+            if ($status === 'failed') {
+                throw new YandexDiskException('Яндекс Диск не смог скачать файл по ссылке — адрес SystemKeeper недоступен из интернета?');
+            }
+            usleep((int) config('yandex_disk.poll_ms') * 1000);
+        } while (time() < $deadline);
+
+        if ($status !== 'success') {
+            throw new YandexDiskException('Яндекс Диск не успел скачать файл по ссылке.');
+        }
+
+        $actual = $this->info($path, 'size')['size'] ?? null;
+        if ($expectedSize !== null && (int) $actual !== $expectedSize) {
+            throw new YandexDiskException("Размер на Диске ({$actual}) не совпал с ожидаемым ({$expectedSize}).");
+        }
+    }
+
     /** @return resource поток для чтения файла */
     public function download(string $path)
     {

@@ -12,8 +12,12 @@ use App\Http\Controllers\Api\V1\ServerBackupSettingsController;
 use App\Http\Controllers\Api\V1\ServerController;
 use App\Http\Controllers\Api\V1\ServerFilesController;
 use App\Http\Controllers\Api\V1\SystemController;
+use App\Http\Controllers\Api\V1\TransferController;
 use App\Http\Controllers\Api\V1\UserController;
 use Illuminate\Support\Facades\Route;
+
+// Временная подписанная ссылка на файл бекапа — для облаков, которые сами скачивают его (Яндекс Диск)
+Route::get('transfers/{storage}/{path}', [TransferController::class, 'show'])->where('path', '.*')->middleware(['signed:relative', 'throttle:60,1'])->name('transfers.show');
 
 Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);

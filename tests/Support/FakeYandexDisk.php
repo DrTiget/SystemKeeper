@@ -3,6 +3,7 @@
 namespace Tests\Support;
 
 use GuzzleHttp\Promise\PromiseInterface;
+use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -20,6 +21,15 @@ class FakeYandexDisk
     public ?string $token = null;
 
     public int $total = 10 * 1024 ** 3;
+
+    /** @var list<string> пути, загруженные «по ссылке» (Диск скачал сам) */
+    public array $fetched = [];
+
+    /** @var list<string> пути, загруженные напрямую (PUT по ссылке загрузчика) */
+    public array $uploaded = [];
+
+    /** @var array<string, string> операции скачивания по ссылке: id → статус */
+    private array $operations = [];
 
     /** Ответ API на любой запрос (например, 401 — отозванный токен) */
     public ?array $failWith = null;
@@ -43,6 +53,7 @@ class FakeYandexDisk
 
         if ($url['host'] === 'uploader.test') {
             $this->files[$q['path']] = $r->body();
+            $this->uploaded[] = $q['path'];
 
             return Http::response('', 201);
         }
@@ -60,6 +71,12 @@ class FakeYandexDisk
         }
         $path = $q['path'] ?? null;
         $resource = substr($url['path'], strlen('/v1/disk'));
+        if (str_starts_with($resource, '/operations/')) {
+            return $this->json(['status' => $this->operations[substr($resource, 12)] ?? 'failed']);
+        }
+        if ($resource === '/resources/upload' && $r->method() === 'POST') {
+            return $this->fetch($q['path'], $q['url']);
+        }
 
         return match (true) {
             $resource === '/' || $resource === '' => $this->json(['total_space' => $this->total, 'used_space' => array_sum(array_map('strlen', $this->files)), 'user' => ['login' => 'tester']]),
@@ -70,6 +87,30 @@ class FakeYandexDisk
             $resource === '/resources' => $this->info($path),
             default => $this->json(['error' => 'NotImplemented'], 500),
         };
+    }
+
+    /** Диск «скачивает» файл по ссылке: ссылки на SystemKeeper (хост public.test) открываются через само приложение. */
+    private function fetch(string $path, string $url): PromiseInterface
+    {
+        if (! isset($this->dirs[dirname($path)])) {
+            return $this->json(['error' => 'DiskPathDoesntExistsError'], 409);
+        }
+        $id = (string) (count($this->operations) + 1);
+        $this->operations[$id] = 'failed';
+        if (parse_url($url, PHP_URL_HOST) === 'public.test') {
+            $u = parse_url($url);
+            $response = app(Kernel::class)->handle(\Illuminate\Http\Request::create($u['path'].'?'.($u['query'] ?? '')));
+            ob_start();
+            $response->sendContent();
+            $body = ob_get_clean();
+            if ($response->getStatusCode() === 200) {
+                $this->files[$path] = $body;
+                $this->fetched[] = $path;
+                $this->operations[$id] = 'success';
+            }
+        }
+
+        return $this->json(['href' => "https://cloud-api.test/v1/disk/operations/{$id}"], 202);
     }
 
     private function mkdir(string $path): PromiseInterface

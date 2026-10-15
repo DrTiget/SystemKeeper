@@ -13,6 +13,7 @@ use App\Services\Backup\BackupManifest;
 use App\Services\Backup\BackupRetention;
 use App\Services\Backup\DatabaseBackupRunner;
 use App\Services\Backup\ServerBackupRunner;
+use App\Services\Backup\StorageTransfer;
 use App\Services\Database\DatabaseException;
 use App\Services\System\Updater;
 use App\Support\Bytes;
@@ -133,10 +134,10 @@ class RunBackup implements ShouldQueue
             $backup->appendLog("Загружаем в «{$storage->name}»");
             try {
                 $fs = $storage->filesystem();
+                // локальная копия — источник: на Яндекс Диск файл скачивается по временной ссылке с SystemKeeper
+                $staging = BackupStorage::query()->where('type', BackupStorage::LOCAL)->firstOrFail();
                 foreach ($backup->files ?? [] as $file) {
-                    $stream = $local->readStream($backup->path.'/'.$file['name']);
-                    $fs->writeStream($backup->path.'/'.$file['name'], $stream);
-                    is_resource($stream) && fclose($stream);
+                    app(StorageTransfer::class)->copy($staging, $local, $storage, $fs, $backup->path.'/'.$file['name'], $file['size'] ?? null, log: $backup->appendLog(...));
                 }
                 $manifest->writeBackupInfo($fs, $backup);
                 $backup->copies()->create(['storage_id' => $storage->id, 'status' => BackupCopy::SUCCESS]);
