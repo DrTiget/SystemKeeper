@@ -31,6 +31,9 @@ class BackupUserProvisioner
      */
     public function provision(DatabaseConnection $c, string $username, array $admin): array
     {
+        if ($c->engine === DatabaseConnection::CLICKHOUSE) {
+            throw new DatabaseException('Автонастройка пользователя для ClickHouse пока не поддерживается — создайте пользователя с правом SELECT и SHOW вручную.');
+        }
         $password = Str::password(32, symbols: false);
         $log = [];
 

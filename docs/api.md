@@ -130,7 +130,7 @@ docker compose exec app php artisan user:create
 
 ## API: базы данных
 
-Подключение к СУБД (MySQL/MariaDB или PostgreSQL) и настройки её бекапа — одна сущность `databases`. Доступно всем пользователям.
+Подключение к СУБД (MySQL/MariaDB, PostgreSQL или ClickHouse) и настройки её бекапа — одна сущность `databases`. Доступно всем пользователям.
 
 | Метод и путь | Тело | Ответ |
 |---|---|---|
@@ -146,12 +146,13 @@ docker compose exec app php artisan user:create
 
 Ошибки `schemas`/`tables`: `422` — ошибка СУБД (доступ, клиент не найден), `502` — не удалось подключиться по SSH.
 
-**Подключение:** `name`, `description?`, `engine` (`mysql` | `postgres`), `via` (`ssh` — клиент `mysql`/`psql` запускается на сервере `server_id`, при `docker_container` — внутри контейнера через `docker exec`; `direct` — из SystemKeeper), `host`, `port` (по умолчанию 3306/5432), `username`, `password?` (зашифрован, наружу только `has_password`; при изменении можно не передавать), `maintenance_database?` (PostgreSQL, по умолчанию `postgres`). Пароль передаётся клиенту через stdin и переменную окружения (`MYSQL_PWD`/`PGPASSWORD`) — в аргументы процессов на сервере не попадает. Сервер, через который подключены базы, удалить нельзя (`409`).
+**Подключение:** `name`, `description?`, `engine` (`mysql` | `postgres` | `clickhouse`), `via` (`ssh` — клиент `mysql`/`psql`/`clickhouse-client` запускается на сервере `server_id`, при `docker_container` — внутри контейнера через `docker exec`; `direct` — из SystemKeeper), `host`, `port` (по умолчанию 3306/5432/9000 — у ClickHouse нативный порт, не HTTP), `username`, `password?` (зашифрован, наружу только `has_password`; при изменении можно не передавать), `maintenance_database?` (PostgreSQL, по умолчанию `postgres`). Пароль передаётся клиенту через stdin и переменную окружения (`MYSQL_PWD`/`PGPASSWORD`/`CLICKHOUSE_PASSWORD`) — в аргументы процессов на сервере не попадает. Сервер, через который подключены базы, удалить нельзя (`409`).
 
 **Бекап** (в ответе — объект `backup`): `backup_enabled`, `schedule` (cron, как у серверов), `databases` (пустой — все, кроме служебных), `exclude_tables` и `schema_only_tables` — таблицы «база.таблица» (PostgreSQL — «база.схема.таблица»), которые пропускаются или дампятся без данных, `options`:
 
 - MySQL: `lock_mode` — `single_transaction` (по умолчанию: снимок без блокировки, для InnoDB), `lock_tables` (блокировка таблиц базы на чтение на время её дампа, для MyISAM), `none` (без блокировок, возможна неконсистентность); `routines`, `events`, `triggers` (по умолчанию `true`), `compress`.
 - PostgreSQL: `format` — `custom` (для `pg_restore`, по умолчанию) или `plain` (SQL), `no_owner` (без владельцев и прав), `compress`. pg_dump всегда делает консистентный снимок без блокировки записи.
+- ClickHouse: `compress`. По каждой базе — `<база>.schema.sql` (CREATE DATABASE и таблицы), `<база>.<таблица>.native.gz` (данные в формате Native; только у таблиц, которые хранят данные — MergeTree, Log, Memory…) и `<база>.views.sql` (представления, материализованные представления, словари — создаются после загрузки данных, иначе MV посчитают их повторно). Транзакций нет: таблицы выгружаются по очереди. Данные MV без `TO` не сохраняются. Автонастройки пользователя нет — нужен пользователь с `SELECT` и `SHOW`. Для `via=direct` нужен clickhouse-client в контейнере SystemKeeper (в образ не входит), поэтому подключайтесь через сервер.
 
 Смена `engine` сбрасывает `options` к значениям по умолчанию.
 

@@ -171,10 +171,15 @@ class BackupManifest
                 }
                 $md .= "- Восстановление: `tar -xzf files.tar.gz -C /` (пути в архиве — от корня, без ведущего `/`; можно распаковать в любой каталог)\n";
             } else {
-                $md .= '- СУБД: '.(($s['engine'] ?? '') === 'postgres' ? 'PostgreSQL' : 'MySQL / MariaDB').', `'.($s['address'] ?? '—')."`\n";
-                $md .= ($s['engine'] ?? '') === 'postgres'
-                    ? "- Восстановление: `<база>.dump` — `pg_restore -d <база> <база>.dump`; `<база>.sql.gz` — `gunzip -c <база>.sql.gz | psql <база>`\n"
-                    : "- Восстановление: `gunzip -c <база>.sql.gz | mysql` (дамп сам создаёт базу); без `.gz` — `mysql < <база>.sql`\n";
+                $engine = $s['engine'] ?? '';
+                $md .= '- СУБД: '.match ($engine) {
+                    'postgres' => 'PostgreSQL', 'clickhouse' => 'ClickHouse', default => 'MySQL / MariaDB'
+                }.', `'.($s['address'] ?? '—')."`\n";
+                $md .= match ($engine) {
+                    'postgres' => "- Восстановление: `<база>.dump` — `pg_restore -d <база> <база>.dump`; `<база>.sql.gz` — `gunzip -c <база>.sql.gz | psql <база>`\n",
+                    'clickhouse' => "- Восстановление: `clickhouse-client --multiquery < <база>.schema.sql`, затем данные каждой таблицы `gunzip -c <база>.<таблица>.native.gz | clickhouse-client --query 'INSERT INTO <база>.<таблица> FORMAT Native'`, в конце `clickhouse-client --multiquery < <база>.views.sql`\n",
+                    default => "- Восстановление: `gunzip -c <база>.sql.gz | mysql` (дамп сам создаёт базу); без `.gz` — `mysql < <база>.sql`\n",
+                };
             }
             $md .= "\n| Бекап | Дата | Размер | Файлы |\n|---|---|---|---|\n";
             foreach ($s['backups'] ?? [] as $b) {
@@ -230,6 +235,10 @@ class BackupManifest
         foreach ($backup->files ?? [] as $f) {
             $name = $f['name'];
             $hints[] = match (true) {
+                str_ends_with($name, '.schema.sql') => "{$name}: clickhouse-client --multiquery < {$name} — сначала схема, затем данные таблиц, затем .views.sql",
+                str_ends_with($name, '.views.sql') => "{$name}: clickhouse-client --multiquery < {$name} — после загрузки данных",
+                str_ends_with($name, '.native.gz') => "{$name}: gunzip -c {$name} | clickhouse-client --query 'INSERT INTO ".self::clickhouseTable($name)." FORMAT Native'",
+                str_ends_with($name, '.native') => "{$name}: clickhouse-client --query 'INSERT INTO ".self::clickhouseTable($name)." FORMAT Native' < {$name}",
                 $name === 'files.tar.gz' => "{$name}: tar -xzf {$name} -C / (или -C <каталог>, чтобы распаковать в сторону)",
                 str_ends_with($name, '.dump') => "{$name}: pg_restore -d <база> {$name}",
                 str_ends_with($name, '.sql.gz') => $backup->source instanceof DatabaseConnection && $backup->source->engine === DatabaseConnection::POSTGRES
@@ -240,6 +249,14 @@ class BackupManifest
         }
 
         return $hints;
+    }
+
+    /** «база.таблица» из имени файла данных ClickHouse (`<база>.<таблица>.native[.gz]`). */
+    private static function clickhouseTable(string $file): string
+    {
+        $parts = explode('.', preg_replace('/\.native(\.gz)?$/', '', $file), 2);
+
+        return count($parts) === 2 ? "{$parts[0]}.{$parts[1]}" : '<база>.<таблица>';
     }
 
     private function tz(): string

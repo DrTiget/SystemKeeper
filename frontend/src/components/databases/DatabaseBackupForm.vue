@@ -17,6 +17,7 @@ const emit = defineEmits<{ saved: [connection: DatabaseConnection] }>()
 
 const c = props.connection
 const isMysql = c.engine === 'mysql'
+const isClickhouse = c.engine === 'clickhouse'
 
 type TableMode = 'data' | 'schema' | 'skip'
 
@@ -152,7 +153,9 @@ const formatOptions = [
 
 const optionsSummary = computed(() => {
   const o = form.options
-  const parts = isMysql
+  const parts = isClickhouse
+    ? ['таблицы в формате Native']
+    : isMysql
     ? [
         lockModes.find((m) => m.value === o.lock_mode)?.title ?? '',
         [o.routines && 'процедуры', o.triggers && 'триггеры', o.events && 'события'].filter(Boolean).join(', '),
@@ -308,12 +311,17 @@ const check = 'flex items-center gap-2 text-sm'
 
     <SettingsSection
       title="Параметры дампа"
-      :description="isMysql ? 'Блокировки во время дампа и что ещё включить, кроме таблиц.' : 'Формат файла и сжатие.'"
+      :description="isMysql ? 'Блокировки во время дампа и что ещё включить, кроме таблиц.' : isClickhouse ? 'Как выгружаются данные.' : 'Формат файла и сжатие.'"
       collapsible
       :summary="optionsSummary"
       :force-open="optionErrors"
     >
-      <template v-if="isMysql">
+      <p v-if="isClickhouse" class="text-sm text-muted-foreground">
+        По каждой базе — схема (<code>.schema.sql</code>), данные каждой таблицы в родном формате ClickHouse (<code>.native.gz</code>) и представления со словарями (<code>.views.sql</code>).
+        Транзакций в ClickHouse нет: таблицы выгружаются по очереди, данные, вставленные во время бекапа, могут попасть в одни таблицы и не попасть в другие.
+        Данные материализованных представлений без <code>TO</code> не сохраняются — используйте <code>TO</code>-таблицы.
+      </p>
+      <template v-else-if="isMysql">
         <div class="grid gap-2">
           <label v-for="m in lockModes" :key="m.value" :class="optionCard">
             <input v-model="form.options.lock_mode" type="radio" :value="m.value" class="mt-0.5 size-4 accent-primary" />

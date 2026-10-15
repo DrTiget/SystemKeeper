@@ -61,7 +61,7 @@ export interface BackupMeta {
     | {
         type: 'database'
         name: string
-        engine: 'mysql' | 'postgres'
+        engine: 'mysql' | 'postgres' | 'clickhouse'
         version: string | null
         address: string
         via: 'ssh' | 'direct'

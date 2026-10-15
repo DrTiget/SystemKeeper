@@ -1,6 +1,6 @@
 import type { ProjectRef } from './projects'
 import type { Retention } from './storages'
-export type Engine = 'mysql' | 'postgres'
+export type Engine = 'mysql' | 'postgres' | 'clickhouse'
 export type Via = 'ssh' | 'direct'
 
 export interface MysqlOptions {
@@ -57,4 +57,4 @@ export interface DbTable {
   size: number | null
 }
 
-export const ENGINE_LABELS: Record<Engine, string> = { mysql: 'MySQL / MariaDB', postgres: 'PostgreSQL' }
+export const ENGINE_LABELS: Record<Engine, string> = { mysql: 'MySQL / MariaDB', postgres: 'PostgreSQL', clickhouse: 'ClickHouse' }

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, ApiError } from '@/api/client'
 import { BACKUP_STATUS, type BackupDetail, backupDuration, backupTrigger, downloadBackupFile, isActive } from '@/api/backups'
+import { ENGINE_LABELS } from '@/api/databases'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
 import { useProjectsStore } from '@/stores/projects'
@@ -89,6 +90,7 @@ const LOCK_MODES: Record<string, string> = { single_transaction: 'снимок �
 const dbOptions = computed(() => {
   const o = dbSource.value?.options
   if (!o) return []
+  if (dbSource.value!.engine === 'clickhouse') return ['Native', o.compress && 'gzip'].filter(Boolean)
   return dbSource.value!.engine === 'mysql'
     ? [LOCK_MODES[String(o.lock_mode)] ?? String(o.lock_mode), o.routines && 'процедуры', o.events && 'события', o.triggers && 'триггеры', o.compress && 'gzip'].filter(Boolean)
     : [o.format === 'custom' ? 'формат custom' : 'SQL', o.no_owner && 'без владельцев', o.compress && 'сжатие'].filter(Boolean)
@@ -319,7 +321,7 @@ const dt = 'text-xs text-muted-foreground'
             <template v-if="dbSource">
               <div class="grid gap-0.5 border-t pt-3">
                 <dt :class="dt">СУБД</dt>
-                <dd>{{ dbSource.version ?? (dbSource.engine === 'mysql' ? 'MySQL / MariaDB' : 'PostgreSQL') }}</dd>
+                <dd>{{ dbSource.version ?? ENGINE_LABELS[dbSource.engine] }}</dd>
               </div>
               <div class="grid gap-0.5">
                 <dt :class="dt">Подключение</dt>

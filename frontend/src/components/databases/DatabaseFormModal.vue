@@ -12,7 +12,9 @@ const props = defineProps<{ connection: DatabaseConnection | null; serverId?: nu
 const emit = defineEmits<{ close: []; saved: [connection: DatabaseConnection, provision: boolean] }>()
 
 const editing = props.connection
-const DEFAULT_PORTS: Record<Engine, number> = { mysql: 3306, postgres: 5432 }
+const DEFAULT_PORTS: Record<Engine, number> = { mysql: 3306, postgres: 5432, clickhouse: 9000 }
+const DEFAULT_USERS: Record<Engine, string> = { mysql: 'root', postgres: 'postgres', clickhouse: 'default' }
+const CLIENTS: Record<Engine, string> = { mysql: 'mysql', postgres: 'psql', clickhouse: 'clickhouse-client' }
 
 const form = reactive({
   name: editing?.name ?? '',
@@ -31,7 +33,7 @@ const form = reactive({
   // Новое подключение через сервер: пользователя для бекапов SystemKeeper может создать сам
   auto_user: !editing,
 })
-const autoUser = computed(() => form.auto_user && form.via === 'ssh' && !editing)
+const autoUser = computed(() => form.auto_user && form.via === 'ssh' && !editing && form.engine !== 'clickhouse')
 const errors = ref<Record<string, string[]>>({})
 const formError = ref('')
 const saving = ref(false)
@@ -41,8 +43,9 @@ watch(
   () => form.engine,
   (engine, prev) => {
     if (form.port === DEFAULT_PORTS[prev]) form.port = DEFAULT_PORTS[engine]
-    if (engine === 'postgres' && form.username === 'root') form.username = 'postgres'
-    if (engine === 'mysql' && form.username === 'postgres') form.username = 'root'
+    if (form.username === DEFAULT_USERS[prev]) form.username = DEFAULT_USERS[engine]
+    // автонастройки пользователя для ClickHouse нет — логин и пароль вводятся вручную
+    if (engine === 'clickhouse') form.auto_user = false
   },
 )
 
@@ -122,6 +125,7 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
         <div class="flex gap-2">
           <label :class="segment"><input v-model="form.engine" type="radio" value="mysql" class="sr-only" />MySQL / MariaDB</label>
           <label :class="segment"><input v-model="form.engine" type="radio" value="postgres" class="sr-only" />PostgreSQL</label>
+          <label :class="segment"><input v-model="form.engine" type="radio" value="clickhouse" class="sr-only" />ClickHouse</label>
         </div>
       </div>
 
@@ -132,7 +136,7 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
           <label :class="segment"><input v-model="form.via" type="radio" value="direct" class="sr-only" />Напрямую</label>
         </div>
         <p :class="hint">
-          <template v-if="form.via === 'ssh'">Клиент {{ form.engine === 'mysql' ? 'mysql' : 'psql' }} запускается на выбранном сервере — база может быть закрыта снаружи. Обычно хост — 127.0.0.1.</template>
+          <template v-if="form.via === 'ssh'">Клиент {{ CLIENTS[form.engine] }} запускается на выбранном сервере — база может быть закрыта снаружи. Обычно хост — 127.0.0.1.</template>
           <template v-else>SystemKeeper подключается к СУБД сам — порт должен быть доступен из сети.</template>
         </p>
       </div>
@@ -167,7 +171,7 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
       </div>
       <p v-for="m in [...(errors.host ?? []), ...(errors.port ?? [])]" :key="m" class="-mt-2 text-sm text-destructive">{{ m }}</p>
 
-      <div v-if="form.via === 'ssh' && !editing" class="grid gap-2">
+      <div v-if="form.via === 'ssh' && !editing && form.engine !== 'clickhouse'" class="grid gap-2">
         <span :class="label">Пользователь БД</span>
         <div class="flex gap-2">
           <label :class="segment"><input v-model="form.auto_user" type="radio" :value="true" class="sr-only" />Создать автоматически</label>
@@ -196,7 +200,7 @@ const segment = 'flex h-9 flex-1 cursor-pointer items-center justify-center roun
           <p v-for="m in errors.password" :key="m" class="text-sm text-destructive">{{ m }}</p>
         </div>
       </div>
-      <p v-if="!autoUser" :class="hint" class="-mt-2">Достаточно пользователя с правами на чтение: {{ form.engine === 'mysql' ? 'SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT' : 'CONNECT и SELECT на нужные базы' }}.</p>
+      <p v-if="!autoUser" :class="hint" class="-mt-2">Достаточно пользователя с правами на чтение: {{ form.engine === 'mysql' ? 'SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT' : form.engine === 'clickhouse' ? 'SELECT и SHOW TABLES, SHOW DATABASES на нужные базы; порт — нативный (9000), не HTTP' : 'CONNECT и SELECT на нужные базы' }}.</p>
 
       <div v-if="form.engine === 'postgres'" class="grid gap-2">
         <label for="d-maint" :class="label">База для подключения</label>

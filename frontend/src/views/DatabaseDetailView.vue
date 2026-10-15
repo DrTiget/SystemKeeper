@@ -169,7 +169,7 @@ const dt = 'text-xs text-muted-foreground'
             </dl>
             <div class="grid gap-2">
               <button :class="btnClass.outline" class="h-8! px-3!" :disabled="checking" @click="check"><Icon :name="checking ? 'loader' : 'plug'" :class="checking && 'animate-spin'" />Проверить подключение</button>
-              <button v-if="connection.via === 'ssh'" :class="btnClass.outline" class="h-8! px-3!" title="Создать в СУБД пользователя только для чтения" @click="provisionOpen = true"><Icon name="users" />Создать пользователя для бекапов</button>
+              <button v-if="connection.via === 'ssh' && connection.engine !== 'clickhouse'" :class="btnClass.outline" class="h-8! px-3!" title="Создать в СУБД пользователя только для чтения" @click="provisionOpen = true"><Icon name="users" />Создать пользователя для бекапов</button>
             </div>
           </section>
         </aside>

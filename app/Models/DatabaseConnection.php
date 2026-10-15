@@ -32,24 +32,29 @@ class DatabaseConnection extends Model
 
     public const POSTGRES = 'postgres';
 
-    public const ENGINES = [self::MYSQL, self::POSTGRES];
+    public const CLICKHOUSE = 'clickhouse';
+
+    public const ENGINES = [self::MYSQL, self::POSTGRES, self::CLICKHOUSE];
 
     public const VIA_SSH = 'ssh';
 
     public const VIA_DIRECT = 'direct';
 
-    public const DEFAULT_PORTS = [self::MYSQL => 3306, self::POSTGRES => 5432];
+    /** ClickHouse — нативный протокол clickhouse-client */
+    public const DEFAULT_PORTS = [self::MYSQL => 3306, self::POSTGRES => 5432, self::CLICKHOUSE => 9000];
 
     /** Служебные базы — не предлагаются к бекапу по умолчанию. */
     public const SYSTEM_DATABASES = [
         self::MYSQL => ['information_schema', 'performance_schema', 'mysql', 'sys'],
         self::POSTGRES => ['postgres'],
+        self::CLICKHOUSE => ['system', 'INFORMATION_SCHEMA', 'information_schema'],
     ];
 
     /** Параметры дампа по умолчанию; в БД — только известные ключи. */
     public const DEFAULT_OPTIONS = [
         self::MYSQL => ['lock_mode' => 'single_transaction', 'routines' => true, 'events' => true, 'triggers' => true, 'compress' => true],
         self::POSTGRES => ['format' => 'custom', 'no_owner' => false, 'compress' => true],
+        self::CLICKHOUSE => ['compress' => true],
     ];
 
     /** @var array<string, mixed> */

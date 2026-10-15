@@ -11,6 +11,7 @@ use App\Services\Database\DatabaseException;
 
 /**
  * Бекап баз данных: по файлу на базу (mysqldump / pg_dump), потоком с сервера или напрямую.
+ * ClickHouse — схема базы, данные каждой таблицы в формате Native и отдельно представления (см. dumpClickhouse).
  */
 class DatabaseBackupRunner
 {
@@ -54,6 +55,17 @@ class DatabaseBackupRunner
         $report = [];
         foreach ($databases as $db) {
             $backup->appendLog("Дампим {$db}");
+            if ($c->engine === DatabaseConnection::CLICKHOUSE) {
+                $entry = $this->dumpClickhouse($c, $backup, $db, $options);
+                $entry['size'] = $sizes[$db] ?? null;
+                $report[] = $entry;
+                if ($entry['error'] !== null) {
+                    $failed[] = $db;
+                }
+                $backup->putMeta('databases', $report);
+
+                continue;
+            }
             [$command, $ext] = $c->engine === DatabaseConnection::MYSQL ? self::mysqlCommand($c, $db, $options) : self::postgresCommand($c, $db, $options);
 
             $started = hrtime(true);
@@ -86,6 +98,100 @@ class DatabaseBackupRunner
             throw new BackupException('Не удалось сделать дамп: '.implode(', ', $failed).'.');
         }
         $backup->appendLog('Дампы получены');
+    }
+
+    /** Движки, у которых нет своих данных (или данные — в другой таблице): создаются после загрузки данных. */
+    private const CLICKHOUSE_VIEWS = ['View', 'MaterializedView', 'LiveView', 'WindowView', 'Dictionary'];
+
+    /**
+     * ClickHouse: `<база>.schema.sql` (CREATE DATABASE и таблицы), `<база>.<таблица>.native.gz` — данные таблиц,
+     * `<база>.views.sql` — представления и словари (их создают последними, иначе материализованные представления
+     * посчитают загружаемые данные повторно). Данные выгружаются только у таблиц, которые их хранят (MergeTree, Log, Memory…).
+     *
+     * @param  array<string, mixed>  $o
+     * @return array<string, mixed> запись для meta.databases
+     */
+    private function dumpClickhouse(DatabaseConnection $c, Backup $backup, string $db, array $o): array
+    {
+        $started = hrtime(true);
+        $name = self::fileName($db);
+        $files = [];
+        $errors = [];
+        $dumpSize = 0;
+        $uncompressed = 0;
+        $str = DatabaseClient::clickhouseString(...);
+
+        try {
+            $createDb = $this->client->query($c, 'SHOW CREATE DATABASE '.DatabaseClient::clickhouseName($db))[0][0] ?? '';
+            $tables = $this->client->query($c, 'SELECT name, engine, create_table_query FROM system.tables WHERE database = '.$str($db)
+                ." AND NOT is_temporary AND name NOT LIKE '.inner%' ORDER BY name");
+        } catch (DatabaseException|SshConnectionException $e) {
+            $error = mb_substr($e->getMessage(), -2000);
+            $backup->appendLog("Ошибка дампа {$db}: {$error}");
+
+            return ['name' => $db, 'file' => null, 'files' => [], 'tables' => 0, 'dump_size' => 0, 'uncompressed_size' => null,
+                'duration_ms' => intdiv(hrtime(true) - $started, 1_000_000), 'status' => 'failed', 'error' => $error];
+        }
+
+        $excluded = self::tablesOf($c->exclude_tables ?? [], $db);
+        $schemaOnly = self::tablesOf($c->schema_only_tables ?? [], $db);
+        $tables = array_values(array_filter($tables, fn ($t) => ! in_array($t[0], $excluded, true)));
+        $isView = fn (array $t) => in_array($t[1], self::CLICKHOUSE_VIEWS, true);
+
+        $writeSql = function (string $file, array $statements) use ($backup, &$files, &$dumpSize) {
+            $f = new BackupFile($backup, $file);
+            $f->write($statements === [] ? '' : implode(";\n\n", $statements).";\n");
+            $f->close();
+            $files[] = $f->name;
+            $dumpSize += $f->size;
+        };
+
+        $writeSql("{$name}.schema.sql", [
+            str_replace('CREATE DATABASE', 'CREATE DATABASE IF NOT EXISTS', $createDb),
+            ...array_map(fn ($t) => $t[2], array_filter($tables, fn ($t) => ! $isView($t))),
+        ]);
+
+        foreach ($tables as [$table, $engine]) {
+            $storesData = str_contains($engine, 'MergeTree') || in_array($engine, ['Log', 'TinyLog', 'StripeLog', 'Memory', 'Set', 'Join'], true);
+            if (! $storesData || in_array($table, $schemaOnly, true)) {
+                continue;
+            }
+            $query = 'SELECT * FROM '.DatabaseClient::clickhouseName($db).'.'.DatabaseClient::clickhouseName($table).' FORMAT Native';
+            [$command, $ext] = self::compressed(DatabaseClient::withPassword($c, DatabaseClient::clickhouseClient($c).' --query '.escapeshellarg($query)), $o['compress'], '.native');
+
+            $file = new BackupFile($backup, $name.'.'.self::fileName($table).$ext);
+            $result = $this->runner->stream($c, $command, $file->write(...), (int) config('backup.run_timeout'));
+            $file->close();
+            $files[] = $file->name;
+            $dumpSize += $file->size;
+            $uncompressed += $file->uncompressedSize ?? $file->size;
+
+            if ($result['exit_code'] !== 0) {
+                $errors[] = "{$table}: ".DatabaseClient::explain($c, $result['exit_code'], trim($result['stderr']));
+            }
+        }
+
+        $views = array_filter($tables, $isView);
+        if ($views !== []) {
+            $writeSql("{$name}.views.sql", array_map(fn ($t) => $t[2], $views));
+        }
+
+        $error = $errors ? mb_substr(implode("\n", $errors), -2000) : null;
+        if ($error !== null) {
+            $backup->appendLog("Ошибка дампа {$db}: {$error}");
+        }
+
+        return [
+            'name' => $db,
+            'file' => "{$name}.schema.sql",
+            'files' => $files,
+            'tables' => count($tables),
+            'dump_size' => $dumpSize,
+            'uncompressed_size' => $uncompressed ?: null,
+            'duration_ms' => intdiv(hrtime(true) - $started, 1_000_000),
+            'status' => $error === null ? 'success' : 'failed',
+            'error' => $error,
+        ];
     }
 
     private function version(DatabaseConnection $c): ?string
