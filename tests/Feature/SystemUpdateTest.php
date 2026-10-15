@@ -38,9 +38,15 @@ class SystemUpdateTest extends TestCase
 
     private function release(string $tag = 'v1.1.0'): array
     {
+        // GET /releases — список; черновики и пре-релизы не считаются
         return [
-            'tag_name' => $tag, 'name' => "SystemKeeper $tag", 'body' => '- новое', 'html_url' => "https://github.com/x/y/releases/tag/$tag",
-            'published_at' => '2026-10-14T10:00:00Z',
+            ['tag_name' => 'v0.9.0', 'name' => '', 'body' => '- старое', 'html_url' => 'https://github.com/x/y/releases/tag/v0.9.0', 'published_at' => '2026-10-01T10:00:00Z'],
+            [
+                'tag_name' => $tag, 'name' => "SystemKeeper $tag", 'body' => '- новое', 'html_url' => "https://github.com/x/y/releases/tag/$tag",
+                'published_at' => '2026-10-14T10:00:00Z',
+            ],
+            ['tag_name' => 'v99.0.0', 'draft' => true, 'name' => '', 'body' => '', 'html_url' => '', 'published_at' => null],
+            ['tag_name' => 'v98.0.0-rc1', 'name' => '', 'body' => '', 'html_url' => '', 'published_at' => null],
         ];
     }
 
@@ -201,5 +207,47 @@ class SystemUpdateTest extends TestCase
         // обновлятор не запущен (нет heartbeat) — застрявший статус ничего не блокирует
         touch($this->dir.'/heartbeat', time() - 600);
         $this->postJson("/api/v1/servers/{$server->id}/backups")->assertStatus(409)->assertJsonPath('message', 'Бекап уже выполняется.');
+    }
+
+    public function test_changelog_merges_github_releases_with_local_file(): void
+    {
+        Http::fake(['api.github.com/*' => Http::sequence()->push($this->release())->push([[
+            'tag_name' => 'v0.1.0', 'name' => '', 'body' => '**Full Changelog**', 'html_url' => 'https://github.com/x/y/releases/tag/v0.1.0', 'published_at' => '2026-10-14T12:00:00Z',
+        ]])]);
+        $this->artisan('system:check-updates');
+
+        $data = $this->getJson('/api/v1/system/changelog')->assertOk()->json('data');
+        $versions = array_column($data, 'version');
+
+        // релизы с GitHub без черновиков и пре-релизов, плюс версии из CHANGELOG.md; новые сверху
+        $this->assertSame('v1.1.0', $versions[0]);
+        $this->assertContains('v0.9.0', $versions);
+        $this->assertContains('v0.1.0', $versions);
+        $this->assertNotContains('v99.0.0', $versions);
+        $this->assertNotContains('v98.0.0-rc1', $versions);
+        $this->assertTrue($data[0]['is_new']);
+        $this->assertSame('- новое', $data[0]['notes']);
+        $local = collect($data)->firstWhere('version', 'v0.1.0');
+        $this->assertFalse($local['is_new']);
+        $this->assertNull($local['url']);
+
+        // версия есть и в CHANGELOG.md, и на GitHub — текст из файла, ссылка с GitHub
+        $this->artisan('system:check-updates');
+        $both = collect($this->getJson('/api/v1/system/changelog')->json('data'))->firstWhere('version', 'v0.1.0');
+        $this->assertStringContainsString('Первый открытый релиз', $both['notes']);
+        $this->assertSame('https://github.com/x/y/releases/tag/v0.1.0', $both['url']);
+        $this->assertSame('2026-10-14', $local['published_at']);
+        $this->assertStringContainsString('Первый открытый релиз', $local['notes']);
+    }
+
+    public function test_changelog_works_without_github(): void
+    {
+        config(['systemkeeper.version' => 'v0.1.0']);
+
+        $data = $this->getJson('/api/v1/system/changelog')->assertOk()->json('data');
+
+        $current = collect($data)->firstWhere('version', 'v0.1.0');
+        $this->assertTrue($current['is_current']);
+        $this->assertTrue($data[0]['is_new']);
     }
 }

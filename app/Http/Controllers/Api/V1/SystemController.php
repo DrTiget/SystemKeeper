@@ -27,6 +27,15 @@ class SystemController extends Controller
         return response()->json(['data' => $this->payload()]);
     }
 
+    /**
+     * Что нового: версии с описанием изменений (Markdown), новые сверху. `is_new` — ещё не установлена,
+     * `is_current` — установленная.
+     */
+    public function changelog(): JsonResponse
+    {
+        return response()->json(['data' => $this->checker->changelog()]);
+    }
+
     /** Проверить новые релизы сейчас (только администратор). */
     public function check(Request $request): JsonResponse
     {

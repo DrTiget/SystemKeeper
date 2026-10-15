@@ -22,6 +22,9 @@ class Backup extends Model
 
     public const TRIGGER_SCHEDULE = 'schedule';
 
+    /** По ссылке-хуку (из CI/CD) */
+    public const TRIGGER_HOOK = 'hook';
+
     public const QUEUED = 'queued';
 
     public const RUNNING = 'running';

@@ -82,5 +82,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           prerelease=$([[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease || true)
+          # описание релиза — раздел версии из CHANGELOG.md; нет раздела — список коммитов от GitHub
+          awk -v v="$GITHUB_REF_NAME" '/^## /{on = ($2 == v); next} on' CHANGELOG.md > notes.md
+          notes=$([ -s notes.md ] && echo "--notes-file notes.md" || echo --generate-notes)
           gh release create "$GITHUB_REF_NAME" deploy/compose.yaml deploy/install.sh deploy/updater.sh \
-            --title "SystemKeeper $GITHUB_REF_NAME" --generate-notes $prerelease
+            --title "SystemKeeper $GITHUB_REF_NAME" $notes $prerelease

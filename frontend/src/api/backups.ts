@@ -9,7 +9,7 @@ export interface Backup {
   source_id: number
   /** в списках по проекту */
   source?: { type: 'server' | 'database'; id: number; name: string } | null
-  trigger: 'manual' | 'schedule'
+  trigger: 'manual' | 'schedule' | 'hook'
   status: BackupStatus
   user: { id: number; name: string } | null
   started_at: string | null
@@ -93,7 +93,18 @@ export const BACKUP_STATUS: Record<BackupStatus, { label: string; dot: string }>
   failed: { label: 'Ошибка', dot: 'bg-destructive' },
 }
 
-export const backupTrigger = (b: Backup) => (b.trigger === 'manual' ? `вручную${b.user ? ', ' + b.user.name : ''}` : 'по расписанию')
+export const TRIGGER_LABELS: Record<Backup['trigger'], string> = { manual: 'Вручную', schedule: 'По расписанию', hook: 'По ссылке-хуку' }
+
+export const backupTrigger = (b: Backup) => TRIGGER_LABELS[b.trigger].toLowerCase() + (b.user ? ', ' + b.user.name : '')
+
+/** Ссылка-хук: POST на неё запускает бекап без входа (из CI/CD). */
+export interface BackupHook {
+  enabled: boolean
+  /** Адрес без домена: /api/v1/hooks/{token} */
+  path: string | null
+  last_used_at: string | null
+  created_at: string | null
+}
 
 /** Длительность: у идущего бекапа — от старта до текущего момента. */
 export function backupDuration(b: Backup): string {

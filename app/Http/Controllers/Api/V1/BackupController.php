@@ -4,20 +4,18 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\BackupResource;
-use App\Jobs\RunBackup;
 use App\Models\Backup;
 use App\Models\BackupCopy;
 use App\Models\DatabaseConnection;
 use App\Models\Project;
 use App\Models\Server;
+use App\Services\Backup\BackupLauncher;
 use App\Services\Backup\BackupManifest;
-use App\Services\System\Updater;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
-use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
@@ -57,10 +55,6 @@ class BackupController extends Controller
      */
     public function serverRun(Request $request, Server $server): JsonResponse
     {
-        if ($server->backupSettingsOrDefault()->paths === []) {
-            throw ValidationException::withMessages(['paths' => 'Сначала выберите каталоги для бекапа.']);
-        }
-
         return $this->start($request, $server);
     }
 
@@ -136,13 +130,7 @@ class BackupController extends Controller
 
     private function start(Request $request, Model $source): JsonResponse
     {
-        $active = Backup::query()->whereMorphedTo('source', $source)->whereIn('status', [Backup::QUEUED, Backup::RUNNING])->exists();
-        abort_if($active, 409, 'Бекап уже выполняется.');
-        abort_if(app(Updater::class)->locked(), 409, 'Идёт обновление SystemKeeper — запустите бекап после него.');
-
-        $backup = new Backup(['trigger' => Backup::TRIGGER_MANUAL, 'status' => Backup::QUEUED, 'user_id' => $request->user()->id]);
-        $backup->source()->associate($source)->save();
-        RunBackup::dispatch($backup);
+        $backup = app(BackupLauncher::class)->start($source, Backup::TRIGGER_MANUAL, $request->user());
 
         return (new BackupResource($backup->load(['user', 'copies.storage'])))->response()->setStatusCode(202);
     }

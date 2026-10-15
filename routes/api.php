@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BackupController;
+use App\Http\Controllers\Api\V1\BackupHookController;
 use App\Http\Controllers\Api\V1\BackupStorageController;
 use App\Http\Controllers\Api\V1\BackupTemplateController;
 use App\Http\Controllers\Api\V1\DatabaseConnectionController;
@@ -18,6 +19,10 @@ use Illuminate\Support\Facades\Route;
 
 // Временная подписанная ссылка на файл бекапа — для облаков, которые сами скачивают его (Яндекс Диск)
 Route::get('transfers/{storage}/{path}', [TransferController::class, 'show'])->where('path', '.*')->middleware(['signed:relative', 'throttle:60,1'])->name('transfers.show');
+
+// Ссылка-хук: запуск бекапа без входа, по секрету в адресе (из CI/CD)
+Route::post('hooks/{token}', [BackupHookController::class, 'trigger'])->middleware('throttle:30,1');
+Route::get('hooks/{token}/backups/{backup}', [BackupHookController::class, 'backup'])->whereNumber('backup')->middleware('throttle:120,1');
 
 Route::prefix('auth')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
@@ -62,8 +67,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('servers/{server}/backups', [BackupController::class, 'serverIndex']);
     Route::post('servers/{server}/backups', [BackupController::class, 'serverRun']);
+    Route::get('servers/{server}/backup-hook', [BackupHookController::class, 'serverShow']);
+    Route::post('servers/{server}/backup-hook', [BackupHookController::class, 'serverStore']);
+    Route::delete('servers/{server}/backup-hook', [BackupHookController::class, 'serverDestroy']);
     Route::get('databases/{database}/backups', [BackupController::class, 'databaseIndex']);
     Route::post('databases/{database}/backups', [BackupController::class, 'databaseRun']);
+    Route::get('databases/{database}/backup-hook', [BackupHookController::class, 'databaseShow']);
+    Route::post('databases/{database}/backup-hook', [BackupHookController::class, 'databaseStore']);
+    Route::delete('databases/{database}/backup-hook', [BackupHookController::class, 'databaseDestroy']);
     Route::post('storages/{storage}/check', [BackupStorageController::class, 'check']);
     Route::get('storages/{storage}/sync', [BackupStorageController::class, 'syncShow']);
     Route::post('storages/{storage}/sync', [BackupStorageController::class, 'sync']);
@@ -74,6 +85,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('backups/{backup}/files/{file}', [BackupController::class, 'download'])->where('file', '[^/]+');
 
     Route::get('system/version', [SystemController::class, 'version']);
+    Route::get('system/changelog', [SystemController::class, 'changelog']);
     Route::post('system/check', [SystemController::class, 'check'])->middleware('throttle:10,1');
     Route::post('system/update', [SystemController::class, 'update']);
 });

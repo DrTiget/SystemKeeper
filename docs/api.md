@@ -175,7 +175,7 @@ docker compose exec app php artisan user:create
 | GET | `/servers/{id}/backups` | История бекапов сервера, новые сверху (`per_page` до 100) |
 | POST | `/databases/{id}/backups` | Запустить бекап базы данных сейчас (`202` / `409`) |
 | GET | `/databases/{id}/backups` | История бекапов базы данных |
-| GET | `/backups/{id}` | Бекап: `status` (`queued`, `running`, `success`, `failed`), `trigger` (`manual`, `schedule`), `user`, `started_at`, `finished_at`, `files` (`name`, `size`), `size`, `log` (`at`, `message`), `error` |
+| GET | `/backups/{id}` | Бекап: `status` (`queued`, `running`, `success`, `failed`), `trigger` (`manual`, `schedule`, `hook`), `user`, `started_at`, `finished_at`, `files` (`name`, `size`), `size`, `log` (`at`, `message`), `error` |
 | GET | `/backups/{id}/files/{name}` | Скачать файл бекапа |
 | DELETE | `/backups/{id}` | Удалить бекап с файлами (`409`, пока выполняется) |
 
@@ -185,6 +185,23 @@ docker compose exec app php artisan user:create
 - При удалении сервера или базы данных удаляются и их бекапы с файлами.
 - Чтобы восстановиться руками без SystemKeeper, в каждом месте хранения лежит описание: `{каталог бекапа}/backup.json` (источник, проект, файлы с SHA-256, команды восстановления), в корне — `index.json` (каталог `servers/5` / `databases/3` → сервер или база и список бекапов) и `README.md` для человека. Оглавление обновляется после каждого бекапа и удаления; перед записью перечитывается: меняется только запись своего источника и в ней только свои поля, чужие записи/поля сохраняются, в README заменяется только блок между метками `systemkeeper:begin/end`. Испорченный `index.json` откладывается в `index.json.broken-<дата>`. Обновления по одному хранилищу идут под блокировкой.
 - Подробности бекапа — `meta` в `GET /backups/{id}`: `host` (hostname, os, kernel, tools — версия tar), `source` (что бекапилось: каталоги и исключения или СУБД с версией, параметрами дампа и таблицами), `pre_command` (команда, код выхода, длительность, хвост вывода), `archive` (`uncompressed_size` — объём до сжатия: из `tar --totals` или посчитанный при приёме), `databases` (по каждой базе: размер в СУБД, объём SQL, размер дампа, время, ошибка). У каждого файла — `sha256` и для `.gz` — `uncompressed_size`; всё считается на лету при приёме потока.
+
+### Запуск по ссылке-хуку (CI/CD)
+
+Секретная ссылка, `POST` на которую запускает бекап без входа — например, из CI/CD перед деплоем. Токен хранится зашифрованным, поиск — по SHA-256.
+
+| Метод | Путь | Описание |
+|---|---|---|
+| GET | `/servers/{id}/backup-hook` | `{enabled, path, last_used_at, created_at}`; `path` — `/api/v1/hooks/{token}` |
+| POST | `/servers/{id}/backup-hook` | Включить ссылку или выпустить новую (старая перестаёт работать), `201` |
+| DELETE | `/servers/{id}/backup-hook` | Выключить ссылку |
+| GET/POST/DELETE | `/databases/{id}/backup-hook` | То же для базы данных |
+| POST | `/hooks/{token}` | **Без входа.** Запустить бекап: `202` и `{id, status, started_at, finished_at, size, error, status_url}`; `404` — ссылки нет; `409` — бекап уже идёт или обновляется система; `422` — не выбраны каталоги. Не чаще 30 раз в минуту |
+| GET | `/hooks/{token}/backups/{id}` | **Без входа.** Ход бекапа этого источника (те же поля) |
+
+```sh
+curl -fsS -X POST https://backup.example.com/api/v1/hooks/skh_…
+```
 
 ## API: диски и облака (хранилища)
 
@@ -217,5 +234,6 @@ docker compose exec app php artisan user:create
 ## API: версия и обновление
 
 - `GET /system/version` — `{current, latest: {version, name, notes, url, published_at} | null, update_available, checked_at, check_error, busy: {backups, syncs}, updater: {available, status, message, from, to, updated_at}}`. `updater.available` — запущен ли контейнер `updater`; `status`: `idle`, `pending`, `waiting` (ждёт бекапы), `backup`, `pulling`, `restarting`, `done`, `failed`, `rolled_back`.
+- `GET /system/changelog` — «Что нового»: `[{version, name, notes (Markdown), url, published_at, is_new, is_current}]`, новые сверху. Описания — из `CHANGELOG.md` сборки, версии новее — из релизов GitHub.
 - `POST /system/check` — проверить релизы сейчас (администратор, не чаще 10 раз в минуту).
 - `POST /system/update` — обновиться до последней версии (администратор), `202`; `422`, если обновлений нет, обновлятор не запущен, обновление уже идёт или идут бекапы/синхронизации (`busy`). Пока идёт обновление, запуск бекапа отвечает `409`, синхронизации — `422`.

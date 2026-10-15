@@ -26,3 +26,16 @@ export const ACTIVE_STATUSES: UpdaterStatus[] = ['pending', 'waiting', 'backup',
 export const getVersion = () => api<{ data: SystemVersion }>('/system/version').then((r) => r.data)
 export const checkUpdates = () => api<{ data: SystemVersion }>('/system/check', { method: 'POST' }).then((r) => r.data)
 export const startUpdate = () => api<{ data: SystemVersion }>('/system/update', { method: 'POST' }).then((r) => r.data)
+
+/** Версия в «Что нового»: notes — Markdown; is_new — ещё не установлена */
+export interface ChangelogEntry {
+  version: string
+  name: string
+  notes: string
+  url: string | null
+  published_at: string | null
+  is_new: boolean
+  is_current: boolean
+}
+
+export const getChangelog = () => api<{ data: ChangelogEntry[] }>('/system/changelog').then((r) => r.data)

@@ -28,7 +28,7 @@ class BackupResource extends JsonResource
                 'name' => $this->source->name,
                 'project' => $this->source->project ? ['id' => $this->source->project->id, 'name' => $this->source->project->name] : null,
             ] : null),
-            /** manual | schedule */
+            /** manual | schedule | hook */
             'trigger' => $this->trigger,
             /** queued | running | success | failed */
             'status' => $this->status,

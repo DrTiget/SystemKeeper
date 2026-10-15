@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -77,10 +78,18 @@ class DatabaseConnection extends Model
         return $this->morphMany(Backup::class, 'source');
     }
 
+    public function backupHook(): MorphOne
+    {
+        return $this->morphOne(BackupHook::class, 'source');
+    }
+
     protected static function booted(): void
     {
         // по одному, чтобы удалились и файлы бекапов
-        static::deleting(fn (self $model) => $model->backups()->each(fn (Backup $b) => $b->delete()));
+        static::deleting(function (self $model) {
+            $model->backups()->each(fn (Backup $b) => $b->delete());
+            $model->backupHook()->delete();
+        });
     }
 
     protected function casts(): array

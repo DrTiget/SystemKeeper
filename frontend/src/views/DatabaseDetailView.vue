@@ -5,6 +5,7 @@ import { api, ApiError } from '@/api/client'
 import { type DatabaseConnection, type DbSchema, ENGINE_LABELS } from '@/api/databases'
 import Icon from '@/components/Icon.vue'
 import BackupHistory from '@/components/BackupHistory.vue'
+import BackupHook from '@/components/BackupHook.vue'
 import Modal from '@/components/Modal.vue'
 import DatabaseBackupForm from '@/components/databases/DatabaseBackupForm.vue'
 import DatabaseFormModal from '@/components/databases/DatabaseFormModal.vue'
@@ -128,6 +129,10 @@ const dt = 'text-xs text-muted-foreground'
         <aside class="grid gap-6">
           <section :class="card" class="p-4!">
             <BackupHistory :source="`databases/${connection.id}`" />
+          </section>
+
+          <section :class="card" class="p-4!">
+            <BackupHook :source="`databases/${connection.id}`" />
           </section>
 
           <section :class="card" class="grid gap-4 p-4!">

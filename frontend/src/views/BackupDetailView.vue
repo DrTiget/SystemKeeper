@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api, ApiError } from '@/api/client'
-import { BACKUP_STATUS, type BackupDetail, backupDuration, backupTrigger, downloadBackupFile, isActive } from '@/api/backups'
+import { BACKUP_STATUS, type BackupDetail, backupDuration, backupTrigger, downloadBackupFile, isActive, TRIGGER_LABELS } from '@/api/backups'
 import { ENGINE_LABELS } from '@/api/databases'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
@@ -264,7 +264,7 @@ const dt = 'text-xs text-muted-foreground'
             </div>
             <div class="grid gap-0.5">
               <dt :class="dt">Запуск</dt>
-              <dd>{{ backup.trigger === 'manual' ? 'Вручную' : 'По расписанию' }}<template v-if="backup.user">, {{ backup.user.name }}</template></dd>
+              <dd>{{ TRIGGER_LABELS[backup.trigger] }}<template v-if="backup.user">, {{ backup.user.name }}</template></dd>
             </div>
             <div class="grid gap-0.5">
               <dt :class="dt">Поставлен в очередь</dt>
