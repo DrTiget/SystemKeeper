@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Синхронизация хранилища: в него копируются успешные бекапы, которых там ещё нет.
  */
-#[Fillable(['user_id', 'status', 'add_to_sources', 'total', 'done', 'failed', 'bytes_total', 'bytes_done', 'current', 'error', 'started_at', 'finished_at'])]
+#[Fillable(['user_id', 'status', 'add_to_sources', 'total', 'done', 'failed', 'bytes_total', 'bytes_done', 'current', 'log', 'error', 'started_at', 'finished_at'])]
 class StorageSync extends Model
 {
     public const QUEUED = 'queued';
@@ -24,6 +24,7 @@ class StorageSync extends Model
     {
         return [
             'add_to_sources' => 'boolean',
+            'log' => 'array',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
         ];
@@ -37,5 +38,12 @@ class StorageSync extends Model
     public function isActive(): bool
     {
         return in_array($this->status, [self::QUEUED, self::RUNNING], true);
+    }
+
+    /** Запись в журнал синхронизации: по файлу — способ, размер и время. */
+    public function appendLog(string $message): void
+    {
+        $this->log = [...($this->log ?? []), ['at' => now()->toIso8601String(), 'message' => $message]];
+        $this->save();
     }
 }

@@ -58,6 +58,12 @@ onBeforeUnmount(() => clearTimeout(timer))
       </div>
       <div class="h-2 overflow-hidden rounded-full bg-foreground/10"><div class="h-full bg-primary transition-all" :style="{ width: `${percent}%` }" /></div>
       <div v-if="last.current" class="truncate font-mono text-xs text-muted-foreground">{{ last.current }}</div>
+      <details v-if="last?.log?.length" class="text-xs">
+        <summary class="cursor-pointer text-muted-foreground hover:text-foreground">Журнал ({{ last.log.length }})</summary>
+        <ol class="mt-1 max-h-48 overflow-auto rounded bg-muted/50 p-2 font-mono">
+          <li v-for="(l, i) in last.log" :key="i"><span class="text-muted-foreground">{{ new Date(l.at).toLocaleTimeString() }}</span> {{ l.message }}</li>
+        </ol>
+      </details>
     </template>
 
     <template v-else>
@@ -66,6 +72,12 @@ onBeforeUnmount(() => clearTimeout(timer))
         Последняя синхронизация {{ last.finished_at ? new Date(last.finished_at).toLocaleString() : '' }}: скопировано {{ last.done }}<template v-if="last.failed">, не удалось {{ last.failed }}</template>
       </div>
       <pre v-if="last?.error" class="max-h-32 overflow-auto rounded bg-muted/50 p-2 text-xs whitespace-pre-wrap text-destructive">{{ last.error }}</pre>
+      <details v-if="last?.log?.length" class="text-xs">
+        <summary class="cursor-pointer text-muted-foreground hover:text-foreground">Журнал ({{ last.log.length }})</summary>
+        <ol class="mt-1 max-h-48 overflow-auto rounded bg-muted/50 p-2 font-mono">
+          <li v-for="(l, i) in last.log" :key="i"><span class="text-muted-foreground">{{ new Date(l.at).toLocaleTimeString() }}</span> {{ l.message }}</li>
+        </ol>
+      </details>
 
       <div v-if="state.pending.backups" class="flex flex-wrap items-center justify-between gap-3">
         <div class="grid gap-1">

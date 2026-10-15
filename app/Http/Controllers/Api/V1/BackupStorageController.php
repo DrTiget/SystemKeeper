@@ -129,6 +129,8 @@ class BackupStorageController extends Controller
                 'bytes_done' => $last->bytes_done,
                 'current' => $last->current,
                 'error' => $last->error,
+                /** Журнал по файлам: `at`, `message` */
+                'log' => $last->log ?? [],
                 'started_at' => $last->started_at,
                 'finished_at' => $last->finished_at,
                 'created_at' => $last->created_at,

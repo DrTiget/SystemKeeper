@@ -194,15 +194,22 @@ class YandexDiskStorageTest extends TestCase
         $this->get($relative)->assertForbidden();
     }
 
-    public function test_small_files_are_uploaded_directly_even_when_public(): void
+    public function test_small_files_also_go_by_link_unless_threshold_set(): void
     {
         config(['systemkeeper.public_url' => 'https://public.test', 'yandex_disk.poll_ms' => 0]);
         $server = $this->serverBackingUpTo($this->create());
 
         $backup = Backup::find($this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id'));
+        $this->assertCount(1, $this->disk->fetched);
+        $this->assertNotContains("disk:/SystemKeeper/{$backup->path}/files.tar.gz", $this->disk->uploaded);
+        $this->assertTrue(collect($backup->log)->contains(fn ($l) => str_starts_with($l['message'], 'files.tar.gz — по ссылке')));
 
-        $this->assertSame([], $this->disk->fetched);
+        // порог задан — мелкие файлы напрямую
+        config(['yandex_disk.fetch_min_size' => 1024]);
+        $backup = Backup::find($this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id'));
+        $this->assertCount(1, $this->disk->fetched);
         $this->assertContains("disk:/SystemKeeper/{$backup->path}/files.tar.gz", $this->disk->uploaded);
+        $this->assertTrue(collect($backup->log)->contains(fn ($l) => str_starts_with($l['message'], 'files.tar.gz — напрямую')));
     }
 
     public function test_sync_runs_several_link_downloads_at_once(): void
@@ -223,7 +230,9 @@ class YandexDiskStorageTest extends TestCase
             ->assertStatus(202)
             ->assertJsonPath('data.last.status', 'success')
             ->assertJsonPath('data.last.done', 5)
-            ->assertJsonPath('data.last.bytes_done', 35);
+            ->assertJsonPath('data.last.bytes_done', 35)
+            ->assertJsonCount(5, 'data.last.log')
+            ->assertJsonPath('data.last.log.0.message', fn ($m) => str_contains($m, '— по ссылке'));
 
         $this->assertSame(3, $this->disk->maxConcurrent);
         $this->assertCount(5, $this->disk->fetched);

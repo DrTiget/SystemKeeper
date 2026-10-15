@@ -117,7 +117,7 @@ class SyncStorage implements ShouldQueue
             }
         }
 
-        app(StorageTransfer::class)->copyMany($tasks, $target, $to);
+        app(StorageTransfer::class)->copyMany($tasks, $target, $to, $sync->appendLog(...));
 
         foreach (array_filter($sources) as $source) {
             if ($error = $manifest->sync($target, $source)) {

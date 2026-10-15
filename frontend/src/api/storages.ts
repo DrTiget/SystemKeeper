@@ -49,6 +49,8 @@ export interface StorageSyncState {
     bytes_done: number
     current: string | null
     error: string | null
+    /** Журнал по файлам: способ загрузки, размер и время */
+    log: { at: string; message: string }[]
     started_at: string | null
     finished_at: string | null
     created_at: string

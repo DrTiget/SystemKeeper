@@ -11,8 +11,9 @@ use Throwable;
 
 /**
  * Копирование файлов бекапов из одного хранилища в другое. На Яндекс Диск — «по ссылке»: Диск сам скачивает файл
- * (временная ссылка S3 или подписанная ссылка SystemKeeper), до `parallel` файлов одновременно (настройка хранилища);
- * мелкие файлы и всё, что не вышло скачать по ссылке, — обычной загрузкой потоком.
+ * (временная ссылка S3 или подписанная ссылка SystemKeeper), до `parallel` файлов одновременно (настройка хранилища),
+ * большие — первыми; всё, что не вышло скачать по ссылке, — обычной загрузкой потоком. По каждому файлу в журнал
+ * пишется способ, размер и время.
  */
 class StorageTransfer
 {
@@ -29,11 +30,14 @@ class StorageTransfer
         $adapter = $toFs instanceof FilesystemAdapter ? $toFs->getAdapter() : null;
         if (! $adapter instanceof YandexDiskAdapter || ! config('yandex_disk.fetch_by_url')) {
             foreach ($tasks as $task) {
-                $this->run($task, fn () => $this->stream($task, $toFs));
+                $this->run($task, fn () => $this->stream($task, $toFs, $log));
             }
 
             return;
         }
+
+        // большие файлы — первыми: они дольше всего скачиваются, а мелкие успеют в освободившихся слотах
+        usort($tasks, fn ($a, $b) => ($b['size'] ?? PHP_INT_MAX) <=> ($a['size'] ?? PHP_INT_MAX));
 
         $client = $adapter->client();
         $parallel = max(1, min(10, (int) ($to->settings['parallel'] ?? config('yandex_disk.parallel'))));
@@ -46,12 +50,12 @@ class StorageTransfer
                 $task = array_shift($tasks);
                 $url = $this->linkable($task) ? $this->publicUrl($task['from'], $task['fs'], $task['path']) : null;
                 if ($url === null) {
-                    $this->run($task, fn () => $this->stream($task, $toFs));
+                    $this->run($task, fn () => $this->stream($task, $toFs, $log));
 
                     continue;
                 }
                 try {
-                    $inFlight[] = ['task' => $task, 'operation' => $client->startUploadFromUrl($adapter->fullPath($task['path']), $url), 'deadline' => time() + $timeout];
+                    $inFlight[] = ['task' => $task, 'operation' => $client->startUploadFromUrl($adapter->fullPath($task['path']), $url), 'deadline' => time() + $timeout, 'started' => microtime(true)];
                 } catch (Throwable $e) {
                     $this->fallback($task, $toFs, $e, $log);
                 }
@@ -71,6 +75,7 @@ class StorageTransfer
                     unset($inFlight[$i]);
                     $client->finishUploadFromUrl($adapter->fullPath($task['path']), $status, $task['size']);
                     isset($task['progress']) && ($task['progress'])((int) $task['size']);
+                    $log && $log($this->summary($task, 'по ссылке', $op['started']));
                     ($task['done'])(null);
                 } catch (Throwable $e) {
                     unset($inFlight[$i]);
@@ -96,7 +101,18 @@ class StorageTransfer
     private function fallback(array $task, Filesystem $toFs, Throwable $e, ?callable $log): void
     {
         $log && $log('Яндекс Диск не скачал '.basename($task['path']).' по ссылке ('.mb_substr($e->getMessage(), 0, 300).') — загружаем напрямую');
-        $this->run($task, fn () => $this->stream($task, $toFs));
+        $this->run($task, fn () => $this->stream($task, $toFs, $log));
+    }
+
+    /** «files.tar.gz — по ссылке, 4.6 ГБ за 512 с (9.1 МБ/с)» */
+    private function summary(array $task, string $how, float $started): string
+    {
+        $seconds = max(0.1, microtime(true) - $started);
+        $mb = ($task['size'] ?? 0) / 1048576;
+        $size = $task['size'] === null ? '' : ($mb >= 1024 ? sprintf(', %.1f ГБ', $mb / 1024) : sprintf(', %.1f МБ', $mb));
+        $speed = $task['size'] ? sprintf(' (%.1f МБ/с)', $mb / $seconds) : '';
+
+        return basename($task['path'])." — {$how}{$size} за ".round($seconds).' с'.$speed;
     }
 
     private function run(array $task, callable $copy): void
@@ -112,8 +128,9 @@ class StorageTransfer
     }
 
     /** Загрузка потоком с проверкой размера. */
-    private function stream(array $task, Filesystem $toFs): void
+    private function stream(array $task, Filesystem $toFs, ?callable $log = null): void
     {
+        $started = microtime(true);
         $stream = $task['fs']->readStream($task['path']) ?: throw new RuntimeException('Нет файла '.basename($task['path'])." в «{$task['from']->name}»");
         isset($task['progress']) && ProgressStream::watch($stream, $task['progress']);
         try {
@@ -124,6 +141,7 @@ class StorageTransfer
         if ($task['size'] !== null && $toFs->size($task['path']) !== $task['size']) {
             throw new RuntimeException('Размер '.basename($task['path']).' после копирования не совпал');
         }
+        $log && $log($this->summary($task, 'напрямую', $started));
     }
 
     /** Мелкие файлы быстрее загрузить самим: у скачивания по ссылке постоянная задержка (~15 с на операцию). */
