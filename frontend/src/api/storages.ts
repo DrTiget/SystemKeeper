@@ -31,3 +31,24 @@ export interface BackupStorage {
 }
 
 export const STORAGE_TYPE_LABELS: Record<BackupStorage['type'], string> = { local: 'Диск SystemKeeper', s3: 'S3' }
+
+/** Синхронизация хранилища — GET/POST /storages/{id}/sync: копирование сюда бекапов из других хранилищ. */
+export interface StorageSyncState {
+  /** Бекапы, которых здесь нет, но они есть в других хранилищах */
+  pending: { backups: number; size: number }
+  last: {
+    id: number
+    status: 'queued' | 'running' | 'success' | 'failed'
+    add_to_sources: boolean
+    total: number
+    done: number
+    failed: number
+    bytes_total: number
+    bytes_done: number
+    current: string | null
+    error: string | null
+    started_at: string | null
+    finished_at: string | null
+    created_at: string
+  } | null
+}

@@ -6,6 +6,7 @@ import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
 import RetentionFields from '@/components/RetentionFields.vue'
 import S3StorageModal from '@/components/S3StorageModal.vue'
+import StorageSync from '@/components/StorageSync.vue'
 import { btnClass, formatBytes } from '@/lib/ui'
 
 const storages = ref<BackupStorage[]>([])
@@ -153,6 +154,7 @@ const card = 'rounded-xl border bg-card p-6 shadow-xs'
       </div>
       <p v-if="checks[st.id]?.status === 'ok'" class="-mt-2 flex items-center gap-2 text-sm"><span class="size-2 rounded-full bg-emerald-500" />Подключение работает: файл записан, прочитан и удалён</p>
       <p v-else-if="checks[st.id]?.status === 'failed'" class="-mt-2 flex items-center gap-2 text-sm text-destructive"><span class="size-2 rounded-full bg-destructive" />{{ checks[st.id]?.error }}</p>
+      <StorageSync :storage="st" @synced="load" />
 
       <div v-if="st.disk" class="grid gap-2.5">
         <div class="flex items-baseline justify-between gap-3 text-sm">

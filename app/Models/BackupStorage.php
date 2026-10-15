@@ -6,6 +6,7 @@ use App\Services\Backup\StorageFilesystems;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -45,6 +46,20 @@ class BackupStorage extends Model
     public function backups(): BelongsToMany
     {
         return $this->belongsToMany(Backup::class, 'backup_copies', 'storage_id')->wherePivot('status', BackupCopy::SUCCESS);
+    }
+
+    public function syncs(): HasMany
+    {
+        return $this->hasMany(StorageSync::class, 'storage_id');
+    }
+
+    /** Успешные бекапы, которых нет в этом хранилище, но есть в другом — их можно скопировать сюда. */
+    public function missingBackups(): Builder
+    {
+        return Backup::query()
+            ->where('backups.status', Backup::SUCCESS)
+            ->whereDoesntHave('copies', fn ($q) => $q->where('storage_id', $this->id)->where('status', BackupCopy::SUCCESS))
+            ->whereHas('copies', fn ($q) => $q->where('storage_id', '!=', $this->id)->where('status', BackupCopy::SUCCESS));
     }
 
     public function copies(): HasMany

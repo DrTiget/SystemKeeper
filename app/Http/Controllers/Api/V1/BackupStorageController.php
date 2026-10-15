@@ -5,10 +5,14 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Storage\BackupStorageRequest;
 use App\Http\Resources\BackupStorageResource;
+use App\Jobs\SyncStorage;
+use App\Models\BackupCopy;
 use App\Models\BackupStorage;
 use App\Models\DatabaseConnection;
 use App\Models\ServerBackupSettings;
+use App\Models\StorageSync;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Support\Str;
@@ -54,14 +58,77 @@ class BackupStorageController extends Controller
     public function destroy(BackupStorage $storage): Response
     {
         abort_if($storage->type === BackupStorage::LOCAL, 409, 'Диск SystemKeeper удалить нельзя.');
-        abort_if($storage->copies()->exists(), 409, 'В хранилище есть бекапы — сначала удалите их или дождитесь, пока их вытеснят новые.');
+        abort_if($storage->copies()->where('status', BackupCopy::SUCCESS)->exists(), 409, 'В хранилище есть бекапы — сначала удалите их или дождитесь, пока их вытеснят новые.');
         $used = ServerBackupSettings::query()->whereJsonContains('storage_ids', $storage->id)->exists()
             || DatabaseConnection::query()->whereJsonContains('storage_ids', $storage->id)->exists();
         abort_if($used, 409, 'Хранилище выбрано у серверов или баз данных — сначала переключите их на другое.');
 
+        $storage->copies()->delete(); // остались только неудачные копии — записи об ошибках
         $storage->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * Синхронизация: сколько бекапов можно скопировать в это хранилище и последний запуск.
+     *
+     * `pending` — успешные бекапы, которых здесь нет, но они есть в других хранилищах; `last` — последняя синхронизация или null.
+     */
+    public function syncShow(BackupStorage $storage): JsonResponse
+    {
+        return response()->json(['data' => $this->syncState($storage)]);
+    }
+
+    /**
+     * Скопировать сюда все бекапы из других хранилищ, которых здесь ещё нет. Выполняется в фоне, ход — в `GET /storages/{id}/sync`.
+     *
+     * `add_to_sources` — и новые бекапы этих серверов и баз сохранять сюда же.
+     */
+    public function sync(Request $request, BackupStorage $storage): JsonResponse
+    {
+        $data = $request->validate(['add_to_sources' => ['sometimes', 'boolean']]);
+
+        if ($storage->syncs()->whereIn('status', [StorageSync::QUEUED, StorageSync::RUNNING])->exists()) {
+            return response()->json(['message' => 'Синхронизация уже идёт.', 'errors' => ['storage' => ['Синхронизация уже идёт.']]], 422);
+        }
+        if (! $storage->missingBackups()->exists()) {
+            return response()->json(['message' => 'Все бекапы уже есть в этом хранилище.', 'errors' => ['storage' => ['Все бекапы уже есть в этом хранилище.']]], 422);
+        }
+
+        $sync = $storage->syncs()->create([
+            'user_id' => $request->user()->id,
+            'status' => StorageSync::QUEUED,
+            'add_to_sources' => (bool) ($data['add_to_sources'] ?? false),
+        ]);
+        SyncStorage::dispatch($sync);
+
+        return response()->json(['data' => $this->syncState($storage)], 202);
+    }
+
+    private function syncState(BackupStorage $storage): array
+    {
+        $missing = $storage->missingBackups();
+        $last = $storage->syncs()->latest('id')->first();
+
+        return [
+            'pending' => ['backups' => $missing->clone()->count(), 'size' => (int) $missing->clone()->sum('backups.size')],
+            'last' => $last ? [
+                'id' => $last->id,
+                /** queued | running | success | failed */
+                'status' => $last->status,
+                'add_to_sources' => $last->add_to_sources,
+                'total' => $last->total,
+                'done' => $last->done,
+                'failed' => $last->failed,
+                'bytes_total' => $last->bytes_total,
+                'bytes_done' => $last->bytes_done,
+                'current' => $last->current,
+                'error' => $last->error,
+                'started_at' => $last->started_at,
+                'finished_at' => $last->finished_at,
+                'created_at' => $last->created_at,
+            ] : null,
+        ];
     }
 
     /**
