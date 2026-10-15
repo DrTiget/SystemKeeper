@@ -9,6 +9,7 @@ use App\Models\DatabaseConnection;
 use App\Models\Server;
 use App\Models\StorageSync;
 use App\Services\Backup\BackupManifest;
+use App\Services\Backup\ProgressStream;
 use App\Services\System\Updater;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -59,14 +60,16 @@ class SyncStorage implements ShouldQueue
 
         foreach ($backups as $backup) {
             $sync->update(['current' => $backup->path]);
+            $base = $sync->bytes_done;
             try {
-                $this->copy($backup, $target, $to, $manifest);
+                $this->copy($backup, $target, $to, $manifest, fn (int $bytes) => $sync->update(['bytes_done' => $base + min($bytes, (int) $backup->size)]));
                 $sync->increment('done');
                 $sources[$backup->source_type.':'.$backup->source_id] = $backup->source;
             } catch (Throwable $e) {
                 // бекап удалили, пока шла синхронизация (очистка старых) — копировать уже нечего
                 if (! Backup::whereKey($backup->id)->exists()) {
                     $sync->decrement('total');
+                    $sync->update(['bytes_done' => $base, 'bytes_total' => max(0, $sync->bytes_total - (int) $backup->size)]);
 
                     continue;
                 }
@@ -75,7 +78,7 @@ class SyncStorage implements ShouldQueue
                 $sync->increment('failed');
                 $errors[] = "{$backup->path}: {$error}";
             }
-            $sync->increment('bytes_done', (int) $backup->size);
+            $sync->update(['bytes_done' => $base + (int) $backup->size]);
         }
 
         foreach (array_filter($sources) as $source) {
@@ -103,16 +106,23 @@ class SyncStorage implements ShouldQueue
         ]);
     }
 
-    private function copy(Backup $backup, BackupStorage $target, Filesystem $to, BackupManifest $manifest): void
+    /** @param callable(int): void $onProgress сколько байт бекапа уже скопировано */
+    private function copy(Backup $backup, BackupStorage $target, Filesystem $to, BackupManifest $manifest, callable $onProgress): void
     {
         $from = $backup->copies->where('status', BackupCopy::SUCCESS)->where('storage_id', '!=', $target->id)->map->storage->filter()
             ->sortBy(fn (BackupStorage $s) => $s->type === BackupStorage::LOCAL ? 0 : 1)->first()
             ?? throw new RuntimeException('Бекап не найден ни в одном хранилище');
         $fs = $from->filesystem();
 
+        $copied = 0;
         foreach ($backup->files ?? [] as $file) {
             $path = $backup->path.'/'.$file['name'];
             $stream = $fs->readStream($path) ?: throw new RuntimeException("Нет файла {$file['name']} в «{$from->name}»");
+            $before = $copied;
+            ProgressStream::watch($stream, function (int $bytes) use (&$copied, $before, $onProgress) {
+                $copied = $before + $bytes;
+                $onProgress($copied);
+            });
             try {
                 $to->writeStream($path, $stream);
             } finally {
