@@ -10,6 +10,7 @@ import ScheduleFields from '@/components/ScheduleFields.vue'
 import SaveBar from '@/components/form/SaveBar.vue'
 import SegmentedControl from '@/components/form/SegmentedControl.vue'
 import SettingsSection from '@/components/form/SettingsSection.vue'
+import DiscoverModal from '@/components/servers/DiscoverModal.vue'
 import FileBrowserModal from '@/components/servers/FileBrowserModal.vue'
 import { btnClass, inputClass } from '@/lib/ui'
 import { unshownErrors, useUnsavedGuard } from '@/lib/unsaved'
@@ -68,6 +69,13 @@ function reset() {
 
 // Каталоги: файловый менеджер и ручной ввод
 const browserOpen = ref(false)
+const discoverOpen = ref(false)
+
+function applyDiscovery(found: { paths: string[]; excludes: string[] }) {
+  form.paths = compact([...form.paths, ...found.paths])
+  form.excludes = [...new Set([...form.excludes, ...found.excludes])]
+  discoverOpen.value = false
+}
 
 /** Убираем пути, которые уже входят в выбранные родительские каталоги. */
 function compact(paths: string[]) {
@@ -181,6 +189,7 @@ const onErrorOptions = [
         </ul>
         <p v-else class="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">Пока ничего не выбрано</p>
         <div class="flex flex-wrap gap-2">
+          <button type="button" :class="btnClass.outline" @click="discoverOpen = true"><Icon name="search" />Найти автоматически</button>
           <button type="button" :class="btnClass.outline" @click="browserOpen = true"><Icon name="folder" />Выбрать на сервере</button>
           <div class="flex min-w-60 flex-1 gap-2">
             <input v-model="newPath" placeholder="или путь вручную: /var/www" spellcheck="false" aria-label="Путь на сервере" :class="inputClass" class="font-mono" @keydown.enter.prevent="addPath" />
@@ -267,6 +276,7 @@ const onErrorOptions = [
     <SaveBar :dirty="dirty" :saving="saving" :saved="savedNotice" :error="formError" class="mt-6" @reset="reset" />
   </form>
 
+  <DiscoverModal v-if="discoverOpen" :server-id="serverId" :paths="form.paths" :excludes="form.excludes" @close="discoverOpen = false" @apply="applyDiscovery" />
   <FileBrowserModal v-if="browserOpen" :server-id="serverId" :selected="form.paths" title="Что копировать" @close="browserOpen = false" @apply="applyBrowser" />
 
   <Modal v-if="templatesOpen" wide title="Шаблоны команд" @close="templatesOpen = false">

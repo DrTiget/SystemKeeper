@@ -112,6 +112,12 @@ docker compose exec app php artisan user:create
 - Отпечаток хоста (`host_fingerprint`, SHA256 как в `ssh-keygen -l`) запоминается при первом успешном подключении; если ключ сервера потом изменится, проверка вернёт `failed` с ошибкой «Отпечаток хоста изменился». Смена `host` или `port` сбрасывает отпечаток.
 - Результат последней проверки — в `last_check: {status, error, checked_at}`. Таймауты — `SSH_CONNECT_TIMEOUT` (10 с) и `SSH_EXEC_TIMEOUT` (30 с).
 
+### Что бекапить: автопоиск
+
+`POST /servers/{id}/discover` — осмотр сервера по SSH (только чтение, до ~2 минут, не чаще 10 раз в минуту):
+`{info: {hostname, os, user, docker}, paths: [{path, category, reasons, inside, recommended, size}], excludes: [{pattern, reason}], databases: [{engine, where: local|docker, container, detail, supported, added}]}`.
+`category` — `system`, `apps`, `web`, `docker`, `docker_volumes`, `mail`; `inside` — путь найденного родительского каталога; `size` — байты (`du`, `null` — не успели посчитать); `added` — СУБД уже добавлена как база этого сервера. `502` — нет SSH, `422` — скрипт не выполнился.
+
 ### Настройки бекапа сервера
 
 Одни на сервер; пока не сохранены, `GET` отдаёт значения по умолчанию. Удаляются вместе с сервером. Сам запуск бекапов будет добавлен позже — сейчас хранятся только настройки.

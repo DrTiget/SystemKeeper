@@ -62,3 +62,11 @@ export interface DirListing {
   entries: FileEntry[]
   truncated: boolean
 }
+
+/** Что бекапить — POST /servers/{id}/discover */
+export interface Discovery {
+  info: Record<string, string>
+  paths: { path: string; category: string; reasons: string[]; inside: string | null; recommended: boolean; size: number | null }[]
+  excludes: { pattern: string; reason: string }[]
+  databases: { engine: string; where: 'local' | 'docker'; container: string | null; detail: string; supported: boolean; added: boolean }[]
+}

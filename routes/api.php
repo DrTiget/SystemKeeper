@@ -54,6 +54,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('servers/{server}/check', [ServerController::class, 'check']);
     Route::post('servers/{server}/reset-fingerprint', [ServerController::class, 'resetFingerprint']);
     Route::get('servers/{server}/files', [ServerFilesController::class, 'index'])->middleware('throttle:120,1');
+    Route::post('servers/{server}/discover', [ServerFilesController::class, 'discover'])->middleware('throttle:10,1');
     Route::get('backup/pre-command-templates', [BackupTemplateController::class, 'preCommands']);
     Route::get('servers/{server}/backup-settings', [ServerBackupSettingsController::class, 'show']);
     Route::match(['put', 'patch'], 'servers/{server}/backup-settings', [ServerBackupSettingsController::class, 'update']);
