@@ -34,7 +34,7 @@ class MonitorController extends Controller
         $request->validate([
             'project_id' => ['nullable', 'string', 'regex:/^(\d+|none)$/'],
             'status' => ['nullable', 'in:up,down,pending,paused'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:500'],
         ]);
 
         $page = Monitor::query()->with('project')
@@ -85,7 +85,7 @@ class MonitorController extends Controller
         $monitor = new Monitor($request->monitorData());
         $monitor->enabled = true;
 
-        return response()->json($this->payload($checker->check($this->withDefaults($monitor))));
+        return response()->json(['data' => $this->payload($checker->check($this->withDefaults($monitor)))]);
     }
 
     /** Проверить сейчас; результат записывается как обычная проверка. */
@@ -94,7 +94,7 @@ class MonitorController extends Controller
         $result = $checker->check($monitor);
         $recorder->record($monitor, $result);
 
-        return response()->json([...$this->payload($result), 'monitor' => $this->resource($monitor->refresh())->resolve()]);
+        return response()->json(['data' => [...$this->payload($result), 'monitor' => $this->resource($monitor->refresh())->resolve()]]);
     }
 
     /**

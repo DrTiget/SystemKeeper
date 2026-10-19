@@ -182,8 +182,8 @@ docker compose exec app php artisan user:create
 | GET | `/monitors/{id}` | Монитор |
 | PATCH | `/monitors/{id}` | Изменить часть полей; пауза — `{"enabled": false}` |
 | DELETE | `/monitors/{id}` | Удалить вместе с проверками и сбоями; `204` |
-| POST | `/monitors/test` | Разовая проверка по полям монитора без сохранения → `{status, response_ms, status_code, message}` |
-| POST | `/monitors/{id}/check` | Проверить сейчас и записать как проверку → то же и `monitor` |
+| POST | `/monitors/test` | Разовая проверка по полям монитора без сохранения → `{data: {status, response_ms, status_code, message}}` |
+| POST | `/monitors/{id}/check` | Проверить сейчас и записать как проверку → то же и `data.monitor` |
 | GET | `/monitors/{id}/heartbeats` | Проверки за `period` = `24h` (по умолчанию), `7d`, `30d`, старые → новые; на `7d`/`30d` усреднены по часу / 3 часа (`down`, если в интервале была недоступность) |
 | GET | `/monitors/{id}/incidents` | Сбои, новые сверху (`per_page`); `ended_at: null` — сбой продолжается |
 

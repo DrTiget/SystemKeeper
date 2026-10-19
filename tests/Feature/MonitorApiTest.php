@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Monitoring\CheckResult;
 use App\Services\Monitoring\MonitorChecker;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Laravel\Sanctum\Sanctum;
 use Tests\Support\FakeMonitorChecker;
 use Tests\TestCase;
@@ -152,7 +153,7 @@ class MonitorApiTest extends TestCase
 
         $this->postJson('/api/v1/monitors/test', ['name' => 'x', 'type' => 'http', 'url' => 'https://example.com'])
             ->assertOk()
-            ->assertExactJson(['status' => 'down', 'response_ms' => 12, 'status_code' => null, 'message' => 'connection refused']);
+            ->assertExactJson(['data' => ['status' => 'down', 'response_ms' => 12, 'status_code' => null, 'message' => 'connection refused']]);
 
         $this->assertDatabaseCount('monitors', 0);
         $this->assertSame('GET', $fake->checked[0]->method);
@@ -166,16 +167,18 @@ class MonitorApiTest extends TestCase
 
         $this->postJson("/api/v1/monitors/{$m->id}/check")
             ->assertOk()
-            ->assertJsonPath('status', 'up')
-            ->assertJsonPath('response_ms', 80)
-            ->assertJsonPath('monitor.status', 'up')
-            ->assertJsonPath('monitor.recent.0.message', '200 OK')
-            ->assertJsonPath('monitor.uptime.h24', 100);
+            ->assertJsonPath('data.status', 'up')
+            ->assertJsonPath('data.response_ms', 80)
+            ->assertJsonPath('data.monitor.status', 'up')
+            ->assertJsonPath('data.monitor.recent.0.message', '200 OK')
+            ->assertJsonPath('data.monitor.uptime.h24', 100);
         $this->assertDatabaseCount('monitor_heartbeats', 1);
     }
 
     public function test_heartbeats_periods(): void
     {
+        // Середина часа и 3-часового интервала, чтобы точки не делились границей усреднения
+        $this->travelTo(Carbon::parse('2026-10-10 14:30:00', 'UTC'));
         $m = Monitor::factory()->create();
         $this->beat($m, 'up', now()->subHours(3), 100);
         $this->beat($m, 'down', now()->subHours(2), null);
@@ -202,5 +205,39 @@ class MonitorApiTest extends TestCase
             ->assertJsonPath('data.0.error', 'timeout')
             ->assertJsonPath('data.0.ended_at', null)
             ->assertJsonPath('data.1.error', 'старый');
+    }
+
+    /** Запросы ровно как во фронте (frontend/src/views/Monitor*.vue, ProjectDetailView.vue). */
+    public function test_frontend_requests_are_accepted(): void
+    {
+        $project = Project::factory()->create();
+        $this->fake(CheckResult::up(120, '200 OK', 200));
+
+        // defaultMonitorInput() из frontend/src/api/monitors.ts
+        $input = [
+            'name' => 'Сайт', 'project_id' => $project->id, 'type' => 'http', 'enabled' => true,
+            'url' => 'https://example.com', 'hostname' => null, 'port' => null,
+            'method' => 'GET', 'accepted_statuses' => ['200-299'], 'keyword' => null, 'keyword_invert' => false,
+            'headers' => [], 'body' => null, 'follow_redirects' => true, 'ignore_tls' => false, 'ssl_expiry_days' => 14,
+            'dns_record_type' => 'A', 'dns_resolver' => null, 'dns_expected' => null,
+            'interval' => 60, 'timeout' => 30, 'retries' => 1, 'retry_interval' => 60,
+        ];
+
+        $this->postJson('/api/v1/monitors/test', $input)->assertOk()->assertJsonPath('data.status', 'up');
+        $id = $this->postJson('/api/v1/monitors', $input)->assertCreated()->json('data.id');
+
+        $keys = ['id', 'project', 'status', 'status_since', 'last_check_at', 'last_response_ms', 'last_error',
+            'uptime' => ['h24', 'd7', 'd30'], 'avg_response_ms', 'ssl', 'recent', 'created_at', ...array_keys($input)];
+        $this->getJson('/api/v1/monitors?per_page=500')->assertOk()->assertJsonStructure(['data' => [$keys]]);
+        $this->getJson("/api/v1/monitors?project_id={$project->id}&per_page=100")->assertOk()->assertJsonCount(1, 'data');
+        $this->getJson("/api/v1/monitors/{$id}")->assertOk()->assertJsonStructure(['data' => $keys]);
+        $this->postJson("/api/v1/monitors/{$id}/check")->assertOk()->assertJsonStructure(['data' => ['status', 'response_ms', 'status_code', 'message', 'monitor']]);
+        foreach (['24h', '7d', '30d'] as $period) {
+            $this->getJson("/api/v1/monitors/{$id}/heartbeats?period={$period}")->assertOk();
+        }
+        $this->getJson("/api/v1/monitors/{$id}/incidents?per_page=10")->assertOk();
+        $this->patchJson("/api/v1/monitors/{$id}", ['enabled' => false])->assertOk()->assertJsonPath('data.status', 'paused');
+        $this->patchJson("/api/v1/monitors/{$id}", $input)->assertOk();
+        $this->deleteJson("/api/v1/monitors/{$id}")->assertSuccessful();
     }
 }
