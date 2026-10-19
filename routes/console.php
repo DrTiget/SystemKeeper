@@ -14,3 +14,5 @@ Schedule::command('monitors:dispatch-due')->everyMinute()->withoutOverlapping();
 Schedule::command('monitors:prune')->dailyAt('03:30');
 Schedule::command('metrics:dispatch-due')->everyMinute()->withoutOverlapping();
 Schedule::command('metrics:prune')->dailyAt('03:45');
+Schedule::command('alerts:evaluate')->everyMinute()->withoutOverlapping();
+Schedule::command('alerts:prune')->dailyAt('04:00');
