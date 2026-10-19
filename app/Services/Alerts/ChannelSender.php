@@ -44,7 +44,8 @@ class ChannelSender
     {
         $response = $this->settings->telegramHttp()->timeout(self::TIMEOUT)->asJson()->post($this->settings->telegramUrl("bot{$config['bot_token']}/sendMessage"), [
             'chat_id' => $config['chat_id'] ?? '',
-            'text' => mb_substr($message->text(), 0, 4000),
+            'text' => $message->telegramHtml(),
+            'parse_mode' => 'HTML',
             'disable_web_page_preview' => true,
         ]);
 
@@ -72,8 +73,9 @@ class ChannelSender
     {
         $body = json_encode([
             ...$payload,
-            'title' => $message->title,
+            'title' => $message->title(),
             'text' => $message->text(),
+            'markdown' => $message->markdown(),
             'url' => $message->url,
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
 

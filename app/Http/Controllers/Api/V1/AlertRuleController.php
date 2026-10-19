@@ -11,10 +11,12 @@ use App\Models\BackupStorage;
 use App\Models\DatabaseConnection;
 use App\Models\Monitor;
 use App\Models\Server;
+use App\Services\Alerts\RuleTestNotifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Правила алертов: что отслеживать, пороги, область, каналы и напоминания.
@@ -63,6 +65,20 @@ class AlertRuleController extends Controller
         $alertRule->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * Отправить пример уведомления по правилу во все его каналы (включая выключенные) — сразу, не через очередь.
+     * Всегда 200 с итогом по каждому каналу: `data.results[]` — `{channel: {id, name, type}, ok, error}`; ошибка канала
+     * не делает ответ ошибочным. Алерт не создаётся, `last_fired_at` не меняется. `422` — у правила нет каналов.
+     */
+    public function test(AlertRule $alertRule, RuleTestNotifier $notifier): JsonResponse
+    {
+        if (! $alertRule->channels()->exists()) {
+            throw ValidationException::withMessages(['channel_ids' => ['У правила нет каналов: добавьте хотя бы один, чтобы отправить тест']]);
+        }
+
+        return response()->json(['data' => ['results' => $notifier->send($alertRule->load('project'))]]);
     }
 
     private function query()

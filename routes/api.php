@@ -115,6 +115,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('alert-channels', AlertChannelController::class);
     Route::get('alert-rules/suggestions', [AlertRuleSuggestionController::class, 'index']);
     Route::post('alert-rules/suggestions/apply', [AlertRuleSuggestionController::class, 'apply']);
+    Route::post('alert-rules/{alert_rule}/test', [AlertRuleController::class, 'test'])->whereNumber('alert_rule')->middleware('throttle:10,1');
     Route::apiResource('alert-rules', AlertRuleController::class);
     Route::get('alerts/summary', [AlertController::class, 'summary']);
     Route::get('alerts', [AlertController::class, 'index']);

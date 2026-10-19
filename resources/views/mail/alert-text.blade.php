@@ -1,0 +1,4 @@
+{!! $alert->text() !!}
+
+--
+SystemKeeper

@@ -48,6 +48,39 @@ class AlertKinds
         self::STORAGE_FULL => ['objects' => ['storage'], 'threshold' => ['min' => 1, 'max' => 100]],
     ];
 
+    /**
+     * Подписи видов для условия правила: название, фраза перед порогом, единица, имеет ли смысл «держится N минут».
+     * Зеркало ALERT_KINDS из frontend/src/api/alerts.ts.
+     *
+     * @var array<string, array{0: string, 1: string|null, 2: string, 3: bool}>
+     */
+    private const LABELS = [
+        self::SERVER_CPU => ['Высокая загрузка CPU', 'CPU выше', '%', true],
+        self::SERVER_MEMORY => ['Мало памяти', 'Память занята больше', '%', true],
+        self::SERVER_DISK => ['Заканчивается место на диске', 'Диск заполнен больше', '%', false],
+        self::SERVER_LOAD => ['Высокая нагрузка (load average)', 'Load на ядро больше', '', true],
+        self::SERVER_UNREACHABLE => ['Сервер не отвечает', null, '', true],
+        self::MONITOR_DOWN => ['Монитор недоступен', null, '', true],
+        self::MONITOR_SSL => ['Истекает сертификат', 'Осталось меньше', 'дн.', false],
+        self::BACKUP_FAILED => ['Бекап не удался', null, '', false],
+        self::BACKUP_MISSING => ['Давно не было бекапа', 'Нет успешного бекапа дольше', 'ч', false],
+        self::STORAGE_FULL => ['Хранилище почти заполнено', 'Заполнено больше', '%', false],
+    ];
+
+    /** Условие правила одной строкой: «CPU выше 90% дольше 5 мин». Аналог describeCondition из frontend/src/api/alerts.ts. */
+    public static function describe(string $kind, ?float $threshold, int $duration): string
+    {
+        [$label, $thresholdLabel, $unit, $hasDuration] = self::LABELS[$kind] ?? [$kind, null, '', false];
+
+        $base = $label;
+        if ($thresholdLabel !== null && $threshold !== null) {
+            $value = str_replace('.', ',', (string) $threshold);
+            $base = "{$thresholdLabel} {$value}".($unit === '%' ? '%' : ($unit !== '' ? " {$unit}" : ''));
+        }
+
+        return $hasDuration && $duration > 0 ? "{$base} дольше {$duration} мин" : $base;
+    }
+
     /** @return list<string> */
     public static function all(): array
     {

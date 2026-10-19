@@ -172,7 +172,7 @@ class AlertChannelApiTest extends TestCase
         Http::assertSent(function (Request $request) {
             return $request->url() === 'https://api.telegram.org/bot123:SECRET/sendMessage'
                 && $request['chat_id'] === '-1001'
-                && str_contains($request['text'], 'Тестовое сообщение');
+                && $request['parse_mode'] === 'HTML' && str_contains($request['text'], 'Тестовое уведомление') && str_contains($request['text'], 'Канал «Дежурный чат» настроен');
         });
         $channel->refresh();
         $this->assertNotNull($channel->last_sent_at);
@@ -209,9 +209,10 @@ class AlertChannelApiTest extends TestCase
         $this->postJson("/api/v1/alert-channels/{$channel->id}/test")->assertOk()->assertJsonPath('data.ok', true);
 
         Mail::assertSent(AlertMail::class, function (AlertMail $mail) {
-            // письмо текстовое и отрисовывается
+            // письмо отрисовывается: HTML и текст
+            $mail->assertSeeInHtml('Канал «Почта» настроен');
             $mail->assertSeeInText('Канал «Почта» настроен');
-            $mail->assertHasSubject('[SystemKeeper] ✅ Тестовое сообщение SystemKeeper');
+            $mail->assertHasSubject('[ТЕСТ] Канал «Почта» настроен');
 
             return $mail->hasTo('a@example.com') && $mail->hasTo('b@example.com');
         });

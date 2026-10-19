@@ -240,9 +240,11 @@ docker compose exec app php artisan user:create
 
 Поля: `name`, `type` (`telegram`, `email`, `webhook`), `enabled`, `config`: `telegram` — `bot_token`, `chat_id`; `email` — `recipients` (до 20 адресов); `webhook` — `url` (http/https), `secret` (необязательный). Настройки хранятся в БД зашифрованно; в ответе секретов нет, только `has_token` (telegram) и `has_secret` (webhook). Если у существующего канала меняется `type`, прежние настройки отбрасываются и новые обязательны. В ответе также `rules_count`, `last_sent_at`, `last_error` (ошибка последней отправки; успешная её сбрасывает).
 
-- **Telegram** — `sendMessage` Bot API с токеном бота в адресе; текст и ссылка на объект одним сообщением.
-- **Почта** — текстовое письмо через настроенный `MAIL_*`, тема `[SystemKeeper] …`.
-- **Вебхук** — `POST` JSON `{event, alert: {id, status, severity, message, rule, object, started_at, resolved_at}, title, text, url}`; `event` — `firing`, `repeat`, `resolved` или `test`. Если задан `secret`, в заголовке `X-Signature` — HMAC-SHA256 (hex) от точного тела запроса. Успех — любой `2xx`.
+Формат один для всех событий (сработал, напоминание, решено, тест) — его строит `App\Services\Alerts\AlertMessage`, каналы только отрисовывают: эмодзи и цвет по статусу (🔴 критично, 🟠 предупреждение, ✅ решено, 🧪 тест), заголовок, сообщение, объект, проект, правило, условие, начало и длительность, ссылка на объект (по `APP_URL`).
+
+- **Telegram** — `sendMessage` Bot API с токеном бота в адресе, `parse_mode=HTML`, `disable_web_page_preview`. Жирный заголовок, сообщение, строки «Объект / Проект / Правило / Начало / Длительность», ссылка «Открыть в SystemKeeper». Пользовательские данные экранируются (`&`, `<`, `>`), длинные значения обрезаются, чтобы уложиться в лимит 4096 знаков.
+- **Почта** — письмо multipart: HTML (таблицы и inline-стили, цветная полоса по статусу, крупное сообщение, таблица деталей, кнопка «Открыть в SystemKeeper», подвал с правилом; в тёмной теме не ломается) и текстовая версия. Тема: `[КРИТИЧНО] Сервер web-1: CPU 97%`, `[ПРЕДУПРЕЖДЕНИЕ] …`, `[КРИТИЧНО · НЕ РЕШЕНО] …`, `[РЕШЕНО] …`, `[ТЕСТ] …`. Отправка через SMTP из «Настройки → Уведомления» или `MAIL_*`.
+- **Вебхук** — `POST` JSON `{event, alert: {id, status, severity, message, rule, object, started_at, resolved_at}, title, text, markdown, url}`; `text` — простой текст, `markdown` — то же в Markdown (пользовательские данные экранированы) для Slack, n8n и т. п.; `event` — `firing`, `repeat`, `resolved` или `test`. Если задан `secret`, в заголовке `X-Signature` — HMAC-SHA256 (hex) от точного тела запроса. Успех — любой `2xx`.
 - Токен бота и секрет вырезаются из сообщений об ошибках (в том числе сетевых).
 
 ### Правила
@@ -254,6 +256,9 @@ docker compose exec app php artisan user:create
 | GET | `/alert-rules/{id}` | Правило |
 | PATCH | `/alert-rules/{id}` | Изменить часть полей; включить/выключить — `{"enabled": false}` |
 | DELETE | `/alert-rules/{id}` | Удалить вместе с алертами правила; `204` |
+| POST | `/alert-rules/{id}/test` | Тестовое уведомление по правилу → `{data: {results: [{channel: {id, name, type}, ok, error}]}}`; не больше 10 в минуту |
+
+`POST /alert-rules/{id}/test` синхронно (не через очередь) шлёт во все каналы правила, в том числе выключенные, пример уведомления именно этого правила: вид, важность, условие, первый подходящий объект из области правила (нет объектов — «Пример объекта»), пометка «Тестовое уведомление», ссылка на правило. Алерт в БД не создаётся, `last_fired_at` не меняется; у канала обновляются `last_sent_at` / `last_error`. Ошибка канала — не ошибка запроса: ответ `200`, у канала `ok: false` и `error` (токены и секреты вырезаны). `422` (`errors.channel_ids`) — у правила нет каналов; `404` — правила нет; `429` — лимит.
 
 Поля: `name`, `enabled`, `kind`, `severity` (`warning`, `critical`), `threshold`, `duration` (минут, 0…1440), `project_id`, `targets` (`[{type, id}]`), `channel_ids`, `repeat_every` (минут, 5…43200; `null` — один раз), `notify_resolved`. В ответе дополнительно `project`, `objects` (targets с названиями), `channels` (`id`, `name`, `type`), `firing_count`, `last_fired_at`, `created_at`.
 

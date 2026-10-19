@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ALERT_KINDS, type AlertKind, type AlertRule, CHANNEL_TYPES, describeCondition, OBJECT_LABELS, SEVERITY } from '@/api/alerts'
+import { ALERT_KINDS, type AlertKind, type AlertRule, CHANNEL_TYPES, describeCondition, OBJECT_LABELS, type RuleTestResult, SEVERITY } from '@/api/alerts'
 import { api, ApiError } from '@/api/client'
 import Icon from '@/components/Icon.vue'
 import AlertsTabs from '@/components/alerts/AlertsTabs.vue'
+import RuleTestResults from '@/components/alerts/RuleTestResults.vue'
 import SuggestedRules from '@/components/alerts/SuggestedRules.vue'
 import { btnClass, formatDate } from '@/lib/ui'
 import { useProjectsStore } from '@/stores/projects'
@@ -39,6 +40,25 @@ async function toggle(r: AlertRule) {
   }
 }
 
+// Тестовое уведомление: итог показывается над списком, пока его не закроют
+const testingId = ref<number | null>(null)
+const testReport = ref<{ rule: string; results: RuleTestResult[]; error: string } | null>(null)
+
+async function sendTest(r: AlertRule) {
+  if (testingId.value !== null) return
+  testingId.value = r.id
+  testReport.value = null
+  try {
+    const results = (await api<{ data: { results: RuleTestResult[] } }>(`/alert-rules/${r.id}/test`, { method: 'POST' })).data.results
+    testReport.value = { rule: r.name, results, error: '' }
+  } catch (e) {
+    const message = e instanceof ApiError ? (Object.values(e.errors).flat()[0] ?? e.message) : 'Не удалось отправить тест'
+    testReport.value = { rule: r.name, results: [], error: message }
+  } finally {
+    testingId.value = null
+  }
+}
+
 /** Правила по группам: Серверы / Аптайм / Бекапы */
 const groups = computed(() => {
   const order = ['Серверы', 'Аптайм', 'Бекапы'] as const
@@ -69,6 +89,13 @@ const starters: AlertKind[] = ['monitor_down', 'server_unreachable', 'server_dis
     <p v-if="loadError" class="text-sm text-destructive">{{ loadError }}</p>
     <!-- Пока правил нет — главный экран; иначе — над списком -->
     <SuggestedRules v-if="loaded && !loadError" :main="!items.length" @applied="load" @loaded="suggestionsCount = $event" />
+    <div v-if="testReport" class="grid gap-2 rounded-xl border bg-card p-4">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="text-sm font-semibold">Тест правила «{{ testReport.rule }}»</h3>
+        <button type="button" class="text-muted-foreground hover:text-foreground" title="Закрыть" aria-label="Закрыть" @click="testReport = null"><Icon name="x" class="size-4" /></button>
+      </div>
+      <RuleTestResults :results="testReport.results" :error="testReport.error" />
+    </div>
     <p v-if="!loaded" class="flex items-center gap-2 text-sm text-muted-foreground"><Icon name="loader" class="animate-spin" />Загрузка…</p>
 
     <template v-else-if="items.length">
@@ -83,7 +110,7 @@ const starters: AlertKind[] = ['monitor_down', 'server_unreachable', 'server_dis
                 <th class="hidden w-[28%] px-4 py-3 font-medium md:table-cell">Где</th>
                 <th class="hidden w-40 px-4 py-3 font-medium lg:table-cell">Куда</th>
                 <th class="w-44 px-4 py-3 font-medium">Сейчас</th>
-                <th class="w-10 px-2" />
+                <th class="w-24 px-2"><span class="sr-only">Действия</span></th>
               </tr>
             </thead>
             <tbody class="divide-y">
@@ -120,7 +147,19 @@ const starters: AlertKind[] = ['monitor_down', 'server_unreachable', 'server_dis
                   </RouterLink>
                   <span v-else class="text-xs text-muted-foreground">{{ r.last_fired_at ? `было ${formatDate(r.last_fired_at)}` : 'не срабатывало' }}</span>
                 </td>
-                <td class="px-2 text-right text-muted-foreground"><Icon name="chevron-right" class="inline size-4" /></td>
+                <td class="px-2 text-right whitespace-nowrap text-muted-foreground" @click.stop>
+                  <button
+                    type="button"
+                    class="inline-flex size-8 items-center justify-center rounded-md hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+                    :title="r.channels.length ? 'Отправить тест' : 'Сначала выберите канал'"
+                    aria-label="Отправить тест"
+                    :disabled="!r.channels.length || testingId !== null"
+                    @click="sendTest(r)"
+                  >
+                    <Icon :name="testingId === r.id ? 'loader' : 'send'" class="size-4" :class="testingId === r.id && 'animate-spin'" />
+                  </button>
+                  <Icon name="chevron-right" class="inline size-4" />
+                </td>
               </tr>
             </tbody>
           </table>

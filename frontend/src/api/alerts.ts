@@ -15,6 +15,7 @@ import type { ProjectRef } from './projects'
  *   GET    /alert-rules/{id}, PATCH, DELETE — PATCH {enabled} — включить/выключить
  *   GET    /alert-rules/suggestions         — AlertSuggestion[]: рекомендуемые правила, которых ещё нет
  *   POST   /alert-rules/suggestions/apply   — { keys, channel_ids } → AlertRule[] (201)
+ *   POST   /alert-rules/{id}/test           — пример уведомления по правилу во все его каналы → { results: RuleTestResult[] }; 422 — у правила нет каналов
  * Срабатывания
  *   GET    /alerts?status=firing|resolved&project_id=&severity=&per_page=&page= — Alert[] (+ meta пагинации)
  *   GET    /alerts/summary                  — { firing: number, critical: number } — для меню
@@ -116,6 +117,13 @@ export interface AlertSuggestion extends Omit<AlertRuleInput, 'enabled' | 'chann
   objects_count: number
 }
 
+/** Итог тестовой отправки по правилу для одного канала */
+export interface RuleTestResult {
+  channel: { id: number; name: string; type: ChannelType }
+  ok: boolean
+  error: string | null
+}
+
 export interface Alert {
   id: number
   rule: { id: number; name: string; kind: AlertKind }
@@ -189,6 +197,13 @@ export function describeCondition(r: Pick<AlertRuleInput, 'kind' | 'threshold' |
   const k = ALERT_KINDS[r.kind]
   const base = k.thresholdLabel && r.threshold !== null ? `${k.thresholdLabel} ${r.threshold}${k.unit === '%' ? '%' : k.unit ? ` ${k.unit}` : ''}` : k.label
   return k.duration && r.duration ? `${base} дольше ${r.duration} мин` : base
+}
+
+/** Строка итога тестовой отправки: «Telegram „Ops“ — отправлено», «Почта — ошибка: …» */
+export function describeTestResult(r: RuleTestResult): string {
+  const type = CHANNEL_TYPES[r.channel.type].label
+  const name = r.channel.name === type ? type : `${type} „${r.channel.name}“`
+  return r.ok ? `${name} — отправлено` : `${name} — ошибка: ${r.error ?? 'не удалось отправить'}`
 }
 
 /** Ссылка на объект алерта */

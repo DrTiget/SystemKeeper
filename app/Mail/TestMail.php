@@ -2,22 +2,15 @@
 
 namespace App\Mail;
 
-use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Content;
-use Illuminate\Mail\Mailables\Envelope;
+use App\Services\Alerts\AlertMessage;
 
 /**
- * Тестовое письмо из «Настройки → Уведомления» (шаблон resources/views/mail/test.blade.php).
+ * Тестовое письмо из «Настройки → Уведомления»: то же оформление, что у уведомлений об алертах.
  */
-class TestMail extends Mailable
+class TestMail extends AlertMail
 {
-    public function envelope(): Envelope
+    public function __construct()
     {
-        return new Envelope(subject: '[SystemKeeper] Тестовое письмо');
-    }
-
-    public function content(): Content
-    {
-        return new Content(text: 'mail.test', with: ['url' => rtrim((string) config('app.url'), '/') ?: null]);
+        parent::__construct(AlertMessage::mailCheck());
     }
 }

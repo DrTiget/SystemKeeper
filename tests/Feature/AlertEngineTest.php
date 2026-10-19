@@ -186,7 +186,7 @@ class AlertEngineTest extends TestCase
         $this->assertSame(Alert::RESOLVED, $alert->status);
         $this->assertEquals(now(), $alert->resolved_at);
         $this->assertSame(['firing', 'resolved'], AlertNotification::orderBy('id')->pluck('event')->all());
-        Http::assertSent(fn (Request $r) => $r['event'] === 'resolved' && str_contains($r['title'], 'Решено') && $r['alert']['status'] === 'resolved' && str_contains($r['text'], 'длилось 7 мин'));
+        Http::assertSent(fn (Request $r) => $r['event'] === 'resolved' && str_contains($r['title'], 'Решено') && $r['alert']['status'] === 'resolved' && str_contains($r['text'], 'Длительность: 7 мин') && str_contains($r['markdown'], '**Длительность:** 7 мин'));
         $this->assertSame(0, AlertPending::count());
     }
 
@@ -307,10 +307,10 @@ class AlertEngineTest extends TestCase
         $this->metrics($server, ['cpu' => 10.0]);
         $this->run_();
 
-        Http::assertSent(fn (Request $r) => str_contains($r->url(), '/bot1:A/sendMessage') && str_starts_with($r['text'], '🔴 Критично: CPU 97%') && str_contains($r['text'], 'Сервер «web-1»'));
-        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'sendMessage') && str_starts_with($r['text'], '✅ Решено: CPU 97%'));
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), '/bot1:A/sendMessage') && $r['parse_mode'] === 'HTML' && str_starts_with($r['text'], '🔴 <b>Критично: Сервер web-1</b>') && str_contains($r['text'], 'CPU 97%') && str_contains($r['text'], 'Объект: Сервер «web-1»'));
+        Http::assertSent(fn (Request $r) => str_contains($r->url(), 'sendMessage') && str_starts_with($r['text'], '✅ <b>Решено: Сервер web-1</b>'));
         Mail::assertSent(AlertMail::class, 2);
-        Mail::assertSent(AlertMail::class, fn ($m) => $m->hasTo('ops@example.com') && str_contains($m->envelope()->subject, 'Критично: CPU 97%'));
+        Mail::assertSent(AlertMail::class, fn ($m) => $m->hasTo('ops@example.com') && $m->envelope()->subject === '[КРИТИЧНО] Сервер web-1: CPU 97%');
         $this->assertSame(4, AlertNotification::where('ok', true)->count());
     }
 

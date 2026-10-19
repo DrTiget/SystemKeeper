@@ -8,7 +8,7 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 
 /**
- * Текстовое письмо об алерте (шаблон resources/views/mail/alert.blade.php).
+ * Письмо об алерте: HTML (resources/views/mail/alert.blade.php) и текстовая версия (alert-text.blade.php).
  */
 class AlertMail extends Mailable
 {
@@ -16,11 +16,11 @@ class AlertMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: '[SystemKeeper] '.$this->alert->title);
+        return new Envelope(subject: $this->alert->subject());
     }
 
     public function content(): Content
     {
-        return new Content(text: 'mail.alert');
+        return new Content(html: 'mail.alert', text: 'mail.alert-text');
     }
 }

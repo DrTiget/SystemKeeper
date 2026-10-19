@@ -11,6 +11,7 @@ import {
   describeCondition,
   OBJECT_LABELS,
   type ObjectType,
+  type RuleTestResult,
   SEVERITY,
   type Severity,
 } from '@/api/alerts'
@@ -19,6 +20,7 @@ import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
 import ProjectSelect from '@/components/ProjectSelect.vue'
 import ChannelFormModal from '@/components/alerts/ChannelFormModal.vue'
+import RuleTestResults from '@/components/alerts/RuleTestResults.vue'
 import SaveBar from '@/components/form/SaveBar.vue'
 import SegmentedControl from '@/components/form/SegmentedControl.vue'
 import SettingsSection from '@/components/form/SettingsSection.vue'
@@ -154,7 +156,7 @@ const repeat = computed({ get: () => form.repeat_every ?? 0, set: (v: number) =>
 
 const autoName = computed(() => describeCondition(form))
 
-async function save() {
+async function save(): Promise<boolean> {
   saving.value = true
   errors.value = {}
   formError.value = ''
@@ -166,13 +168,38 @@ async function save() {
     fill(res)
     savedNotice.value = true
     if (!id) router.replace({ name: 'alert-rules' })
+    return true
   } catch (e) {
     if (e instanceof ApiError && e.status === 422) {
       errors.value = e.errors
       formError.value = unshownErrors(e.errors, ['threshold', 'duration', 'targets', 'channel_ids', 'name'])
     } else formError.value = e instanceof ApiError ? e.message : 'Не удалось сохранить'
+    return false
   } finally {
     saving.value = false
+  }
+}
+
+// Тестовое уведомление по сохранённому правилу; несохранённые изменения сначала сохраняются
+const testing = ref(false)
+const testResults = ref<RuleTestResult[]>([])
+const testError = ref('')
+const testShown = ref(false)
+
+async function sendTest() {
+  testShown.value = false
+  testResults.value = []
+  testError.value = ''
+  testing.value = true
+  try {
+    if (dirty.value && !(await save())) return
+    testResults.value = (await api<{ data: { results: RuleTestResult[] } }>(`/alert-rules/${id}/test`, { method: 'POST' })).data.results
+    testShown.value = true
+  } catch (e) {
+    testError.value = e instanceof ApiError ? (Object.values(e.errors).flat()[0] ?? e.message) : 'Не удалось отправить тест'
+    testShown.value = true
+  } finally {
+    testing.value = false
   }
 }
 
@@ -202,8 +229,14 @@ const field = 'grid gap-1.5'
           <h2 class="text-xl font-semibold tracking-tight">{{ id ? rule?.name : 'Новое правило' }}</h2>
           <p class="text-sm text-muted-foreground">Что отслеживать, при каком условии и кому сообщать.</p>
         </div>
-        <button v-if="id" :class="btnClass.destructive" @click="deleteOpen = true"><Icon name="trash" />Удалить</button>
+        <div v-if="id" class="flex flex-wrap items-center gap-2">
+          <button type="button" :class="btnClass.outline" :disabled="testing || saving || !form.channel_ids.length" :title="form.channel_ids.length ? 'Пример уведомления по этому правилу — во все его каналы' : 'Сначала выберите канал'" @click="sendTest">
+            <Icon :name="testing ? 'loader' : 'send'" :class="testing && 'animate-spin'" />Отправить тест
+          </button>
+          <button :class="btnClass.destructive" @click="deleteOpen = true"><Icon name="trash" />Удалить</button>
+        </div>
       </header>
+      <RuleTestResults v-if="testShown" :results="testResults" :error="testError" class="rounded-xl border bg-card p-4" />
 
       <form class="rounded-xl border bg-card p-6 shadow-xs" @submit.prevent="save">
         <SettingsSection title="Что отслеживать">
