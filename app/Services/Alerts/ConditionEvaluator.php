@@ -130,7 +130,7 @@ class ConditionEvaluator
             return [null, ''];
         }
 
-        return [$worst[1] > $rule->threshold, "Диск {$worst[0]} заполнен на ".$this->number($worst[1]).'%'.$this->lasting($rule)];
+        return [$worst[1] > $rule->threshold, "Диск «{$worst[0]}» заполнен на ".$this->number($worst[1]).'%'.$this->lasting($rule)];
     }
 
     /** Нагрузка за 5 минут на одно ядро. */

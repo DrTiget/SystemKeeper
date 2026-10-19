@@ -447,7 +447,7 @@ class AlertEngineTest extends TestCase
         $messages = Alert::with('rule')->get()->mapWithKeys(fn ($a) => [$a->rule->name => $a->message])->all();
         $this->assertSame([
             'mem' => 'Память занята на 93%',
-            'disk' => 'Диск /data заполнен на 91%',
+            'disk' => 'Диск «/data» заполнен на 91%',
             'load' => 'Нагрузка 3 на ядро (load5 12, ядер: 4)',
         ], $messages);
     }

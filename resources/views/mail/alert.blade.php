@@ -17,8 +17,8 @@
     @media (max-width: 620px) {
         .sk-wrap { width: 100% !important; }
         .sk-pad { padding-left: 20px !important; padding-right: 20px !important; }
-        .sk-label { display: block !important; width: 100% !important; padding-bottom: 0 !important; }
-        .sk-value { display: block !important; width: 100% !important; padding-top: 2px !important; }
+        .sk-label { display: block !important; width: auto !important; padding-right: 0 !important; padding-bottom: 0 !important; border-bottom: 0 !important; }
+        .sk-value { display: block !important; width: auto !important; padding-top: 2px !important; }
     }
     @media (prefers-color-scheme: dark) {
         .sk-page { background-color: #0f1115 !important; }

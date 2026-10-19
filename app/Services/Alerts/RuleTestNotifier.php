@@ -83,7 +83,7 @@ class RuleTestNotifier
         return match ($rule->kind) {
             AlertKinds::SERVER_CPU => 'CPU '.$percent(5).'%'.$lasting,
             AlertKinds::SERVER_MEMORY => 'Память занята на '.$percent(5).'%'.$lasting,
-            AlertKinds::SERVER_DISK => 'Диск / заполнен на '.$percent(3).'%',
+            AlertKinds::SERVER_DISK => 'Диск «/» заполнен на '.$percent(3).'%',
             AlertKinds::SERVER_LOAD => 'Нагрузка '.number_format(($threshold ?? 2) + 0.5, 2, ',', '').' на ядро'.$lasting,
             AlertKinds::SERVER_UNREACHABLE => "Сервер {$name} не отвечает: connection timed out",
             AlertKinds::MONITOR_DOWN => "{$name} недоступен: connection refused",

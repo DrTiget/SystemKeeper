@@ -29,7 +29,7 @@ class AlertResource extends JsonResource
                 'name' => $this->object_name,
                 'project' => $this->project ? ['id' => $this->project->id, 'name' => $this->project->name] : null,
             ],
-            /** «CPU 97% дольше 5 мин», «Диск / заполнен на 91%», «Сайт example.com недоступен: …» */
+            /** «CPU 97% дольше 5 мин», «Диск «/» заполнен на 91%», «Сайт example.com недоступен: …» */
             'message' => $this->message,
             'started_at' => $this->started_at,
             'resolved_at' => $this->resolved_at,
