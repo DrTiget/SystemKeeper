@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Services\System\UpdateChecker;
 use App\Services\System\Updater;
 use Illuminate\Http\JsonResponse;
@@ -39,7 +40,7 @@ class SystemController extends Controller
     /** Проверить новые релизы сейчас (только администратор). */
     public function check(Request $request): JsonResponse
     {
-        abort_unless($request->user()->is_admin, 403);
+        abort_unless($request->user() instanceof User && $request->user()->is_admin, 403);
         $this->checker->check();
 
         return response()->json(['data' => $this->payload()]);
@@ -48,7 +49,7 @@ class SystemController extends Controller
     /** Обновиться до последнего релиза (только администратор). Ход — в `GET /system/version`. */
     public function update(Request $request): JsonResponse
     {
-        abort_unless($request->user()->is_admin, 403);
+        abort_unless($request->user() instanceof User && $request->user()->is_admin, 403);
 
         $error = match (true) {
             ! $this->checker->updateAvailable() => 'Обновлений нет.',

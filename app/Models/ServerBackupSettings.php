@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Cron\CronExpression;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -15,6 +16,8 @@ use Illuminate\Support\Carbon;
 #[Fillable(['enabled', 'paths', 'excludes', 'schedule', 'pre_command', 'pre_command_timeout', 'pre_command_continue_on_error', 'storage_ids', 'keep_count', 'max_size'])]
 class ServerBackupSettings extends Model
 {
+    use Auditable;
+
     protected $table = 'server_backup_settings';
 
     protected function casts(): array

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\AlertResource;
 use App\Models\Alert;
 use App\Models\AlertRule;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -61,7 +62,7 @@ class AlertController extends Controller
         abort_unless($alert->isFiring(), 409, 'Алерт уже решён.');
 
         if (! $alert->acknowledged_at) {
-            $alert->forceFill(['acknowledged_at' => now(), 'acknowledged_by' => $request->user()->id])->save();
+            $alert->forceFill(['acknowledged_at' => now(), 'acknowledged_by' => $request->user() instanceof User ? $request->user()->id : null])->save();
         }
 
         return new AlertResource($this->query()->findOrFail($alert->id));

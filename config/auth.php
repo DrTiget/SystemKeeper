@@ -42,6 +42,11 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Приложения со статичным API-токеном (App\Providers\AuditServiceProvider)
+        'app' => [
+            'driver' => 'api-application',
+        ],
     ],
 
     /*

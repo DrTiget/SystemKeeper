@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
@@ -15,6 +16,8 @@ use Illuminate\Support\Str;
 #[Hidden(['token', 'token_hash'])]
 class BackupHook extends Model
 {
+    use Auditable;
+
     protected function casts(): array
     {
         return [

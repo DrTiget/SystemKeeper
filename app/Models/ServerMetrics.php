@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable(['server_id', 'enabled', 'interval', 'retention_days', 'disks_exclude', 'next_collect_at', 'last_attempt_at', 'collected_at', 'snapshot', 'error'])]
 class ServerMetrics extends Model
 {
+    use Auditable;
+
     public const OK = 'ok';
 
     public const STALE = 'stale';

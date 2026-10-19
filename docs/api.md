@@ -4,7 +4,7 @@
 
 ## Документация API (OpenAPI)
 
-Описание генерируется из кода пакетом [dedoc/scramble](https://scramble.dedoc.co): интерактивная страница — `/api/docs`, спецификация OpenAPI 3.1 — `/api/docs.json` (`php artisan scramble:export` — выгрузка в файл). В `APP_ENV=local` доступна всем, в остальных окружениях — только с `Authorization: Bearer <token>`. Авторизация в описании — Bearer (Sanctum).
+Описание генерируется из кода пакетом [dedoc/scramble](https://scramble.dedoc.co): интерактивная страница — `/api/docs`, спецификация OpenAPI 3.1 — `/api/docs.json` (`php artisan scramble:export` — выгрузка в файл). В `APP_ENV=local` доступна всем, в остальных окружениях — только с токеном пользователя или приложения. В интерфейсе — страница «Документация API» (`/api-docs`, ссылка из раздела «Приложения»): методы по разделам, параметры, тела запросов и ответов, выгрузка OpenAPI. Схемы авторизации в спецификации — Bearer и `X-Api-Key`.
 
 ## Ошибки API
 
@@ -30,6 +30,42 @@ docker compose exec app php artisan user:create
 | `GET /api/v1/auth/me` | Bearer | — | `200 {data: {id, name, email, is_admin, settings, created_at}}` |
 
 Токен передаётся заголовком `Authorization: Bearer <token>`. Без токена или с отозванным — `401 {"message": "Требуется авторизация."}`. Ошибки валидации — `422 {"message", "errors": {поле: [..]}}`.
+
+## API: приложения (токены для интеграций)
+
+Приложение — внешняя интеграция (CI, Grafana, скрипты) со статичным токеном `ska_…`. Создаёт администратор (раздел «Приложения»), токен показывается **один раз** — при создании и перевыпуске, в базе хранится только SHA-256. Запросы приложения: `Authorization: Bearer ska_…` или `X-Api-Key: ska_…`.
+
+Права — по разделам: `<раздел>:read` (GET) и `<раздел>:write` (всё остальное, включает read), `*:read`/`*:write` — все разделы. Разделы: `projects` (проекты и группы), `servers` (серверы, файлы, настройки бекапа), `databases`, `backups` (запуски, история, хуки, файлы бекапов), `storages`, `monitors`, `metrics`, `alerts` (каналы, правила, срабатывания), `system` (версия), `audit` (журнал действий). Без права — `403 «У приложения нет права servers:write.»`; неверный или отозванный токен, выключенное приложение — `401`.
+
+Приложению **недоступны** (`401`): `auth/*`, `profile/*` — это про сеанс человека; `users`, `settings/*`, `applications` — администрирование, иначе приложение могло бы выдать себе права или новый токен; `system/check` и `system/update` — `403` (только администратор-человек). Всё остальное приложение вызывает теми же методами, что и интерфейс: один набор маршрутов под `auth:sanctum,app` + middleware `scope:<раздел>`.
+
+| Метод и путь (администратор) | Тело | Ответ |
+|---|---|---|
+| `GET /applications` | — | `200 {data: [Application]}` |
+| `GET /applications/scopes` | — | `200 {data: {sections: [{key, label}], scopes: [..]}}` |
+| `POST /applications` | `{name, description?, is_active?, scopes: [..]}` | `201 {data: Application + token}` |
+| `GET /applications/{id}` | — | `200 {data: Application}` |
+| `PATCH /applications/{id}` | любые поля из POST | `200 {data: Application}` |
+| `DELETE /applications/{id}` | — | `204` |
+| `POST /applications/{id}/token` | — | `200 {data: Application + token}` — перевыпуск, старый токен перестаёт работать |
+| `DELETE /applications/{id}/token` | — | `200 {data: Application}` — отзыв, `has_token: false` |
+
+`Application`: `{id, name, description, is_active, scopes, has_token, token_prefix, token_created_at, last_used_at, last_used_ip, created_by: {id, name} | null, created_at}`. Последнее использование обновляется не чаще раза в минуту (или при смене IP).
+
+## API: журнал действий
+
+Пишется всё: изменения сущностей через API (`<тип>.created|updated|deleted` с `{old, new}` или `{attributes}`), вход, выход и неудачный вход (`auth.login|logout|login_failed`), выпуск и отзыв токенов приложений, системные события — бекапы (`backup.queued|started|success|failed|deleted`), алерты (`alert.fired|resolved|acknowledged`), синхронизация хранилищ (`storage_sync.queued|success|failed`). Изменяющие запросы, после которых не изменилась ни одна сущность (проверки, тестовые отправки, настройки), пишутся событием `request` с методом, путём и телом запроса. Актор — `user`, `application` (с именем на момент действия) или `system`; для действий человека и приложения — IP и User-Agent. Секреты маскируются `***`: скрытые и зашифрованные поля моделей и любые ключи с `password`, `passphrase`, `secret`, `token`, `private_key`, `api_key`, `credential`, `authorization` на любой глубине.
+
+| Метод и путь | Доступ | Ответ |
+|---|---|---|
+| `GET /audit-logs` | администратор или приложение с `audit:read` | `200` пагинация `{data: [AuditLog], meta}`, новые первыми |
+| `GET /audit-logs/{id}` | то же | `200 {data: AuditLog}` |
+| `GET /settings/audit` | администратор | `200 {data: {retention_days}}` |
+| `PUT /settings/audit` | администратор | `{retention_days: 1–3650}` → `200` |
+
+Фильтры списка: `actor_type` (`user|application|system`), `actor_id`, `event` (точно или префикс `backup.*`), `subject_type` (`server`, `database`, `project`, `monitor`, `alert_rule`, `api_application`…), `subject_id`, `from`, `to` (дата `YYYY-MM-DD` — включительно, или дата-время), `search` (имя актора или объекта), `per_page` (до 200).
+
+`AuditLog`: `{id, actor_type, actor_id, actor_name, event, subject_type, subject_id, subject_label, changes, ip, user_agent, created_at}`. Старые записи удаляет `php artisan audit:prune` (планировщик, ежедневно в 04:15) по сроку хранения (по умолчанию 90 дней).
 
 ## API: профиль
 

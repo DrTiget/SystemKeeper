@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\Audit\Audit;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -18,7 +19,7 @@ class AuthController extends Controller
 {
     private const MAX_ATTEMPTS = 5;
 
-    public function login(LoginRequest $request): JsonResponse
+    public function login(LoginRequest $request, Audit $audit): JsonResponse
     {
         $throttleKey = Str::lower($request->string('email')).'|'.$request->ip();
 
@@ -34,6 +35,7 @@ class AuthController extends Controller
 
         if (! $user || ! Hash::check($request->string('password'), $user->password)) {
             RateLimiter::hit($throttleKey, 60);
+            $audit->record('auth.login_failed', $user, ['email' => (string) $request->string('email')], false, (string) $request->string('email'));
 
             throw ValidationException::withMessages([
                 'email' => ['Неверный email или пароль.'],
@@ -43,6 +45,7 @@ class AuthController extends Controller
         RateLimiter::clear($throttleKey);
 
         $token = $user->createToken($request->input('device_name') ?: 'api')->plainTextToken;
+        $audit->record('auth.login', $user, ['device_name' => $request->input('device_name') ?: 'api'], $user);
 
         return response()->json([
             'token' => $token,
@@ -50,8 +53,9 @@ class AuthController extends Controller
         ]);
     }
 
-    public function logout(Request $request): Response
+    public function logout(Request $request, Audit $audit): Response
     {
+        $audit->record('auth.logout', $request->user());
         $request->user()->currentAccessToken()->delete();
 
         return response()->noContent();

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use App\Services\Backup\StorageFilesystems;
 use App\Services\Storage\YandexDiskClient;
 use Illuminate\Contracts\Filesystem\Filesystem;
@@ -24,6 +25,8 @@ use Throwable;
 #[Hidden(['settings'])]
 class BackupStorage extends Model
 {
+    use Auditable;
+
     public const LOCAL = 'local';
 
     public const S3 = 's3';

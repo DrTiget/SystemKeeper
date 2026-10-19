@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use App\Services\Backup\Retention;
 use Cron\CronExpression;
 use Database\Factories\DatabaseConnectionFactory;
@@ -26,6 +27,8 @@ use Illuminate\Support\Carbon;
 #[Hidden(['password'])]
 class DatabaseConnection extends Model
 {
+    use Auditable;
+
     /** @use HasFactory<DatabaseConnectionFactory> */
     use HasFactory;
 

@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\AuditRequests;
+use App\Http\Middleware\EnsureApplicationScope;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -25,6 +27,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->redirectGuestsTo(fn () => null);
         // Секреты SSH и БД передаются как есть: у ключа значимы переводы строк, у паролей — пробелы
         $middleware->trimStrings(except: ['private_key', 'passphrase', 'password', 'admin.password']);
+        // Права приложений по разделам API и журнал изменяющих запросов
+        $middleware->alias(['scope' => EnsureApplicationScope::class]);
+        $middleware->api(append: [AuditRequests::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

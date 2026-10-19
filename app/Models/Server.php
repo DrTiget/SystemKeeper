@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use App\Services\Backup\Retention;
 use Database\Factories\ServerFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -23,6 +24,8 @@ use Illuminate\Database\Eloquent\Relations\MorphOne;
 #[Hidden(['private_key', 'passphrase', 'password'])]
 class Server extends Model
 {
+    use Auditable;
+
     /** @use HasFactory<ServerFactory> */
     use HasFactory;
 

@@ -50,7 +50,21 @@ return [
         /*
          * Description rendered on the home page of the API documentation (`/docs/api`).
          */
-        'description' => 'API сервиса бекапов и мониторинга SystemKeeper. Авторизация: Bearer-токен Sanctum (POST /auth/login).',
+        'description' => <<<'MD'
+            API сервиса бекапов и мониторинга SystemKeeper. Ответы — JSON, ошибки — `{"message", "errors"}`.
+
+            ## Авторизация
+
+            - **Приложения** (интеграции): администратор создаёт приложение в разделе «Приложения» и получает токен `ska_…` (показывается один раз).
+              Передавайте его заголовком `Authorization: Bearer ska_…` или `X-Api-Key: ska_…`.
+              Права задаются по разделам: `<раздел>:read` — GET-запросы, `<раздел>:write` — изменения (включает read), `*:read`/`*:write` — все разделы.
+              Разделы: `projects`, `servers`, `databases`, `backups`, `storages`, `monitors`, `metrics`, `alerts`, `system`, `audit`.
+              Без нужного права — `403`, с отозванным токеном или у выключенного приложения — `401`.
+              Приложению недоступны: вход и профиль, пользователи, настройки, управление приложениями, обновление системы.
+            - **Пользователи**: `POST /auth/login` → `Authorization: Bearer <id>|<token>`.
+
+            Все изменения записываются в журнал действий (`GET /audit-logs`) с указанием пользователя или приложения.
+            MD,
     ],
 
     'ui' => [

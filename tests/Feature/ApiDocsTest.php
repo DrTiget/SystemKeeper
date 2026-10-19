@@ -35,7 +35,9 @@ class ApiDocsTest extends TestCase
         $spec = $this->getJson('/api/docs.json')->assertOk()->json();
 
         $this->assertSame('3.1.0', $spec['openapi']);
-        $this->assertSame(['http' => ['type' => 'http', 'scheme' => 'bearer']], $spec['components']['securitySchemes']);
+        $this->assertSame(['http', 'apiKey'], array_keys($spec['components']['securitySchemes']));
+        $this->assertSame(['type' => 'apiKey', 'in' => 'header', 'name' => 'X-Api-Key'], array_diff_key($spec['components']['securitySchemes']['apiKey'], ['description' => 1]));
+        $this->assertStringContainsString('X-Api-Key', $spec['info']['description']);
 
         $documented = [];
         foreach ($spec['paths'] as $path => $methods) {

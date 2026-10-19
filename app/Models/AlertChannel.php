@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
@@ -15,6 +16,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 #[Hidden(['config'])]
 class AlertChannel extends Model
 {
+    use Auditable;
+
+    /** @var list<string> Не пишутся в журнал как изменения. */
+    public array $auditIgnore = ['last_sent_at', 'last_error'];
+
     public const TELEGRAM = 'telegram';
 
     public const EMAIL = 'email';

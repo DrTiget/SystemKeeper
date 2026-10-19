@@ -41,7 +41,9 @@ class AppServiceProvider extends ServiceProvider
         // Документация OpenAPI: /api/docs и /api/docs.json (доступ — App\Http\Middleware\ApiDocsAccess)
         Scramble::configure()
             ->withDocumentTransformers(function (OpenApi $openApi) {
-                $openApi->secure(SecurityScheme::http('bearer'));
+                // Bearer: токен пользователя (Sanctum) или приложения; X-Api-Key — альтернатива для токена приложения
+                $openApi->secure(SecurityScheme::http('bearer')->setDescription('Токен пользователя из POST /auth/login или токен приложения (ska_…).'));
+                $openApi->secure(SecurityScheme::apiKey('header', 'X-Api-Key')->setDescription('Токен приложения (ska_…).'));
             })
             ->expose(ui: 'api/docs', document: 'api/docs.json');
     }

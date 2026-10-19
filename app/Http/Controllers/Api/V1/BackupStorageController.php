@@ -11,6 +11,7 @@ use App\Models\BackupStorage;
 use App\Models\DatabaseConnection;
 use App\Models\ServerBackupSettings;
 use App\Models\StorageSync;
+use App\Models\User;
 use App\Services\Storage\YandexDiskException;
 use App\Services\System\Updater;
 use Illuminate\Http\JsonResponse;
@@ -101,7 +102,7 @@ class BackupStorageController extends Controller
         }
 
         $sync = $storage->syncs()->create([
-            'user_id' => $request->user()->id,
+            'user_id' => $request->user() instanceof User ? $request->user()->id : null,
             'status' => StorageSync::QUEUED,
             'add_to_sources' => (bool) ($data['add_to_sources'] ?? false),
         ]);

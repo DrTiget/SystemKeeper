@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Database\Factories\MonitorFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -20,6 +21,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class Monitor extends Model
 {
+    use Auditable;
+
     /** @use HasFactory<MonitorFactory> */
     use HasFactory;
 

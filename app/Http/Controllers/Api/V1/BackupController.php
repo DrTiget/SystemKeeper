@@ -10,6 +10,7 @@ use App\Models\DatabaseConnection;
 use App\Models\Project;
 use App\Models\ProjectGroup;
 use App\Models\Server;
+use App\Models\User;
 use App\Services\Backup\BackupLauncher;
 use App\Services\Backup\BackupManifest;
 use Illuminate\Database\Eloquent\Model;
@@ -174,7 +175,7 @@ class BackupController extends Controller
 
     private function start(Request $request, Model $source): JsonResponse
     {
-        $backup = app(BackupLauncher::class)->start($source, Backup::TRIGGER_MANUAL, $request->user());
+        $backup = app(BackupLauncher::class)->start($source, Backup::TRIGGER_MANUAL, $request->user() instanceof User ? $request->user() : null);
 
         return (new BackupResource($backup->load(['user', 'copies.storage'])))->response()->setStatusCode(202);
     }

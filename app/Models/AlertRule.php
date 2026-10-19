@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\Auditable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['name', 'enabled', 'kind', 'severity', 'threshold', 'duration', 'project_id', 'targets', 'repeat_every', 'notify_resolved', 'last_fired_at'])]
 class AlertRule extends Model
 {
+    use Auditable;
+
     public const WARNING = 'warning';
 
     public const CRITICAL = 'critical';
