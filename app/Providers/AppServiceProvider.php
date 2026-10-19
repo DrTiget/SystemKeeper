@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Models\DatabaseConnection;
 use App\Models\Server;
 use App\Models\User;
+use App\Services\Monitoring\MonitorChecker;
+use App\Services\Monitoring\NetworkMonitorChecker;
 use App\Services\Ssh\SshConnector;
 use App\Services\Ssh\SshConnectorInterface;
 use Dedoc\Scramble\Scramble;
@@ -22,6 +24,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(SshConnectorInterface::class, SshConnector::class);
+        $this->app->bind(MonitorChecker::class, NetworkMonitorChecker::class);
     }
 
     /**

@@ -10,3 +10,5 @@ Artisan::command('inspire', function () {
 
 Schedule::command('system:check-updates')->everyTenMinutes()->withoutOverlapping()->runInBackground();
 Schedule::command('backups:dispatch-due')->everyMinute()->withoutOverlapping();
+Schedule::command('monitors:dispatch-due')->everyMinute()->withoutOverlapping();
+Schedule::command('monitors:prune')->dailyAt('03:30');

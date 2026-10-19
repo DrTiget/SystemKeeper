@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\BackupHookController;
 use App\Http\Controllers\Api\V1\BackupStorageController;
 use App\Http\Controllers\Api\V1\BackupTemplateController;
 use App\Http\Controllers\Api\V1\DatabaseConnectionController;
+use App\Http\Controllers\Api\V1\MonitorController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\ProjectController;
 use App\Http\Controllers\Api\V1\ProjectGroupController;
@@ -50,6 +51,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('project-groups', ProjectGroupController::class);
     Route::apiResource('projects', ProjectController::class);
     Route::get('projects/{project}/backups', [BackupController::class, 'projectIndex']);
+
+    Route::post('monitors/test', [MonitorController::class, 'test'])->middleware('throttle:30,1');
+    Route::post('monitors/{monitor}/check', [MonitorController::class, 'check'])->middleware('throttle:60,1');
+    Route::get('monitors/{monitor}/heartbeats', [MonitorController::class, 'heartbeats']);
+    Route::get('monitors/{monitor}/incidents', [MonitorController::class, 'incidents']);
+    Route::apiResource('monitors', MonitorController::class);
 
     Route::post('servers/{server}/check', [ServerController::class, 'check']);
     Route::post('servers/{server}/reset-fingerprint', [ServerController::class, 'resetFingerprint']);

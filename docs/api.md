@@ -171,6 +171,31 @@ docker compose exec app php artisan user:create
 - Права администратора: `admin.mode = local` — root MySQL по сокету или пользователь `postgres` (от root или через `sudo -n`), в Docker — root-пароль из `MYSQL_ROOT_PASSWORD`/`MARIADB_ROOT_PASSWORD` или `POSTGRES_USER`; `credentials` — логин и пароль администратора, используются один раз и не сохраняются.
 - SQL и все пароли передаются через stdin команды, в аргументы процессов на сервере не попадают.
 
+## API: мониторинг доступности
+
+Мониторы проверяют сайты и сервисы по расписанию. Планировщик каждую минуту ставит в очередь проверки мониторов, которым подошло время (`monitors:dispatch-due`); проверки старше 30 дней удаляются раз в сутки (`monitors:prune`).
+
+| Метод | Путь | Описание |
+|---|---|---|
+| GET | `/monitors` | Список по названию; `project_id` (`none` — без проекта), `status` (`up`, `down`, `pending`, `paused`), `per_page` |
+| POST | `/monitors` | Создать (поля ниже); `201` |
+| GET | `/monitors/{id}` | Монитор |
+| PATCH | `/monitors/{id}` | Изменить часть полей; пауза — `{"enabled": false}` |
+| DELETE | `/monitors/{id}` | Удалить вместе с проверками и сбоями; `204` |
+| POST | `/monitors/test` | Разовая проверка по полям монитора без сохранения → `{status, response_ms, status_code, message}` |
+| POST | `/monitors/{id}/check` | Проверить сейчас и записать как проверку → то же и `monitor` |
+| GET | `/monitors/{id}/heartbeats` | Проверки за `period` = `24h` (по умолчанию), `7d`, `30d`, старые → новые; на `7d`/`30d` усреднены по часу / 3 часа (`down`, если в интервале была недоступность) |
+| GET | `/monitors/{id}/incidents` | Сбои, новые сверху (`per_page`); `ended_at: null` — сбой продолжается |
+
+Поля монитора: `name`, `project_id`, `type` (`http`, `tcp`, `ping`, `dns`), `enabled`; `http` — `url`, `method`, `accepted_statuses` («200-299», «301»), `keyword` и `keyword_invert`, `headers` (`[{name, value}]`), `body`, `follow_redirects`, `ignore_tls`, `ssl_expiry_days`; `tcp`/`ping`/`dns` — `hostname` (у `tcp` ещё `port`); `dns` — `dns_record_type` (`A`, `AAAA`, `CNAME`, `MX`, `TXT`, `NS`), `dns_resolver` (IP; пусто — системный), `dns_expected`; общие — `interval` (20…86400 с), `timeout`, `retries` (0…10), `retry_interval`.
+
+В ответе дополнительно: `status` (`up`, `down`, `pending`, `paused`), `status_since`, `last_check_at`, `last_response_ms`, `last_error`, `uptime` (`h24`, `d7`, `d30`, %; `null` — нет данных), `avg_response_ms` (за 24 часа), `ssl` (`valid_to`, `issuer`, `days_left`; только https), `recent` (до 50 последних проверок: `at`, `status`, `response_ms`, `status_code`, `message`).
+
+- Монитор становится `down`, когда неудач подряд больше `retries` (0 — сразу); пока они копятся, статус `pending`, а следующая проверка — через `retry_interval`. Первая ошибка сбоя сохраняется в инциденте; первый успех закрывает его.
+- Uptime — доля `up` среди `up` и `down`; повторные проверки (`pending`) не учитываются.
+- Сертификат: истёкший — `down` (если не `ignore_tls`); истекающий раньше чем через `ssl_expiry_days` — монитор `up` с предупреждением в `message`.
+- Значения заголовков хранятся в БД зашифрованно и не попадают в журнал и сообщения проверок; логин и пароль из адреса в текстах ошибок вырезаются.
+
 ## API: запуски бекапов
 
 Бекап выполняется в очереди `backups` (отдельный воркер `backups` в `compose.yaml`, задача — до 4 часов). Файлы — в хранилище источника (см. «Диски и облака»); у локального — на диске `backups` (`storage/app/backups/{servers|databases}/{id}/{дата}-{id бекапа}/`).
