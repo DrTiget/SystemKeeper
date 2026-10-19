@@ -161,19 +161,92 @@ class MonitorApiTest extends TestCase
         $this->postJson('/api/v1/monitors/test', ['type' => 'tcp'])->assertUnprocessable();
     }
 
-    public function test_check_now_records_heartbeat(): void
+    public function test_check_now_does_not_record_anything(): void
     {
-        $this->fake(CheckResult::up(80, '200 OK', 200));
-        $m = Monitor::factory()->create();
+        $this->fake(CheckResult::down('timeout', 80));
+        $m = Monitor::factory()->create(['status' => 'up', 'retries' => 0]);
+        $this->beat($m, 'up', now()->subMinute());
 
         $this->postJson("/api/v1/monitors/{$m->id}/check")
             ->assertOk()
-            ->assertJsonPath('data.status', 'up')
+            ->assertJsonPath('data.status', 'down')
             ->assertJsonPath('data.response_ms', 80)
+            ->assertJsonPath('data.message', 'timeout')
             ->assertJsonPath('data.monitor.status', 'up')
-            ->assertJsonPath('data.monitor.recent.0.message', '200 OK')
-            ->assertJsonPath('data.monitor.uptime.h24', 100);
+            ->assertJsonCount(1, 'data.monitor.recent');
+
         $this->assertDatabaseCount('monitor_heartbeats', 1);
+        $this->assertDatabaseCount('monitor_incidents', 0);
+        $m->refresh();
+        $this->assertSame('up', $m->status);
+        $this->assertNull($m->last_check_at);
+        $this->assertNull($m->last_error);
+    }
+
+    public function test_heartbeat_ids_in_recent_and_24h_but_not_averaged(): void
+    {
+        $m = Monitor::factory()->create();
+        $this->beat($m, 'up', now()->subHour());
+        $id = MonitorHeartbeat::first()->id;
+
+        $this->getJson("/api/v1/monitors/{$m->id}")->assertJsonPath('data.recent.0.id', $id);
+        $this->getJson("/api/v1/monitors/{$m->id}/heartbeats")->assertJsonPath('data.0.id', $id);
+        $this->getJson("/api/v1/monitors/{$m->id}/heartbeats?period=7d")->assertJsonPath('data.0.id', null);
+    }
+
+    public function test_delete_single_heartbeat_keeps_status_and_recalculates_stats(): void
+    {
+        $m = Monitor::factory()->create(['status' => 'down']);
+        $this->beat($m, 'down', now()->subHour(), null);
+        $this->beat($m, 'up', now()->subMinutes(30));
+        $other = Monitor::factory()->create();
+        $this->beat($other, 'up', now());
+        $down = MonitorHeartbeat::where('monitor_id', $m->id)->where('status', 'down')->first();
+
+        $this->deleteJson("/api/v1/monitors/{$other->id}/heartbeats/{$down->id}")->assertNotFound();
+        $this->assertDatabaseCount('monitor_heartbeats', 3);
+
+        $this->deleteJson("/api/v1/monitors/{$m->id}/heartbeats/{$down->id}")->assertNoContent();
+        $this->assertDatabaseCount('monitor_heartbeats', 2);
+        $this->getJson("/api/v1/monitors/{$m->id}")
+            ->assertJsonPath('data.status', 'down')
+            ->assertJsonPath('data.uptime.h24', 100)
+            ->assertJsonCount(1, 'data.recent');
+        $this->deleteJson("/api/v1/monitors/{$m->id}/heartbeats/{$down->id}")->assertNotFound();
+    }
+
+    public function test_clear_history_with_and_without_incidents(): void
+    {
+        $m = Monitor::factory()->create(['status' => 'down']);
+        $other = Monitor::factory()->create();
+        $this->beat($m, 'down', now()->subHour(), null);
+        $this->beat($m, 'up', now());
+        $this->beat($other, 'up', now());
+        MonitorIncident::create(['monitor_id' => $m->id, 'started_at' => now()->subHour()]);
+
+        $this->deleteJson("/api/v1/monitors/{$m->id}/heartbeats")->assertNoContent();
+        $this->assertDatabaseCount('monitor_heartbeats', 1);
+        $this->assertDatabaseCount('monitor_incidents', 1);
+        $this->getJson("/api/v1/monitors/{$m->id}")->assertJsonPath('data.status', 'down')->assertJsonPath('data.uptime.d30', null)->assertJsonPath('data.recent', []);
+
+        $this->beat($m, 'up', now());
+        $this->deleteJson("/api/v1/monitors/{$m->id}/heartbeats?incidents=1")->assertNoContent();
+        $this->assertDatabaseCount('monitor_incidents', 0);
+        $this->assertDatabaseCount('monitor_heartbeats', 1);
+        $this->deleteJson("/api/v1/monitors/{$m->id}/heartbeats?incidents=maybe")->assertUnprocessable();
+    }
+
+    public function test_delete_single_incident(): void
+    {
+        $m = Monitor::factory()->create();
+        $other = Monitor::factory()->create();
+        $i = MonitorIncident::create(['monitor_id' => $m->id, 'started_at' => now()->subHour()]);
+        MonitorIncident::create(['monitor_id' => $m->id, 'started_at' => now()->subDay()]);
+
+        $this->deleteJson("/api/v1/monitors/{$other->id}/incidents/{$i->id}")->assertNotFound();
+        $this->deleteJson("/api/v1/monitors/{$m->id}/incidents/{$i->id}")->assertNoContent();
+        $this->assertDatabaseCount('monitor_incidents', 1);
+        $this->deleteJson("/api/v1/monitors/{$m->id}/incidents/{$i->id}")->assertNotFound();
     }
 
     public function test_heartbeats_periods(): void

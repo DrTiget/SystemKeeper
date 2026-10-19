@@ -9,8 +9,11 @@ import type { ProjectRef } from './projects'
  * PATCH  /monitors/{id}                            — изменить (частичный MonitorInput; пауза — {enabled: false})
  * DELETE /monitors/{id}
  * POST   /monitors/test                            — разовая проверка по MonitorInput без сохранения → MonitorCheckResult
- * POST   /monitors/{id}/check                      — проверить сейчас → MonitorCheckResult (и записать как проверку)
+ * POST   /monitors/{id}/check                      — проверить сейчас → MonitorCheckResult (не записывается как проверка)
  * GET    /monitors/{id}/heartbeats?period=24h|7d|30d — проверки за период (для графика; на 7d/30d можно усреднять по интервалам)
+ * DELETE /monitors/{id}/heartbeats/{heartbeat}      — удалить одну проверку
+ * DELETE /monitors/{id}/heartbeats?incidents=1      — очистить историю проверок (incidents=1 — и сбои)
+ * DELETE /monitors/{id}/incidents/{incident}        — удалить сбой
  * GET    /monitors/{id}/incidents?per_page=        — сбои: периоды, когда монитор был недоступен
  */
 
@@ -69,6 +72,8 @@ export interface MonitorInput {
 }
 
 export interface Heartbeat {
+  /** null — усреднённая точка (7 и 30 дней), удалять нельзя */
+  id: number | null
   at: string
   status: HeartbeatStatus
   /** Время ответа, мс; null — ответа не было */

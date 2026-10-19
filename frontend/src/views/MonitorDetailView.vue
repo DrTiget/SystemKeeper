@@ -85,8 +85,6 @@ async function checkNow() {
   try {
     const res = (await api<{ data: MonitorCheckResult }>(`/monitors/${id}/check`, { method: 'POST' })).data
     lastCheck.value = res
-    if (res.monitor) monitor.value = res.monitor
-    loadHeartbeats()
   } catch (e) {
     actionError.value = e instanceof ApiError ? e.message : 'Не удалось проверить'
   } finally {
@@ -102,6 +100,39 @@ async function togglePause() {
     actionError.value = e instanceof ApiError ? e.message : 'Не удалось изменить'
   }
 }
+
+// Удаление проверок и сбоев — с подтверждением
+type Pending = { kind: 'beat'; beat: Heartbeat } | { kind: 'incident'; incident: MonitorIncident } | { kind: 'clear' }
+const pending = ref<Pending | null>(null)
+const pendingError = ref('')
+const pendingBusy = ref(false)
+const clearIncidents = ref(false)
+function ask(p: Pending) {
+  pending.value = p
+  pendingError.value = ''
+  clearIncidents.value = false
+}
+async function confirmPending() {
+  const p = pending.value
+  if (!p) return
+  pendingBusy.value = true
+  pendingError.value = ''
+  try {
+    if (p.kind === 'beat') await api(`/monitors/${id}/heartbeats/${p.beat.id}`, { method: 'DELETE' })
+    else if (p.kind === 'incident') await api(`/monitors/${id}/incidents/${p.incident.id}`, { method: 'DELETE' })
+    else await api(`/monitors/${id}/heartbeats${clearIncidents.value ? '?incidents=1' : ''}`, { method: 'DELETE' })
+    pending.value = null
+    await load()
+  } catch (e) {
+    pendingError.value = e instanceof ApiError ? e.message : 'Не удалось удалить'
+  } finally {
+    pendingBusy.value = false
+  }
+}
+const pendingTitle = computed(() => {
+  const p = pending.value
+  return p?.kind === 'beat' ? 'Удалить проверку?' : p?.kind === 'incident' ? 'Удалить сбой?' : 'Очистить историю?'
+})
 
 const deleteOpen = ref(false)
 const deleteError = ref('')
@@ -210,12 +241,13 @@ const tile = 'grid content-start gap-1 rounded-xl border bg-card p-4 shadow-xs'
       <section :class="card" class="grid gap-3">
         <div class="flex flex-wrap items-baseline justify-between gap-2">
           <h3 class="font-semibold">Последние проверки</h3>
-          <span class="text-xs text-muted-foreground">
-            каждые {{ formatInterval(monitor.interval) }}<template v-if="monitor.last_check_at"> · последняя {{ formatDate(monitor.last_check_at) }}</template>
+          <span class="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>каждые {{ formatInterval(monitor.interval) }}<template v-if="monitor.last_check_at"> · последняя {{ formatDate(monitor.last_check_at) }}</template></span>
+            <button class="font-medium text-primary hover:underline" @click="ask({ kind: 'clear' })">Очистить историю</button>
           </span>
         </div>
-        <HeartbeatBar :beats="monitor.recent" :slots="60" size="md" />
-        <div class="flex justify-between text-xs text-muted-foreground"><span>раньше</span><span>сейчас</span></div>
+        <HeartbeatBar :beats="monitor.recent" :slots="60" size="md" selectable @select="ask({ kind: 'beat', beat: $event })" />
+        <div class="flex justify-between text-xs text-muted-foreground"><span>раньше</span><span>нажмите на столбик, чтобы удалить проверку</span><span>сейчас</span></div>
       </section>
 
       <section :class="card" class="grid gap-4">
@@ -238,6 +270,7 @@ const tile = 'grid content-start gap-1 rounded-xl border bg-card p-4 shadow-xs'
                 <span v-if="i.error" class="text-xs break-words text-muted-foreground">{{ i.error }}</span>
               </span>
               <span class="text-sm whitespace-nowrap tabular-nums" :class="!i.ended_at && 'text-destructive'">{{ formatSpan(i.started_at, i.ended_at) }}</span>
+              <button class="rounded p-0.5 text-muted-foreground hover:text-destructive" title="Удалить сбой" @click="ask({ kind: 'incident', incident: i })"><Icon name="trash" class="size-4" /></button>
             </li>
           </ul>
           <p v-else class="flex items-center gap-2 text-sm text-muted-foreground"><Icon name="check" class="size-4 text-primary" />Сбоев не было</p>
@@ -270,6 +303,29 @@ const tile = 'grid content-start gap-1 rounded-xl border bg-card p-4 shadow-xs'
         </aside>
       </div>
     </template>
+
+    <Modal v-if="pending" :title="pendingTitle" @close="pending = null">
+      <template v-if="pending.kind === 'beat'">
+        <p class="flex flex-wrap items-center gap-x-2 text-sm">
+          <span class="size-2 rounded-full" :class="MONITOR_STATUS[pending.beat.status].dot" />
+          <span class="font-medium">{{ MONITOR_STATUS[pending.beat.status].label }}</span>
+          <span v-if="pending.beat.response_ms !== null" class="text-muted-foreground">· {{ pending.beat.response_ms }} мс</span>
+          <span class="text-muted-foreground">· {{ formatDate(pending.beat.at) }}</span>
+        </p>
+        <p v-if="pending.beat.message" class="mt-1 text-sm break-words text-muted-foreground">{{ pending.beat.message }}</p>
+        <p class="mt-3 text-sm text-muted-foreground">Проверка исчезнет из полосы и графика, аптайм пересчитается. Статус монитора не изменится.</p>
+      </template>
+      <p v-else-if="pending.kind === 'incident'" class="text-sm text-muted-foreground">Сбой от {{ formatDate(pending.incident.started_at) }} будет удалён из списка. Статус монитора не изменится.</p>
+      <template v-else>
+        <p class="text-sm text-muted-foreground">Все проверки «{{ monitor?.name }}» будут удалены: полоса и график опустеют, аптайм станет «—». Статус монитора не изменится.</p>
+        <label class="mt-3 flex items-center gap-2 text-sm"><input v-model="clearIncidents" type="checkbox" class="size-4" />Удалить и список сбоев</label>
+      </template>
+      <p v-if="pendingError" class="mt-3 text-sm text-destructive">{{ pendingError }}</p>
+      <div class="mt-6 flex justify-end gap-2">
+        <button :class="btnClass.outline" @click="pending = null">Отмена</button>
+        <button :class="btnClass.destructive" :disabled="pendingBusy" @click="confirmPending">Удалить</button>
+      </div>
+    </Modal>
 
     <Modal v-if="deleteOpen && monitor" title="Удалить монитор?" @close="deleteOpen = false">
       <p class="text-sm text-muted-foreground">«{{ monitor.name }}» и вся история его проверок будут удалены.</p>

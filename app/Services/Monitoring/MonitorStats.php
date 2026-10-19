@@ -60,6 +60,7 @@ class MonitorStats
                 ],
                 'avg_response_ms' => $r && $r->avg24 !== null ? (int) round($r->avg24) : null,
                 'recent' => ($recent[$monitor->id] ?? collect())->map(fn ($h) => [
+                    'id' => $h->id,
                     'at' => Carbon::parse($h->created_at, 'UTC'),
                     'status' => $h->status,
                     'response_ms' => $h->response_ms,

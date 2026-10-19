@@ -4,7 +4,8 @@ import { type Heartbeat, MONITOR_STATUS } from '@/api/monitors'
 import { formatDate } from '@/lib/ui'
 
 /** Полоса последних проверок: старые слева, новые справа; пустые ячейки — проверок ещё не было. */
-const props = withDefaults(defineProps<{ beats: Heartbeat[]; slots?: number; size?: 'sm' | 'md' }>(), { slots: 50, size: 'sm' })
+const props = withDefaults(defineProps<{ beats: Heartbeat[]; slots?: number; size?: 'sm' | 'md'; selectable?: boolean }>(), { slots: 50, size: 'sm' })
+const emit = defineEmits<{ select: [beat: Heartbeat] }>()
 
 const cells = computed(() => {
   const last = props.beats.slice(-props.slots)
@@ -21,8 +22,9 @@ const tip = computed(() => (hovered.value === null ? null : cells.value[hovered.
         v-for="(b, i) in cells"
         :key="i"
         class="h-full min-w-[3px] flex-1 rounded-[3px] transition-opacity"
-        :class="[b ? MONITOR_STATUS[b.status].bar : 'bg-muted', hovered !== null && hovered !== i && 'opacity-50']"
+        :class="[b ? MONITOR_STATUS[b.status].bar : 'bg-muted', hovered !== null && hovered !== i && 'opacity-50', selectable && b && 'cursor-pointer']"
         @mouseenter="hovered = b ? i : null"
+        @click="selectable && b && emit('select', b)"
       />
     </div>
     <div

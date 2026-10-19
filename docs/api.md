@@ -183,8 +183,11 @@ docker compose exec app php artisan user:create
 | PATCH | `/monitors/{id}` | Изменить часть полей; пауза — `{"enabled": false}` |
 | DELETE | `/monitors/{id}` | Удалить вместе с проверками и сбоями; `204` |
 | POST | `/monitors/test` | Разовая проверка по полям монитора без сохранения → `{data: {status, response_ms, status_code, message}}` |
-| POST | `/monitors/{id}/check` | Проверить сейчас и записать как проверку → то же и `data.monitor` |
-| GET | `/monitors/{id}/heartbeats` | Проверки за `period` = `24h` (по умолчанию), `7d`, `30d`, старые → новые; на `7d`/`30d` усреднены по часу / 3 часа (`down`, если в интервале была недоступность) |
+| POST | `/monitors/{id}/check` | Проверить сейчас → то же и `data.monitor` (текущий монитор). Результат только возвращается: проверка не записывается, статус, сбои и `last_check_at` не меняются |
+| GET | `/monitors/{id}/heartbeats` | Проверки за `period` = `24h` (по умолчанию), `7d`, `30d`, старые → новые; на `7d`/`30d` усреднены по часу / 3 часа (`down`, если в интервале была недоступность). У проверки есть `id` (в `recent` и на `24h`), у усреднённых он `null` |
+| DELETE | `/monitors/{id}/heartbeats/{heartbeat}` | Удалить одну проверку; `204`, `404` — если она у другого монитора |
+| DELETE | `/monitors/{id}/heartbeats` | Очистить историю проверок; `?incidents=1` — вместе со сбоями; `204` |
+| DELETE | `/monitors/{id}/incidents/{incident}` | Удалить один сбой; `204`, `404` — если он у другого монитора |
 | GET | `/monitors/{id}/incidents` | Сбои, новые сверху (`per_page`); `ended_at: null` — сбой продолжается |
 
 Поля монитора: `name`, `project_id`, `type` (`http`, `tcp`, `ping`, `dns`), `enabled`; `http` — `url`, `method`, `accepted_statuses` («200-299», «301»), `keyword` и `keyword_invert`, `headers` (`[{name, value}]`), `body`, `follow_redirects`, `ignore_tls`, `ssl_expiry_days`; `tcp`/`ping`/`dns` — `hostname` (у `tcp` ещё `port`); `dns` — `dns_record_type` (`A`, `AAAA`, `CNAME`, `MX`, `TXT`, `NS`), `dns_resolver` (IP; пусто — системный), `dns_expected`; общие — `interval` (20…86400 с), `timeout`, `retries` (0…10), `retry_interval`.
@@ -192,6 +195,7 @@ docker compose exec app php artisan user:create
 В ответе дополнительно: `status` (`up`, `down`, `pending`, `paused`), `status_since`, `last_check_at`, `last_response_ms`, `last_error`, `uptime` (`h24`, `d7`, `d30`, %; `null` — нет данных), `avg_response_ms` (за 24 часа), `ssl` (`valid_to`, `issuer`, `days_left`; только https), `recent` (до 50 последних проверок: `at`, `status`, `response_ms`, `status_code`, `message`).
 
 - Монитор становится `down`, когда неудач подряд больше `retries` (0 — сразу); пока они копятся, статус `pending`, а следующая проверка — через `retry_interval`. Первая ошибка сбоя сохраняется в инциденте; первый успех закрывает его.
+- Удаление проверок не меняет статус монитора; uptime и среднее время ответа считаются по оставшимся проверкам.
 - Uptime — доля `up` среди `up` и `down`; повторные проверки (`pending`) не учитываются.
 - Сертификат: истёкший — `down` (если не `ignore_tls`); истекающий раньше чем через `ssl_expiry_days` — монитор `up` с предупреждением в `message`.
 - Значения заголовков хранятся в БД зашифрованно и не попадают в журнал и сообщения проверок; логин и пароль из адреса в текстах ошибок вырезаются.

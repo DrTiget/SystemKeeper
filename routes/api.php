@@ -55,6 +55,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('monitors/test', [MonitorController::class, 'test'])->middleware('throttle:30,1');
     Route::post('monitors/{monitor}/check', [MonitorController::class, 'check'])->middleware('throttle:60,1');
     Route::get('monitors/{monitor}/heartbeats', [MonitorController::class, 'heartbeats']);
+    Route::delete('monitors/{monitor}/heartbeats', [MonitorController::class, 'clearHeartbeats']);
+    Route::delete('monitors/{monitor}/heartbeats/{heartbeat}', [MonitorController::class, 'destroyHeartbeat'])->whereNumber('heartbeat');
+    Route::delete('monitors/{monitor}/incidents/{incident}', [MonitorController::class, 'destroyIncident'])->whereNumber('incident');
     Route::get('monitors/{monitor}/incidents', [MonitorController::class, 'incidents']);
     Route::apiResource('monitors', MonitorController::class);
 

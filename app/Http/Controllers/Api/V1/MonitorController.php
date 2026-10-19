@@ -8,9 +8,9 @@ use App\Http\Resources\MonitorIncidentResource;
 use App\Http\Resources\MonitorResource;
 use App\Models\Monitor;
 use App\Models\MonitorHeartbeat;
+use App\Models\MonitorIncident;
 use App\Services\Monitoring\CheckResult;
 use App\Services\Monitoring\MonitorChecker;
-use App\Services\Monitoring\MonitorRecorder;
 use App\Services\Monitoring\MonitorStats;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -88,13 +88,42 @@ class MonitorController extends Controller
         return response()->json(['data' => $this->payload($checker->check($this->withDefaults($monitor)))]);
     }
 
-    /** Проверить сейчас; результат записывается как обычная проверка. */
-    public function check(Monitor $monitor, MonitorChecker $checker, MonitorRecorder $recorder): JsonResponse
+    /** Проверить сейчас. Результат только возвращается: проверка не записывается, статус и сбои монитора не меняются. */
+    public function check(Monitor $monitor, MonitorChecker $checker): JsonResponse
     {
         $result = $checker->check($monitor);
-        $recorder->record($monitor, $result);
 
-        return response()->json(['data' => [...$this->payload($result), 'monitor' => $this->resource($monitor->refresh())->resolve()]]);
+        return response()->json(['data' => [...$this->payload($result), 'monitor' => $this->resource($monitor)->resolve()]]);
+    }
+
+    /** Удаляет одну проверку (404, если она у другого монитора). Статус монитора не меняется. */
+    public function destroyHeartbeat(Monitor $monitor, MonitorHeartbeat $heartbeat): Response
+    {
+        abort_unless($heartbeat->monitor_id === $monitor->id, 404);
+        $heartbeat->delete();
+
+        return response()->noContent();
+    }
+
+    /** Очищает историю проверок монитора; `incidents=1` — вместе со сбоями. Статус монитора не меняется. */
+    public function clearHeartbeats(Request $request, Monitor $monitor): Response
+    {
+        $withIncidents = $request->validate(['incidents' => ['nullable', 'boolean']])['incidents'] ?? false;
+        $monitor->heartbeats()->delete();
+        if ($withIncidents) {
+            $monitor->incidents()->delete();
+        }
+
+        return response()->noContent();
+    }
+
+    /** Удаляет один сбой (404, если он у другого монитора). */
+    public function destroyIncident(Monitor $monitor, MonitorIncident $incident): Response
+    {
+        abort_unless($incident->monitor_id === $monitor->id, 404);
+        $incident->delete();
+
+        return response()->noContent();
     }
 
     /**
@@ -110,6 +139,7 @@ class MonitorController extends Controller
         if ($bucket === 0) {
             $data = $monitor->heartbeats()->where('created_at', '>=', $from)->orderBy('created_at')->orderBy('id')->get()
                 ->map(fn (MonitorHeartbeat $h) => [
+                    'id' => $h->id,
                     'at' => $h->created_at,
                     'status' => $h->status,
                     'response_ms' => $h->response_ms,
@@ -121,6 +151,7 @@ class MonitorController extends Controller
                 ->selectRaw('FLOOR(UNIX_TIMESTAMP(created_at) / ?) as b, SUM(status = ?) as up, SUM(status = ?) as down, AVG(response_ms) as ms', [$bucket, 'up', 'down'])
                 ->groupBy('b')->orderBy('b')->get()
                 ->map(fn ($r) => [
+                    'id' => null,
                     'at' => Carbon::createFromTimestampUTC((int) $r->b * $bucket),
                     'status' => $r->down > 0 ? 'down' : ($r->up > 0 ? 'up' : 'pending'),
                     'response_ms' => $r->ms !== null ? (int) round($r->ms) : null,
