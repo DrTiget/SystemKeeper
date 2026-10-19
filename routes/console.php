@@ -12,3 +12,5 @@ Schedule::command('system:check-updates')->everyTenMinutes()->withoutOverlapping
 Schedule::command('backups:dispatch-due')->everyMinute()->withoutOverlapping();
 Schedule::command('monitors:dispatch-due')->everyMinute()->withoutOverlapping();
 Schedule::command('monitors:prune')->dailyAt('03:30');
+Schedule::command('metrics:dispatch-due')->everyMinute()->withoutOverlapping();
+Schedule::command('metrics:prune')->dailyAt('03:45');

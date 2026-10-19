@@ -54,6 +54,17 @@ class Server extends Model
         return new Retention($s->storage_ids ?? [], $s->keep_count, $s->max_size);
     }
 
+    public function metrics(): HasOne
+    {
+        return $this->hasOne(ServerMetrics::class);
+    }
+
+    /** Настройки сбора ресурсов и последний снимок или значения по умолчанию (не сохраняются). */
+    public function metricsOrDefault(): ServerMetrics
+    {
+        return $this->metrics ?? (new ServerMetrics)->setRelation('server', $this)->forceFill(['server_id' => $this->id]);
+    }
+
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);

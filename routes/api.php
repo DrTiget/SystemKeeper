@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\ProjectGroupController;
 use App\Http\Controllers\Api\V1\ServerBackupSettingsController;
 use App\Http\Controllers\Api\V1\ServerController;
 use App\Http\Controllers\Api\V1\ServerFilesController;
+use App\Http\Controllers\Api\V1\ServerMetricsController;
 use App\Http\Controllers\Api\V1\SystemController;
 use App\Http\Controllers\Api\V1\TransferController;
 use App\Http\Controllers\Api\V1\UserController;
@@ -68,6 +69,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('backup/pre-command-templates', [BackupTemplateController::class, 'preCommands']);
     Route::get('servers/{server}/backup-settings', [ServerBackupSettingsController::class, 'show']);
     Route::match(['put', 'patch'], 'servers/{server}/backup-settings', [ServerBackupSettingsController::class, 'update']);
+    Route::get('metrics/servers', [ServerMetricsController::class, 'index']);
+    Route::get('servers/{server}/metrics', [ServerMetricsController::class, 'show']);
+    Route::get('servers/{server}/metrics/history', [ServerMetricsController::class, 'history']);
+    Route::match(['put', 'patch'], 'servers/{server}/metrics/settings', [ServerMetricsController::class, 'update']);
     Route::apiResource('servers', ServerController::class);
 
     Route::post('databases/{database}/provision-user', [DatabaseConnectionController::class, 'provisionUser']);
