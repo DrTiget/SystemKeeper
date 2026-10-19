@@ -39,6 +39,7 @@ class AlertEngineTest extends TestCase
 
         $this->travelTo(now()->startOfMinute());
         Http::fake(['hook.test/*' => Http::response('ok')]);
+        config(['mail.default' => 'smtp']);
     }
 
     private function channel(string $name = 'Вебхук', bool $enabled = true): AlertChannel

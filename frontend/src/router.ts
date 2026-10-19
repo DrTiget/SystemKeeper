@@ -33,6 +33,7 @@ const router = createRouter({
         { path: 'alerts/channels', name: 'alert-channels', component: () => import('@/views/AlertChannelsView.vue'), meta: { title: 'Алерты' } },
         { path: 'storages', name: 'storages', component: () => import('@/views/StoragesView.vue'), meta: { title: 'Диски и облака' } },
         { path: 'users', name: 'users', component: () => import('@/views/UsersView.vue'), meta: { title: 'Пользователи', admin: true } },
+        { path: 'settings/notifications', name: 'settings-notifications', component: () => import('@/views/NotificationSettingsView.vue'), meta: { title: 'Уведомления', admin: true } },
         { path: 'profile', name: 'profile', component: () => import('@/views/ProfileView.vue'), meta: { title: 'Профиль' } },
       ],
     },

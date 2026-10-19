@@ -34,7 +34,7 @@ const navGroups: { title: string; admin?: boolean; items: NavItem[] }[] = [
     ],
   },
   { title: 'Бекапы', items: [{ to: '/backups', label: 'Последние бекапы', icon: 'clock' }, { to: '/storages', label: 'Диски и облака', icon: 'archive' }] },
-  { title: 'Администрирование', admin: true, items: [{ to: '/users', label: 'Пользователи', icon: 'users', admin: true }] },
+  { title: 'Администрирование', admin: true, items: [{ to: '/users', label: 'Пользователи', icon: 'users', admin: true }, { to: '/settings/notifications', label: 'Уведомления', icon: 'send', admin: true }] },
 ]
 
 const visibleGroups = computed(() =>

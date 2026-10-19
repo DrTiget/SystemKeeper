@@ -28,6 +28,8 @@ class AlertChannelApiTest extends TestCase
 
         // каналами пользуются все пользователи, не только администраторы
         Sanctum::actingAs(User::factory()->create());
+        // почта настроена (MAIL_* из .env), иначе канал «Почта» создать нельзя
+        config(['mail.default' => 'smtp']);
     }
 
     private function telegram(array $config = []): AlertChannel

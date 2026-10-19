@@ -4,18 +4,20 @@ namespace App\Services\Alerts;
 
 use App\Mail\AlertMail;
 use App\Models\AlertChannel;
+use App\Services\Settings\NotificationSettings;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Mail;
 use RuntimeException;
 use Throwable;
 
 /**
- * Отправляет сообщение в канал: Telegram (Bot API), письмо или вебхук (JSON с подписью X-Signature).
+ * Отправляет сообщение в канал: Telegram (Bot API; адрес и прокси — из настроек уведомлений), письмо (SMTP из настроек или .env) или вебхук (JSON с подписью X-Signature).
  * Ошибка — RuntimeException с понятным текстом; секреты (токен бота, секрет вебхука) в тексте ошибки вырезаются.
  */
 class ChannelSender
 {
     private const TIMEOUT = 10;
+
+    public function __construct(private NotificationSettings $settings) {}
 
     /**
      * @param  array<string, mixed>  $payload  для вебхука: машиночитаемое описание события
@@ -40,7 +42,7 @@ class ChannelSender
     /** @param array<string, mixed> $config */
     private function telegram(array $config, AlertMessage $message): void
     {
-        $response = Http::timeout(self::TIMEOUT)->asJson()->post("https://api.telegram.org/bot{$config['bot_token']}/sendMessage", [
+        $response = $this->settings->telegramHttp()->timeout(self::TIMEOUT)->asJson()->post($this->settings->telegramUrl("bot{$config['bot_token']}/sendMessage"), [
             'chat_id' => $config['chat_id'] ?? '',
             'text' => mb_substr($message->text(), 0, 4000),
             'disable_web_page_preview' => true,
@@ -59,7 +61,7 @@ class ChannelSender
             throw new RuntimeException('Не указаны получатели');
         }
 
-        Mail::to($recipients)->send(new AlertMail($message));
+        $this->settings->sendMail($recipients, new AlertMail($message));
     }
 
     /**
@@ -95,6 +97,6 @@ class ChannelSender
             }
         }
 
-        return mb_substr($text, 0, 500);
+        return $this->settings->scrub($text);
     }
 }

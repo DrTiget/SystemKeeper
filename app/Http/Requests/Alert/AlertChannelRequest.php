@@ -3,8 +3,10 @@
 namespace App\Http\Requests\Alert;
 
 use App\Models\AlertChannel;
+use App\Services\Settings\NotificationSettings;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 /**
  * Создание (POST) и изменение (PATCH) канала — AlertChannelInput. Секреты (`bot_token`, `secret`) при изменении
@@ -58,6 +60,17 @@ class AlertChannelRequest extends FormRequest
             'config.url' => $type === AlertChannel::WEBHOOK ? [$each, 'string', 'max:2048', 'url:http,https'] : ['prohibited'],
             'config.secret' => $type === AlertChannel::WEBHOOK ? ['nullable', 'string', 'max:255'] : ['prohibited'],
         ];
+    }
+
+    /** Канал «Почта» нельзя создать (или перевести в этот тип), пока почта не настроена: письма уходили бы в никуда. */
+    public function after(): array
+    {
+        return [function (Validator $validator) {
+            $becomesEmail = $this->type() === AlertChannel::EMAIL && $this->channel()?->type !== AlertChannel::EMAIL;
+            if ($becomesEmail && ! app(NotificationSettings::class)->mailConfigured()) {
+                $validator->errors()->add('type', NotificationSettings::NOT_CONFIGURED);
+            }
+        }];
     }
 
     /** @return array<string, string> */

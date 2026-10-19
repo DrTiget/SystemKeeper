@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\BackupStorageController;
 use App\Http\Controllers\Api\V1\BackupTemplateController;
 use App\Http\Controllers\Api\V1\DatabaseConnectionController;
 use App\Http\Controllers\Api\V1\MonitorController;
+use App\Http\Controllers\Api\V1\NotificationSettingsController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\ProjectController;
 use App\Http\Controllers\Api\V1\ProjectGroupController;
@@ -49,6 +50,11 @@ Route::middleware('auth:sanctum')->prefix('profile')->group(function () {
 
 Route::middleware(['auth:sanctum', 'can:manage-users'])->group(function () {
     Route::apiResource('users', UserController::class);
+
+    Route::get('settings/notifications', [NotificationSettingsController::class, 'show']);
+    Route::match(['put', 'patch'], 'settings/notifications', [NotificationSettingsController::class, 'update']);
+    Route::post('settings/notifications/test-mail', [NotificationSettingsController::class, 'testMail'])->middleware('throttle:10,1');
+    Route::post('settings/notifications/test-telegram', [NotificationSettingsController::class, 'testTelegram'])->middleware('throttle:10,1');
 });
 
 Route::middleware('auth:sanctum')->group(function () {

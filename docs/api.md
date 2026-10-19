@@ -232,11 +232,11 @@ docker compose exec app php artisan user:create
 | Метод | Путь | Описание |
 |---|---|---|
 | GET | `/alert-channels` | Все каналы → `{data: AlertChannel[]}` (без пагинации) |
-| POST | `/alert-channels` | Создать; `201` |
+| POST | `/alert-channels` | Создать; `201`. Канал «Почта» при ненастроенной почте — `422` с текстом «Почта не настроена: Настройки → Уведомления» в `errors.type` |
 | GET | `/alert-channels/{id}` | Канал |
 | PATCH | `/alert-channels/{id}` | Изменить часть полей; секреты (`bot_token`, `secret`) пустыми или без поля оставляют прежние |
 | DELETE | `/alert-channels/{id}` | Удалить; канал пропадает из правил, журнал отправок в него удаляется; `204` |
-| POST | `/alert-channels/{id}/test` | Тестовое сообщение → `{data: {ok, error}}`, всегда `200` |
+| POST | `/alert-channels/{id}/test` | Тестовое сообщение → `{data: {ok, error}}`, всегда `200`; для канала «Почта» без настроенной почты — `422` |
 
 Поля: `name`, `type` (`telegram`, `email`, `webhook`), `enabled`, `config`: `telegram` — `bot_token`, `chat_id`; `email` — `recipients` (до 20 адресов); `webhook` — `url` (http/https), `secret` (необязательный). Настройки хранятся в БД зашифрованно; в ответе секретов нет, только `has_token` (telegram) и `has_secret` (webhook). Если у существующего канала меняется `type`, прежние настройки отбрасываются и новые обязательны. В ответе также `rules_count`, `last_sent_at`, `last_error` (ошибка последней отправки; успешная её сбрасывает).
 
@@ -292,6 +292,38 @@ docker compose exec app php artisan user:create
 | POST | `/alerts/{id}/ack` | Взять в работу: повторные уведомления прекращаются; повторный вызов ничего не меняет; `409`, если алерт уже решён |
 
 Алерт: `id`, `rule` (`id`, `name`, `kind`), `severity`, `status`, `object` (`type`, `id`, `name`, `project`), `message`, `started_at`, `resolved_at`, `acknowledged_at`, `acknowledged_by` (`id`, `name`), `notifications` (`channel`, `event`, `at`, `ok`, `error`). Название и проект объекта сохраняются в алерте, поэтому история остаётся после удаления объекта.
+
+## API: настройки уведомлений
+
+Как SystemKeeper отправляет письма и подключается к Telegram. **Только администратор** (остальным `403`). Хранится в таблице `settings`, значение зашифровано целиком. Пароли наружу не отдаются никогда — только признаки `has_password`.
+
+| Метод и путь | Тело | Ответ |
+|---|---|---|
+| `GET /api/v1/settings/notifications` | — | `200 {data: NotificationSettings}` |
+| `PUT /api/v1/settings/notifications` (или `PATCH`) | `NotificationSettingsInput` | `200 {data: NotificationSettings}` — то же, что `GET` |
+| `POST /api/v1/settings/notifications/test-mail` | `{to}` | `200 {data: {ok, error}}`; `422`, если почта не настроена или `to` не адрес |
+| `POST /api/v1/settings/notifications/test-telegram` | — | `200 {data: {ok, error}}` |
+
+```jsonc
+// NotificationSettings
+{"data": {
+  "mail": {"configured": true, "host": "smtp.example.com", "port": 465, "encryption": "ssl",   // none | tls | ssl
+           "username": "robot@example.com", "has_password": true,
+           "from_address": "alerts@example.com", "from_name": "SystemKeeper",
+           "source": "settings"},                                                              // settings | env | none
+  "telegram": {"api_url": "https://api.telegram.org",
+               "proxy": {"enabled": true, "type": "socks5",                                    // http | socks5
+                         "host": "10.0.0.5", "port": 1080, "username": "u", "has_password": true}}
+}}
+```
+
+- **Источник почты** (`mail.source`): `settings` — задан `mail.host`, письма идут через этот SMTP с адресом отправителя из настроек; `env` — хоста в настройках нет, но на сервере задан реальный `MAIL_MAILER` (не `log` и не `array`), письма идут через `MAIL_*` из `.env`; `none` — почта не настроена (`configured: false`), письма некуда отправлять. Пустой `mail.host` при сохранении возвращает почту на `.env`.
+- **Шифрование:** `ssl` — SSL/TLS с первого байта (обычно порт 465), `tls` — обязательный STARTTLS (587), `none` — без шифрования (25).
+- **`PUT`:** разделы `mail` и `telegram` и поля внутри можно слать частично — что не передано, не меняется; пустые текстовые поля сбрасываются (`telegram.api_url` пустой — снова `https://api.telegram.org`). Если задан `mail.host` — обязателен `mail.from_address`; при `telegram.proxy.enabled` — `host` и `port`.
+- **Пароли** (`mail.password`, `telegram.proxy.password`): отсутствующее или пустое поле оставляет прежний пароль (пустая строка и `null` для API — одно и то же); новое значение заменяет. Стереть сохранённый пароль — `clear_password: true` в том же разделе (`mail.clear_password`, `telegram.proxy.clear_password`); если одновременно передан новый пароль, он важнее.
+- **Прокси Telegram:** `http` → `http://user:pass@host:port`, `socks5` → `socks5h://…` (имена резолвит прокси); логин и пароль кодируются. Прокси и `api_url` действуют для отправки в каналы Telegram и для `test-telegram`.
+- **`test-mail`** шлёт письмо с сохранённой конфигурацией (SMTP из настроек или `.env`). **`test-telegram`** не требует токена: делает `GET {api_url}` (через прокси, если он включён, без редиректов) — любой HTTP-ответ считается успехом, ошибка соединения — `ok: false` с текстом в `error`. Оба — не чаще 10 раз в минуту.
+- Тексты ошибок отправки (в `error`, в канале и в алерте) очищаются от паролей SMTP и прокси и токена бота.
 
 ## API: запуски бекапов
 

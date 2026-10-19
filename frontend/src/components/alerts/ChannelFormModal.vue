@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { type AlertChannel, CHANNEL_TYPES, type ChannelType } from '@/api/alerts'
 import { api, ApiError } from '@/api/client'
 import Icon from '@/components/Icon.vue'
 import Modal from '@/components/Modal.vue'
+import type { NotificationSettings } from '@/api/settings'
 import { btnClass, inputClass } from '@/lib/ui'
+import { useAuthStore } from '@/stores/auth'
 
 /** Создание и изменение канала. Секреты (токен бота, секрет вебхука) не возвращаются API: пусто — оставить прежние. */
 const props = defineProps<{ channel: AlertChannel | null }>()
@@ -24,6 +27,17 @@ const form = reactive({
 const errors = ref<Record<string, string[]>>({})
 const formError = ref('')
 const saving = ref(false)
+const auth = useAuthStore()
+// Настроена ли почта. Настройки видит только администратор: остальным подсказка не нужна, а сервер всё равно ответит 422
+const mailConfigured = ref(true)
+onMounted(async () => {
+  if (!auth.user?.is_admin) return
+  try {
+    mailConfigured.value = (await api<{ data: NotificationSettings }>('/settings/notifications')).data.mail.configured
+  } catch {
+    // подсказка необязательна
+  }
+})
 const keepsSecret = computed(() => !!editing && editing.type === form.type)
 
 async function save() {
@@ -66,6 +80,10 @@ const field = 'grid gap-1.5'
           <span class="text-xs text-muted-foreground">{{ t.hint }}</span>
         </label>
       </div>
+      <p v-for="m in errors.type" :key="m" class="-mt-3 text-sm text-destructive">
+        {{ m }}
+        <RouterLink v-if="auth.user?.is_admin && form.type === 'email'" to="/settings/notifications" class="font-medium underline" @click="emit('close')">Открыть настройки</RouterLink>
+      </p>
 
       <div :class="field">
         <label for="c-name" class="text-sm font-medium">Название</label>
@@ -85,12 +103,21 @@ const field = 'grid gap-1.5'
           <p class="text-xs text-muted-foreground">Для групп начинается с минуса. Узнать можно у @userinfobot или @getidsbot.</p>
           <p v-for="m in err('chat_id')" :key="m" class="text-sm text-destructive">{{ m }}</p>
         </div>
+        <p class="text-xs text-muted-foreground">
+          Если api.telegram.org недоступен с сервера, задайте адрес Bot API или прокси в
+          <RouterLink v-if="auth.user?.is_admin" to="/settings/notifications" class="font-medium text-primary hover:underline" @click="emit('close')">Настройки → Уведомления</RouterLink>
+          <template v-else>настройках уведомлений (нужен администратор)</template>.
+        </p>
       </template>
 
       <div v-else-if="form.type === 'email'" :class="field">
         <label for="c-rcpt" class="text-sm font-medium">Адреса</label>
         <input id="c-rcpt" v-model="form.recipients" required placeholder="admin@example.com, ops@example.com" spellcheck="false" :class="inputClass" :aria-invalid="!!err('recipients')" />
         <p class="text-xs text-muted-foreground">Через запятую. Письма уходят через почту, настроенную в SystemKeeper.</p>
+        <p v-if="!mailConfigured" class="rounded-md border border-amber-500/40 bg-amber-500/10 p-2.5 text-sm">
+          Почта не настроена, письма никуда не уйдут.
+          <RouterLink to="/settings/notifications" class="font-medium text-primary hover:underline" @click="emit('close')">Настроить в Настройки → Уведомления</RouterLink>
+        </p>
         <p v-for="m in err('recipients')" :key="m" class="text-sm text-destructive">{{ m }}</p>
       </div>
 
