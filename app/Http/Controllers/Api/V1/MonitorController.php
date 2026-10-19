@@ -153,11 +153,19 @@ class MonitorController extends Controller
     /** Значения по умолчанию для несохранённого монитора (как в БД). */
     private function withDefaults(Monitor $monitor): Monitor
     {
-        return $monitor->forceFill(array_merge([
+        $defaults = [
             'method' => 'GET', 'accepted_statuses' => ['200-299'], 'headers' => [], 'follow_redirects' => true,
             'ignore_tls' => false, 'keyword_invert' => false, 'ssl_expiry_days' => 14, 'dns_record_type' => 'A',
             'timeout' => 30,
-        ], array_filter($monitor->getAttributes(), fn ($v) => $v !== null)));
+        ];
+        // Через касты модели: сырые getAttributes() — уже зашифрованные/закодированные значения
+        foreach ($defaults as $key => $value) {
+            if (! array_key_exists($key, $monitor->getAttributes())) {
+                $monitor->setAttribute($key, $value);
+            }
+        }
+
+        return $monitor;
     }
 
     /** @return array<string, mixed> */

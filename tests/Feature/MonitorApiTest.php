@@ -11,6 +11,7 @@ use App\Services\Monitoring\CheckResult;
 use App\Services\Monitoring\MonitorChecker;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
 use Tests\Support\FakeMonitorChecker;
 use Tests\TestCase;
@@ -239,5 +240,21 @@ class MonitorApiTest extends TestCase
         $this->patchJson("/api/v1/monitors/{$id}", ['enabled' => false])->assertOk()->assertJsonPath('data.status', 'paused');
         $this->patchJson("/api/v1/monitors/{$id}", $input)->assertOk();
         $this->deleteJson("/api/v1/monitors/{$id}")->assertSuccessful();
+    }
+
+    /** Разовая проверка настоящим чекером: заголовки и коды ответа доходят до запроса как массивы. */
+    public function test_test_endpoint_with_network_checker(): void
+    {
+        Http::fake(['example.com/*' => Http::response('ok', 200)]);
+
+        $this->postJson('/api/v1/monitors/test', [
+            'name' => 'x', 'type' => 'http', 'url' => 'http://example.com/', 'method' => 'GET',
+            'accepted_statuses' => ['200-299'], 'headers' => [['name' => 'X-Token', 'value' => 'abc']],
+        ])->assertOk()->assertJsonPath('data.status', 'up')->assertJsonPath('data.status_code', 200);
+
+        Http::assertSent(fn ($r) => $r->hasHeader('X-Token', 'abc'));
+
+        $this->postJson('/api/v1/monitors/test', ['name' => 'x', 'type' => 'http', 'url' => 'http://example.com/'])
+            ->assertOk()->assertJsonPath('data.status', 'up');
     }
 }
