@@ -13,6 +13,8 @@ import type { ProjectRef } from './projects'
  *   GET    /alert-rules?project_id=         — AlertRule[]
  *   POST   /alert-rules                     — AlertRuleInput
  *   GET    /alert-rules/{id}, PATCH, DELETE — PATCH {enabled} — включить/выключить
+ *   GET    /alert-rules/suggestions         — AlertSuggestion[]: рекомендуемые правила, которых ещё нет
+ *   POST   /alert-rules/suggestions/apply   — { keys, channel_ids } → AlertRule[] (201)
  * Срабатывания
  *   GET    /alerts?status=firing|resolved&project_id=&severity=&per_page=&page= — Alert[] (+ meta пагинации)
  *   GET    /alerts/summary                  — { firing: number, critical: number } — для меню
@@ -103,6 +105,15 @@ export interface AlertRule extends AlertRuleInput {
   firing_count: number
   last_fired_at: string | null
   created_at: string
+}
+
+/** Рекомендуемое правило: поля правила на все проекты и объекты + зачем оно и сколько объектов под него попадёт */
+export interface AlertSuggestion extends Omit<AlertRuleInput, 'enabled' | 'channel_ids'> {
+  /** Идентификатор для apply: server_disk_warning, server_disk_critical, monitor_down… */
+  key: string
+  /** «3 сервера с метриками» */
+  reason: string
+  objects_count: number
 }
 
 export interface Alert {

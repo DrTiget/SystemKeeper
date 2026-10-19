@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AlertChannelController;
 use App\Http\Controllers\Api\V1\AlertController;
 use App\Http\Controllers\Api\V1\AlertRuleController;
+use App\Http\Controllers\Api\V1\AlertRuleSuggestionController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\BackupController;
 use App\Http\Controllers\Api\V1\BackupHookController;
@@ -112,6 +113,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('alert-channels/{alert_channel}/test', [AlertChannelController::class, 'test'])->middleware('throttle:20,1');
     Route::apiResource('alert-channels', AlertChannelController::class);
+    Route::get('alert-rules/suggestions', [AlertRuleSuggestionController::class, 'index']);
+    Route::post('alert-rules/suggestions/apply', [AlertRuleSuggestionController::class, 'apply']);
     Route::apiResource('alert-rules', AlertRuleController::class);
     Route::get('alerts/summary', [AlertController::class, 'summary']);
     Route::get('alerts', [AlertController::class, 'index']);

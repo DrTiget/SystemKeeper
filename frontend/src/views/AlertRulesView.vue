@@ -5,6 +5,7 @@ import { ALERT_KINDS, type AlertKind, type AlertRule, CHANNEL_TYPES, describeCon
 import { api, ApiError } from '@/api/client'
 import Icon from '@/components/Icon.vue'
 import AlertsTabs from '@/components/alerts/AlertsTabs.vue'
+import SuggestedRules from '@/components/alerts/SuggestedRules.vue'
 import { btnClass, formatDate } from '@/lib/ui'
 import { useProjectsStore } from '@/stores/projects'
 
@@ -14,8 +15,10 @@ const router = useRouter()
 const items = ref<AlertRule[]>([])
 const loaded = ref(false)
 const loadError = ref('')
+/** Сколько рекомендуемых правил можно добавить; null — ещё не знаем */
+const suggestionsCount = ref<number | null>(null)
 
-onMounted(async () => {
+async function load() {
   try {
     items.value = (await api<{ data: AlertRule[] }>('/alert-rules')).data
   } catch {
@@ -23,7 +26,8 @@ onMounted(async () => {
   } finally {
     loaded.value = true
   }
-})
+}
+onMounted(load)
 
 async function toggle(r: AlertRule) {
   r.enabled = !r.enabled
@@ -63,6 +67,8 @@ const starters: AlertKind[] = ['monitor_down', 'server_unreachable', 'server_dis
     <AlertsTabs />
 
     <p v-if="loadError" class="text-sm text-destructive">{{ loadError }}</p>
+    <!-- Пока правил нет — главный экран; иначе — над списком -->
+    <SuggestedRules v-if="loaded && !loadError" :main="!items.length" @applied="load" @loaded="suggestionsCount = $event" />
     <p v-if="!loaded" class="flex items-center gap-2 text-sm text-muted-foreground"><Icon name="loader" class="animate-spin" />Загрузка…</p>
 
     <template v-else-if="items.length">
@@ -122,7 +128,7 @@ const starters: AlertKind[] = ['monitor_down', 'server_unreachable', 'server_dis
       </section>
     </template>
 
-    <div v-else-if="!loadError" class="grid gap-4 rounded-xl border border-dashed p-8">
+    <div v-else-if="!loadError && suggestionsCount === 0" class="grid gap-4 rounded-xl border border-dashed p-8">
       <div class="grid justify-items-center gap-1 text-center">
         <Icon name="bell" class="size-8 text-muted-foreground" />
         <p class="font-medium">Правил пока нет</p>
