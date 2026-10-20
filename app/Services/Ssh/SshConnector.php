@@ -4,7 +4,10 @@ namespace App\Services\Ssh;
 
 use App\Exceptions\Ssh\HostFingerprintChangedException;
 use App\Exceptions\Ssh\SshConnectionException;
+use App\Exceptions\Ssh\SshInternalException;
 use App\Models\Server;
+use Error;
+use ErrorException;
 use phpseclib3\Crypt\PublicKeyLoader;
 use phpseclib3\Net\SSH2;
 use Throwable;
@@ -20,7 +23,7 @@ class SshConnector implements SshConnectorInterface
         try {
             $stdout = $stdin === null ? (string) $ssh->exec($command) : $this->execWithStdin($ssh, $command, $stdin);
         } catch (Throwable $e) {
-            throw new SshConnectionException("Ошибка выполнения команды: {$e->getMessage()}", previous: $e);
+            throw $this->commandFailure($e);
         } finally {
             $stderr = $ssh->getStdError();
             $ssh->disconnect();
@@ -59,7 +62,7 @@ class SshConnector implements SshConnectorInterface
                 }
             }
         } catch (Throwable $e) {
-            throw new SshConnectionException("Ошибка выполнения команды: {$e->getMessage()}", previous: $e);
+            throw $this->commandFailure($e);
         } finally {
             $stderr = $ssh->getStdError();
             $ssh->disconnect();
@@ -73,6 +76,19 @@ class SshConnector implements SshConnectorInterface
             'exit_code' => $ssh->getExitStatus() === false ? null : $ssh->getExitStatus(),
             'stderr' => (string) $stderr,
         ];
+    }
+
+    /** Внутренние ошибки PHP/библиотеки попадают в лог (report) и помечаются отдельным исключением. */
+    private function commandFailure(Throwable $e): SshConnectionException
+    {
+        $message = "Ошибка выполнения команды: {$e->getMessage()}";
+        if ($e instanceof ErrorException || $e instanceof Error) {
+            report($e);
+
+            return new SshInternalException($message, previous: $e);
+        }
+
+        return new SshConnectionException($message, previous: $e);
     }
 
     /** Запускает команду без ожидания, пишет в её stdin и читает stdout до закрытия канала. */

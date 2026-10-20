@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Exceptions\Ssh\SshConnectionException;
+use App\Exceptions\Ssh\SshInternalException;
 use App\Jobs\CollectServerMetrics;
 use App\Models\Project;
 use App\Models\Server;
@@ -109,6 +110,57 @@ class ServerMetricsTest extends TestCase
         $this->assertSame(25.0, $point->swap);
         $this->assertEquals(['/' => 41.0, '/data' => 90.0, '/boot/efi' => 5.8], $point->disks);
         $this->assertEquals(now()->addSeconds(60), ServerMetrics::sole()->next_collect_at);
+    }
+
+    public function test_internal_ssh_error_is_retried_once(): void
+    {
+        $server = Server::factory()->create();
+        $fake = $this->fakeSsh();
+        $fake->throwQueue = [new SshInternalException('Undefined array key 1')];
+
+        $metrics = $this->collect($server);
+
+        $this->assertCount(2, $fake->calls);
+        $this->assertNull($metrics->error);
+        $this->assertNotNull($metrics->collected_at);
+        $this->assertSame(1, ServerMetricPoint::count());
+    }
+
+    public function test_repeated_internal_ssh_error_keeps_previous_state_without_error(): void
+    {
+        $this->travelTo(now()->startOfMinute());
+        $server = Server::factory()->create();
+        $this->fakeSsh();
+        $this->collect($server);
+        $collectedAt = ServerMetrics::sole()->collected_at;
+
+        $this->travel(60)->seconds();
+        $fake = $this->fakeSsh();
+        $fake->throwQueue = [new SshInternalException('Undefined array key 1'), new SshInternalException('Undefined array key 1')];
+        $metrics = $this->collect($server);
+
+        $this->assertCount(2, $fake->calls);
+        $this->assertNull($metrics->error);
+        $this->assertEquals($collectedAt, $metrics->collected_at);
+        $this->assertEquals(now(), $metrics->last_attempt_at);
+        $this->assertEquals(now()->addSeconds(60), $metrics->next_collect_at);
+        $this->assertSame(1, ServerMetricPoint::count());
+        $this->getJson("/api/v1/servers/{$server->id}/metrics")->assertJsonPath('data.status', 'ok');
+
+        // при долгом сбое данные устаревают, но «не отвечает» не появляется
+        $this->travel(200)->seconds();
+        $this->getJson("/api/v1/servers/{$server->id}/metrics")->assertJsonPath('data.status', 'stale')->assertJsonPath('data.error', null);
+    }
+
+    public function test_plain_ssh_error_is_not_retried_and_sets_error(): void
+    {
+        $server = Server::factory()->create();
+        $fake = $this->fakeSsh(throw: new SshConnectionException('Connection timed out'));
+
+        $metrics = $this->collect($server);
+
+        $this->assertCount(1, $fake->calls);
+        $this->assertSame('Connection timed out', $metrics->error);
     }
 
     public function test_status_stale_after_three_intervals_and_unreachable_on_error(): void

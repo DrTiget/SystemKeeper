@@ -18,6 +18,9 @@ class FakeSshConnector implements SshConnectorInterface
      */
     public array $results = [];
 
+    /** Исключения по очереди: каждый вызов exec бросает следующее, пока очередь не опустеет. @var list<Throwable> */
+    public array $throwQueue = [];
+
     /**
      * @param  array{exit_code: int|null, stdout: string, stderr: string}  $result
      */
@@ -31,6 +34,9 @@ class FakeSshConnector implements SshConnectorInterface
     {
         $this->calls[] = ['server' => $server->id, 'command' => $command, 'stdin' => $stdin];
 
+        if ($this->throwQueue) {
+            throw array_shift($this->throwQueue);
+        }
         if ($this->throw) {
             throw $this->throw;
         }

@@ -2,6 +2,7 @@
 
 namespace App\Services\Metrics;
 
+use App\Exceptions\Ssh\SshInternalException;
 use App\Models\Server;
 use App\Models\ServerMetricPoint;
 use App\Models\ServerMetrics;
@@ -26,11 +27,24 @@ class MetricsCollector
         $now = now();
 
         try {
-            $result = $this->ssh->exec($server, MetricsScript::command(), self::TIMEOUT);
+            try {
+                $result = $this->ssh->exec($server, MetricsScript::command(), self::TIMEOUT);
+            } catch (SshInternalException) {
+                // единичный сбой библиотеки — одна повторная попытка
+                $result = $this->ssh->exec($server, MetricsScript::command(), self::TIMEOUT);
+            }
             if ($result['exit_code'] !== 0 && trim($result['stdout']) === '') {
                 throw new MetricsException('Команда сбора завершилась с кодом '.($result['exit_code'] ?? '—').': '.trim($result['stderr']));
             }
             $snapshot = $this->parser->parse($result['stdout'], $metrics->disks_exclude ?? []);
+        } catch (SshInternalException) {
+            // Наш сбой, а не недоступность сервера: данные просто стареют, error не трогаем
+            $metrics->forceFill([
+                'last_attempt_at' => $now,
+                'next_collect_at' => $now->clone()->addSeconds($metrics->interval),
+            ])->save();
+
+            return $metrics;
         } catch (Throwable $e) {
             $metrics->forceFill([
                 'last_attempt_at' => $now,
