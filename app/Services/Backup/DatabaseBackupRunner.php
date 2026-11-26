@@ -8,6 +8,7 @@ use App\Models\DatabaseConnection;
 use App\Services\Database\DatabaseClient;
 use App\Services\Database\DatabaseCommandRunner;
 use App\Services\Database\DatabaseException;
+use Throwable;
 
 /**
  * Бекап баз данных: по файлу на базу (mysqldump / pg_dump), потоком с сервера или напрямую.
@@ -70,7 +71,13 @@ class DatabaseBackupRunner
 
             $started = hrtime(true);
             $file = new BackupFile($backup, self::fileName($db).$ext);
-            $result = $this->runner->stream($c, $command, $file->write(...), (int) config('backup.run_timeout'));
+            try {
+                $result = $this->runner->stream($c, $command, $file->write(...), $backup->secondsLeft());
+            } catch (Throwable $e) {
+                $file->abort();
+
+                throw $e;
+            }
             $file->close();
 
             $error = null;
@@ -160,7 +167,13 @@ class DatabaseBackupRunner
             [$command, $ext] = self::compressed(DatabaseClient::withPassword($c, DatabaseClient::clickhouseClient($c).' --query '.escapeshellarg($query)), $o['compress'], '.native');
 
             $file = new BackupFile($backup, $name.'.'.self::fileName($table).$ext);
-            $result = $this->runner->stream($c, $command, $file->write(...), (int) config('backup.run_timeout'));
+            try {
+                $result = $this->runner->stream($c, $command, $file->write(...), $backup->secondsLeft());
+            } catch (Throwable $e) {
+                $file->abort();
+
+                throw $e;
+            }
             $file->close();
             $files[] = $file->name;
             $dumpSize += $file->size;

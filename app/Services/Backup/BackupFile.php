@@ -3,6 +3,7 @@
 namespace App\Services\Backup;
 
 use App\Models\Backup;
+use App\Support\Bytes;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -23,6 +24,14 @@ class BackupFile
 
     private ?\InflateContext $inflate = null;
 
+    private string $fullPath;
+
+    /** Байт записано с последней проверки свободного места */
+    private int $sinceSpaceCheck = self::SPACE_CHECK_EVERY; // первая проверка — на первом же куске
+
+    /** Проверяем свободное место не чаще чем раз в столько байт */
+    private const SPACE_CHECK_EVERY = 64 * 1024 * 1024;
+
     public function __construct(private Backup $backup, public readonly string $name)
     {
         $disk = Storage::disk('backups');
@@ -32,17 +41,62 @@ class BackupFile
             $this->inflate = inflate_init(ZLIB_ENCODING_GZIP) ?: null;
             $this->uncompressedSize = 0;
         }
-        $this->handle = fopen($disk->path($backup->path.'/'.$name), 'wb') ?: throw new BackupException("Не удалось создать файл {$name}.");
+        $this->fullPath = $disk->path($backup->path.'/'.$name);
+        $this->handle = fopen($this->fullPath, 'wb') ?: throw new BackupException("Не удалось создать файл {$name}.");
     }
 
     public function write(string $chunk): void
     {
-        if (fwrite($this->handle, $chunk) !== strlen($chunk)) {
-            throw new BackupException("Не удалось записать {$this->name}: нет места на диске?");
+        $this->ensureFreeSpace(strlen($chunk));
+        // предупреждение PHP не должно превращаться в ErrorException: ошибку оформляем сами и сразу чистим за собой
+        $reason = '';
+        set_error_handler(function (int $no, string $message) use (&$reason) {
+            $reason = $message;
+
+            return true;
+        });
+        try {
+            $written = fwrite($this->handle, $chunk);
+        } finally {
+            restore_error_handler();
+        }
+        if ($written !== strlen($chunk)) {
+            $this->abort();
+            throw new BackupException("Не удалось записать {$this->name} на диск SystemKeeper"
+                .(str_contains($reason, 'errno=28') || str_contains($reason, 'No space') ? ': закончилось место на диске.' : ($reason !== '' ? ": {$reason}" : '.')));
         }
         hash_update($this->hash, $chunk);
         $this->countUncompressed($chunk);
         $this->size += strlen($chunk);
+    }
+
+    /**
+     * Не даём забить диск до нуля: на нём же MySQL и журналы, а при полном диске MySQL
+     * останавливает запись и задача бекапа не может даже отметить себя неудачной.
+     */
+    private function ensureFreeSpace(int $incoming): void
+    {
+        $this->sinceSpaceCheck += $incoming;
+        if ($this->sinceSpaceCheck < self::SPACE_CHECK_EVERY) {
+            return;
+        }
+        $this->sinceSpaceCheck = 0;
+        $free = @disk_free_space(dirname($this->fullPath));
+        $reserve = (int) config('backup.write_reserve');
+        if ($free !== false && $free - $incoming < $reserve) {
+            $this->abort();
+            throw new BackupException('Бекап остановлен: на диске SystemKeeper осталось '.Bytes::format((int) $free)
+                .' — меньше резерва '.Bytes::format($reserve).". Записано {$this->name}: ".Bytes::format($this->size).'.');
+        }
+    }
+
+    /** Прерывает запись: закрывает и удаляет неполный файл, чтобы сразу освободить место. */
+    public function abort(): void
+    {
+        if (is_resource($this->handle)) {
+            @fclose($this->handle);
+        }
+        @unlink($this->fullPath);
     }
 
     /**

@@ -43,7 +43,11 @@ class SshConnector implements SshConnectorInterface
     public function stream(Server $server, string $command, callable $onOutput, ?int $timeout = null, ?string $stdin = null): array
     {
         $ssh = $this->connect($server);
-        $ssh->setTimeout($timeout ?? (int) config('ssh.exec_timeout'));
+        $limit = $timeout ?? (int) config('ssh.exec_timeout');
+        $deadline = microtime(true) + $limit;
+        $expired = false;
+        $callbackError = null;
+        $ssh->setTimeout($limit);
         $ssh->enableQuietMode();
 
         try {
@@ -53,22 +57,40 @@ class SshConnector implements SshConnectorInterface
             }
             $ssh->sendEOF(SSH2::CHANNEL_EXEC);
             while (true) {
+                // phpseclib отсчитывает тайм-аут заново на каждый read() — это тайм-аут простоя, а не всей команды;
+                // поэтому перед каждым чтением даём только остаток общего срока
+                $left = $deadline - microtime(true);
+                if ($left <= 0) {
+                    $expired = true;
+                    break;
+                }
+                $ssh->setTimeout($left);
                 $chunk = $ssh->read('', SSH2::READ_NEXT, SSH2::CHANNEL_EXEC);
                 if ($chunk === true || $chunk === false || $ssh->isTimeout()) {
                     break;
                 }
                 if ($chunk !== '') {
-                    $onOutput($chunk);
+                    try {
+                        $onOutput($chunk);
+                    } catch (Throwable $e) {
+                        // ошибка приёмника (например, запись на диск) — не ошибка SSH: прерываем передачу и отдаём как есть
+                        $callbackError = $e;
+                        break;
+                    }
                 }
             }
         } catch (Throwable $e) {
             throw $this->commandFailure($e);
         } finally {
             $stderr = $ssh->getStdError();
+            // соединение закрываем сразу, не дожидаясь закрытия канала: удалённая команда получит SIGPIPE
             $ssh->disconnect();
         }
 
-        if ($ssh->isTimeout()) {
+        if ($callbackError !== null) {
+            throw $callbackError;
+        }
+        if ($expired || $ssh->isTimeout()) {
             throw new SshConnectionException('Команда не завершилась за отведённое время.');
         }
 

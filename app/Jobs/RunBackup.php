@@ -169,12 +169,15 @@ class RunBackup implements ShouldQueue
     /** Задача упала вне handle() — например, по таймауту. */
     public function failed(?Throwable $e): void
     {
+        // сначала освобождаем место: при полном диске MySQL не примет даже отметку о неудаче
+        $this->deleteLocalFiles();
         $this->backup->refresh();
         if ($this->backup->isActive()) {
             $this->markFailed(match (true) {
+                // TimeoutExceededException — наследник MaxAttemptsExceededException, поэтому проверяется первым
+                $e instanceof TimeoutExceededException => 'Бекап не уложился в '.intdiv($this->timeout, 3600).' ч и был остановлен.',
                 // задачу забрали у воркера, который упал или был перезапущен посреди бекапа
                 $e instanceof MaxAttemptsExceededException => 'Бекап прерван: воркер бекапов был остановлен или перезапущен во время работы. Запустите бекап заново.',
-                $e instanceof TimeoutExceededException => 'Бекап не уложился в '.intdiv($this->timeout, 3600).' ч и был остановлен.',
                 default => $e?->getMessage() ?: 'Бекап прерван.',
             });
         }
@@ -183,8 +186,21 @@ class RunBackup implements ShouldQueue
     /** Файлы неудачного бекапа неполные — удаляем их, запись с журналом остаётся. */
     private function markFailed(string $error): void
     {
+        // неполные файлы удаляем до записи в БД: если диск забит, MySQL на нём же ждёт места и UPDATE висит
+        $this->deleteLocalFiles();
         $this->backup->forceFill(['status' => Backup::FAILED, 'finished_at' => now(), 'error' => $error])->save();
         $this->backup->deleteFiles();
+    }
+
+    private function deleteLocalFiles(): void
+    {
+        if ($this->backup->path) {
+            try {
+                Storage::disk('backups')->deleteDirectory($this->backup->path);
+            } catch (Throwable) {
+                // удалится ниже в deleteFiles() или при очистке
+            }
+        }
     }
 
     /** servers/5/2026-10-14_120000-17 */

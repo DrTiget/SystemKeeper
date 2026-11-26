@@ -8,11 +8,14 @@ use App\Models\Backup;
 use App\Models\DatabaseConnection;
 use App\Models\Server;
 use App\Models\User;
+use App\Services\Backup\BackupException;
+use App\Services\Backup\BackupFile;
 use App\Services\Backup\DatabaseBackupRunner;
 use App\Services\Backup\ServerBackupRunner;
 use App\Services\Ssh\SshConnectorInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Queue\MaxAttemptsExceededException;
+use Illuminate\Queue\TimeoutExceededException;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
@@ -139,6 +142,81 @@ class BackupRunTest extends TestCase
 
         $this->assertSame(Backup::FAILED, $backup->fresh()->status);
         $this->assertStringStartsWith('Бекап прерван: воркер бекапов был остановлен', $backup->fresh()->error);
+    }
+
+    public function test_disk_full_on_write_aborts_file_with_clear_error(): void
+    {
+        $backup = $this->server()->backups()->create(['trigger' => 'manual', 'status' => Backup::RUNNING, 'path' => 'servers/1/x']);
+        $file = new BackupFile($backup, 'files.tar.gz');
+        // /dev/full отвечает на запись ENOSPC (errno=28) — как забитый диск
+        (fn () => $this->handle = fopen('/dev/full', 'wb'))->call($file);
+
+        try {
+            $file->write(str_repeat('x', 8192));
+            $this->fail('Ожидалась ошибка записи');
+        } catch (BackupException $e) {
+            $this->assertStringContainsString('закончилось место на диске', $e->getMessage());
+        }
+        Storage::disk('backups')->assertMissing('servers/1/x/files.tar.gz');
+    }
+
+    public function test_low_disk_space_stops_backup_and_frees_space(): void
+    {
+        config(['backup.write_reserve' => PHP_INT_MAX]);
+        $server = $this->server();
+        $this->fake(['stdout' => 'archive-bytes']);
+
+        $id = $this->postJson("/api/v1/servers/{$server->id}/backups")->json('data.id');
+
+        $backup = Backup::find($id);
+        $this->assertSame(Backup::FAILED, $backup->status);
+        $this->assertStringStartsWith('Бекап остановлен: на диске SystemKeeper осталось', $backup->error);
+        $this->assertSame([], $backup->files);
+        Storage::disk('backups')->assertMissing($backup->path);
+    }
+
+    public function test_low_disk_space_stops_database_backup_without_next_databases(): void
+    {
+        config(['backup.write_reserve' => PHP_INT_MAX]);
+        $db = DatabaseConnection::factory()->create([
+            'engine' => 'mysql', 'via' => 'ssh', 'server_id' => Server::factory()->create()->id, 'username' => 'bk', 'password' => 'secret',
+            'databases' => ['shop', 'blog'],
+        ]);
+        $fake = $this->fake(['stdout' => 'DUMP'], [
+            'information_schema' => ['exit_code' => 0, 'stdout' => "shop\t1000\nblog\t2000\n", 'stderr' => ''],
+            'VERSION()' => ['exit_code' => 0, 'stdout' => "8.4.2\n", 'stderr' => ''],
+        ]);
+
+        $id = $this->postJson("/api/v1/databases/{$db->id}/backups")->json('data.id');
+
+        $backup = Backup::find($id);
+        $this->assertSame(Backup::FAILED, $backup->status);
+        $this->assertStringStartsWith('Бекап остановлен', $backup->error);
+        // после нехватки места следующие базы не дампятся
+        $this->assertCount(0, array_filter($fake->calls, fn ($c) => str_contains($c['command'], "'blog'")));
+        Storage::disk('backups')->assertMissing($backup->path);
+    }
+
+    public function test_timeout_marks_backup_failed_and_removes_files(): void
+    {
+        $backup = $this->server()->backups()->create(['trigger' => 'manual', 'status' => Backup::RUNNING, 'path' => 'servers/1/y']);
+        Storage::disk('backups')->put('servers/1/y/files.tar.gz', 'partial');
+
+        (new RunBackup($backup))->failed(new TimeoutExceededException('timeout'));
+
+        $this->assertSame(Backup::FAILED, $backup->fresh()->status);
+        $this->assertStringStartsWith('Бекап не уложился в 4 ч', $backup->fresh()->error);
+        Storage::disk('backups')->assertMissing('servers/1/y');
+    }
+
+    public function test_seconds_left_counts_from_backup_start(): void
+    {
+        config(['backup.run_timeout' => 3600]);
+        $backup = $this->server()->backups()->create(['trigger' => 'manual', 'status' => Backup::RUNNING, 'started_at' => now()->subMinutes(50)]);
+        $this->assertEqualsWithDelta(600, $backup->secondsLeft(), 2);
+
+        $backup->started_at = now()->subHours(2);
+        $this->assertSame(1, $backup->secondsLeft());
     }
 
     public function test_server_without_paths_is_rejected(): void

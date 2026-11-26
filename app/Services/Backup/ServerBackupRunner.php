@@ -55,7 +55,13 @@ class ServerBackupRunner
         $backup->appendLog('Архивируем: '.implode(', ', $settings->paths));
         $started = hrtime(true);
         $file = new BackupFile($backup, 'files.tar.gz');
-        $result = $this->ssh->stream($server, self::tarCommand($settings->paths, $settings->excludes ?? []), $file->write(...), (int) config('backup.run_timeout'));
+        try {
+            $result = $this->ssh->stream($server, self::tarCommand($settings->paths, $settings->excludes ?? []), $file->write(...), $backup->secondsLeft());
+        } catch (Throwable $e) {
+            $file->abort();
+
+            throw $e;
+        }
         $file->close();
 
         // GNU tar с --totals пишет в stderr «Total bytes written: N» — объём до сжатия; иначе (BusyBox) — посчитанный при приёме

@@ -117,6 +117,18 @@ class Backup extends Model
         $this->save();
     }
 
+    /**
+     * Сколько секунд осталось из общего срока бекапа (backup.run_timeout от начала) — срок на всю работу,
+     * а не на каждый файл отдельно. Не меньше 1: истёкший срок даст тайм-аут первой же передаче.
+     */
+    public function secondsLeft(): int
+    {
+        $limit = (int) config('backup.run_timeout');
+        $elapsed = $this->started_at ? (int) $this->started_at->diffInSeconds(now(), true) : 0;
+
+        return max(1, $limit - $elapsed);
+    }
+
     /** Строка журнала с отметкой времени; сохраняется сразу — чтобы ход бекапа был виден в API. */
     public function appendLog(string $message): void
     {
