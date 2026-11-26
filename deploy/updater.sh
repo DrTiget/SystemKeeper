@@ -103,9 +103,15 @@ update() {
     cp compose.yaml compose.yaml.prev
     cp "$STATE/next/compose.yaml" compose.yaml
     env_set SK_VERSION "$TO"
-    if ! docker compose pull --quiet $(app_services) >>"$STATE/update.log" 2>&1; then
-        DUMP=; rollback "Не удалось скачать образ $TO"; return
+    # Обязателен только образ SystemKeeper; сторонние (mysql, caddy) уже есть локально и подтягиваются
+    # по возможности — недоступный Docker Hub не должен срывать обновление.
+    IMAGE="$(env_get SK_IMAGE)"
+    IMAGE="${IMAGE:-ghcr.io/drtiget/systemkeeper}:$TO"
+    if ! docker pull --quiet "$IMAGE" >>"$STATE/update.log" 2>&1; then
+        DUMP=; rollback "Не удалось скачать образ $IMAGE"; return
     fi
+    timeout 600 docker compose pull --quiet --ignore-pull-failures $(app_services) >>"$STATE/update.log" 2>&1 \
+        || log "Сторонние образы обновить не удалось — используются локальные"
 
     status restarting "Перезапускаю сервисы"
     # up -d сам ждёт здоровья web (depends_on); не поднялся — сразу откат
